@@ -1,35 +1,66 @@
 // lib/deckParser.ts
+console.log(">>> USING DECK PARSER FROM:", __filename);
+
+import { normalizeName } from "./nameUtils";
+import { resolveNameServer } from "./serverAliasMap";
+
 export function extractName(raw: string): string {
-  let name = raw.trim();
+    let name = raw.trim();
 
-  if (name.includes("//")) name = name.split("//")[0].trim();
+    // Remove DFC back faces
+    if (name.includes("//")) name = name.split("//")[0].trim();
 
-  name = name.replace(/\([^)]*\)/g, "").trim();
-  name = name.replace(/\b\d+[a-zA-Z]?\b/g, "").trim();
-  name = name.replace(/[.,:;]+$/, "").trim();
-  name = name.replace(/\s{2,}/g, " ");
+    // Remove parentheses (set codes, collector numbers)
+    name = name.replace(/\([^)]*\)/g, "").trim();
 
-  return name;
+    // Remove collector numbers like "123a" or "45"
+    name = name.replace(/\b\d+[a-zA-Z]?\b/g, "").trim();
+
+    // Remove trailing punctuation
+    name = name.replace(/[.,:;]+$/, "").trim();
+
+    // Collapse double spaces
+    name = name.replace(/\s{2,}/g, " ");
+
+    return name;
 }
 
 export function parseDecklist(text: string): Map<string, number> {
-  const map = new Map<string, number>();
+    const map = new Map<string, number>();
 
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+    const lines = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
 
-  for (const line of lines) {
-    const match = line.match(/^(\d+)\s+(.+)$/);
-    if (!match) continue;
+    for (const line of lines) {
+        const match = line.match(/^(\d+)\s+(.+)$/);
+        if (!match) continue;
 
-    const qty = parseInt(match[1], 10);
-    const name = extractName(match[2]);
-    if (!name) continue;
+        const qty = parseInt(match[1], 10);
+        const rawName = match[2];
 
-    map.set(name, (map.get(name) ?? 0) + qty);
-  }
+        // Extract printed-like name
+        const extracted = extractName(rawName);
+        if (!extracted) continue;
 
-  return map;
+        // Normalize for matching
+        const normalized = normalizeName(extracted);
+
+        // Apply canonical alias resolution
+        const canonical = resolveNameServer(normalizeName(extracted));
+
+        // 🔥 DEBUG LOG — this is the key
+        console.log("PARSED CARD:", {
+            rawName,
+            extracted,
+            normalized,
+            canonical,
+            aliasExists: canonical !== normalized
+        });
+
+        map.set(canonical, (map.get(canonical) ?? 0) + qty);
+    }
+
+    return map;
 }

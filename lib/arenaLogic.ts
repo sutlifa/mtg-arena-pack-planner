@@ -1,4 +1,5 @@
 // lib/arenaLogic.ts
+import { resolveName } from "./aliasResolver";
 
 /**
  * Computes how many copies of each card are still needed,
@@ -7,39 +8,44 @@
  * - Omen / DFC / modal cards
  * - Multiple printings across sets
  *
- * Key rules:
- * - If the collection has a name-only entry ("Card Name"),
- *   we treat that as the authoritative total owned.
- * - Otherwise, we sum all set-specific variants ("Card Name|set").
+ * Now also handles:
+ * - Arena mechanical names (Detect Intrusion → Spider‑Sense)
+ * - Canonical name resolution for both deck and collection
  */
-
 export function computeNeededCopies(
-  deckMap: Map<string, number>,
-  collectionMap: Map<string, number>
+    deckMap: Map<string, number>,
+    collectionMap: Map<string, number>
 ) {
-  const needed = new Map<string, number>();
+    const needed = new Map<string, number>();
 
-  deckMap.forEach((qtyNeeded, deckKey) => {
-    // deckKey may be "Card Name" or "Card Name|set"
-    const [nameOnly] = deckKey.split("|");
+    deckMap.forEach((qtyNeeded, deckKeyRaw) => {
+        // ⭐ Canonicalize deck key
+        const deckKey = resolveName(deckKeyRaw);
+        const [nameOnlyRaw] = deckKey.split("|");
 
-    let totalOwned = 0;
+        // ⭐ Canonicalize nameOnly
+        const nameOnly = resolveName(nameOnlyRaw);
 
-    if (collectionMap.has(nameOnly)) {
-      // If a name-only key exists, trust it as the total
-      totalOwned = collectionMap.get(nameOnly)!;
-    } else {
-      // Otherwise, sum all set-specific variants
-      for (const [key, qty] of collectionMap.entries()) {
-        if (key.startsWith(nameOnly + "|")) {
-          totalOwned += qty;
+        let totalOwned = 0;
+
+        // ⭐ Check canonical name-only key
+        if (collectionMap.has(nameOnly)) {
+            totalOwned = collectionMap.get(nameOnly)!;
+        } else {
+            // ⭐ Sum all canonical set-specific variants
+            for (const [rawKey, qty] of collectionMap.entries()) {
+                const canonicalKey = resolveName(rawKey);
+                if (canonicalKey.startsWith(nameOnly + "|")) {
+                    totalOwned += qty;
+                }
+            }
         }
-      }
-    }
 
-    const missing = Math.max(qtyNeeded - totalOwned, 0);
-    needed.set(deckKey, missing);
-  });
+        const missing = Math.max(qtyNeeded - totalOwned, 0);
 
-  return needed;
+        // ⭐ Store result under canonical deck key
+        needed.set(deckKey, missing);
+    });
+
+    return needed;
 }

@@ -1,11 +1,16 @@
 import "./globals.css";
+import AliasLoader from "./AliasLoader";
 
 export const metadata = {
   title: "MTG Arena Pack Planner",
   description: "Analyze decks, Arena collection, and pack recommendations.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <head>
@@ -23,6 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }}
         className="min-h-screen"
       >
+        {/* Load Arena → Printed name alias map on the client */}
+        <AliasLoader />
+
         {children}
       </body>
     </html>
