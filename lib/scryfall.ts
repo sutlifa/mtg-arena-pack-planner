@@ -1,59 +1,95 @@
-const EXCLUDED_SET_TYPES = new Set([
-  "promo",
-  "token",
-  "masterpiece",
-  "memorabilia",
-  "minigame",
-]);
+// ⭐ In-memory cache to avoid repeated Scryfall calls within a function lifetime
+const cache = new Map<string, any>();
 
-async function fetchAllPages(url: string) {
-  const results: any[] = [];
-  let next: string | null = url;
+async function safeFetch(url: string, retries = 3): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
-  while (next) {
-    const res: Response = await fetch(next, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 86400 },
-    });
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
 
-    const json: any = await res.json();
-    if (json.object === "error") throw new Error(json.details);
+      // Handle Scryfall rate limits
+      if (res.status === 429) {
+        await new Promise((r) => setTimeout(r, 400 + i * 400));
+        continue;
+      }
 
-    results.push(...json.data);
-    next = json.has_more ? json.next_page : null;
+      if (!res.ok) {
+        throw new Error(`Scryfall returned ${res.status}`);
+      }
+
+      return await res.json();
+    } catch (err) {
+      if (i === retries - 1) {
+        console.error("SCRYFALL LOOKUP FAILED:", url, err);
+        return null;
+      }
+
+      // Exponential backoff
+      await new Promise((r) => setTimeout(r, 300 + i * 300));
+    }
   }
 
-  return results;
+  return null;
 }
 
-export async function lookupCard(cardName: string) {
-  const res: Response = await fetch(
-    `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`,
-    { headers: { Accept: "application/json" } }
-  );
-
-  const named: any = await res.json();
-  if (named.object === "error") {
-    return { ok: false, error: named.details };
+function normalizeCardData(data: any, fallbackName: string) {
+  if (!data) {
+    return {
+      name: fallbackName,
+      set: "unknown",
+      set_name: "Unknown Set",
+      set_icon_svg_uri: null,
+      rarity: "unknown",
+      image_uris: { normal: null },
+      card_faces: null,
+      failed: true,
+    };
   }
 
-  const allPrints: any[] = await fetchAllPages(named.prints_search_uri);
-
-  const arenaPrints = allPrints
-    .filter((p: any) => p.games?.includes("arena") || p.arena_id)
-    .sort((a: any, b: any) =>
-      String(b.released_at).localeCompare(String(a.released_at))
-    );
-
-  const latest = arenaPrints[0] ?? null;
-  const booster = arenaPrints.find(
-    (p: any) => p.booster && !EXCLUDED_SET_TYPES.has(p.set_type)
-  );
+  const image =
+    data.image_uris?.normal ||
+    data.card_faces?.[0]?.image_uris?.normal ||
+    null;
 
   return {
-    ok: true,
-    name: named.name,
-    latestArenaPrint: latest,
-    recommendedPackPrint: booster ?? null,
+    name: data.name ?? fallbackName,
+    set: data.set ?? "unknown",
+    set_name: data.set_name ?? "Unknown Set",
+    set_icon_svg_uri: data.set_icon_svg_uri ?? null,
+    rarity: data.rarity ?? "unknown",
+    image_uris: { normal: image },
+    card_faces: data.card_faces || null,
+    failed: false,
   };
+}
+
+export async function lookupCard(name: string) {
+  // Cache hit
+  if (cache.has(name)) {
+    return cache.get(name);
+  }
+
+  // 1. Exact search
+  const exactUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(
+    name
+  )}`;
+
+  let data = await safeFetch(exactUrl);
+
+  // 2. Fuzzy fallback
+  if (!data) {
+    const fuzzyUrl = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(
+      name
+    )}`;
+    data = await safeFetch(fuzzyUrl);
+  }
+
+  // 3. Normalize + cache
+  const normalized = normalizeCardData(data, name);
+  cache.set(name, normalized);
+
+  return normalized;
 }

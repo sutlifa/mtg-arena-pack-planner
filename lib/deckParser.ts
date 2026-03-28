@@ -1,40 +1,38 @@
-export function normalizeLine(line: string) {
-  return line
-    .replace(/\u00A0/g, " ")
-    .replace(/^●\s*/u, "")
-    .replace(/^SB:\s*/i, "")
-    .replace(/^Sideboard\s*/i, "")
-    .replace(/^Commander\s*/i, "")
-    .replace(/^Companion\s*/i, "")
-    .replace(/^\/\/.*$/i, "")
-    .trim();
-}
-
-export function extractName(raw: string) {
+export function extractName(raw: string): string {
   let name = raw.trim();
 
-  name = name.replace(/\s+\([^)]*\)\s+[A-Za-z0-9★-]+\s*$/u, "");
-  name = name.replace(/\s+\([^)]*\)\s*$/u, "");
+  if (name.includes("//")) {
+    name = name.split("//")[0].trim();
+  }
 
-  return name.trim();
+  name = name.replace(/\([^)]*\)/g, "").trim();
+  name = name.replace(/\b\d+[a-zA-Z]?\b/g, "").trim();
+  name = name.replace(/[.,:;]+$/, "").trim();
+  name = name.replace(/\s{2,}/g, " ");
+
+  return name;
 }
 
 export function parseDecklist(text: string): Map<string, number> {
   const map = new Map<string, number>();
-  const lines = text.split(/\r?\n/);
 
-  for (const rawLine of lines) {
-    const line = normalizeLine(rawLine);
-    if (!line) continue;
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
-    const match = line.match(/^(\d+)[xX]?\s+(.+)$/u);
+  for (const line of lines) {
+    const match = line.match(/^(\d+)\s+(.+)$/);
     if (!match) continue;
 
-    const qty = Number(match[1]);
-    const name = extractName(match[2]);
+    const qty = parseInt(match[1], 10);
+    const rawName = match[2];
 
+    const name = extractName(rawName);
     if (!name) continue;
-    map.set(name, (map.get(name) ?? 0) + qty);
+
+    const current = map.get(name) ?? 0;
+    map.set(name, current + qty);
   }
 
   return map;

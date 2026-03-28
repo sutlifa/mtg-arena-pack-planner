@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {}, // required to silence the warning
+  webpack: (config) => {
+    return config; // enabling this forces Webpack
+  },
 };
 
 export default nextConfig;
