@@ -1,10 +1,37 @@
+// lib/setRecommender.ts
+import { getCardMap } from "./cardData";
+
 export async function rankSets(cardResults: any[]) {
   const setMap = new Map<string, any>();
   const setCache = new Map<string, any>();
 
+  const bulk = await getCardMap();
+
+  function getBulkSetInfo(code: string) {
+    for (const name in bulk) {
+      for (const c of bulk[name]) {
+        if (c.set.toLowerCase() === code.toLowerCase()) {
+          return {
+            code: c.set.toUpperCase(),
+            name: c.set_name,
+            icon: c.set_icon_svg_uri,
+            release: c.released_at ?? "",
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   async function getSetInfo(code: string) {
     const lower = code.toLowerCase();
     if (setCache.has(lower)) return setCache.get(lower);
+
+    const bulkInfo = getBulkSetInfo(code);
+    if (bulkInfo) {
+      setCache.set(lower, bulkInfo);
+      return bulkInfo;
+    }
 
     const res = await fetch(`https://api.scryfall.com/sets/${lower}`);
     const json = await res.json();
@@ -14,16 +41,22 @@ export async function rankSets(cardResults: any[]) {
       return null;
     }
 
-    setCache.set(lower, json);
-    return json;
+    const info = {
+      code: json.code?.toUpperCase() ?? code.toUpperCase(),
+      name: json.name,
+      icon: json.icon_svg_uri,
+      release: json.released_at ?? "",
+    };
+
+    setCache.set(lower, info);
+    return info;
   }
 
   for (const row of cardResults) {
     const lookup = row.lookup;
     if (!lookup) continue;
 
-    const code = lookup.set?.toUpperCase?.() ?? "UNKNOWN";
-    const setName = lookup.set_name ?? "Unknown Set";
+    const code = lookup.set?.toUpperCase() ?? "UNKNOWN";
     const needed = row.needed ?? 0;
 
     if (!setMap.has(code)) {
@@ -31,9 +64,9 @@ export async function rankSets(cardResults: any[]) {
 
       setMap.set(code, {
         code,
-        name: setName,
-        release: setInfo?.released_at ?? "",
-        icon: setInfo?.icon_svg_uri ?? lookup.set_icon_svg_uri ?? null,
+        name: setInfo?.name ?? lookup.set_name,
+        release: setInfo?.release ?? "",
+        icon: setInfo?.icon ?? lookup.set_icon_svg_uri,
         cards: [],
         totalCopies: 0,
         uniqueCards: 0,
@@ -45,7 +78,7 @@ export async function rankSets(cardResults: any[]) {
     entry.cards.push({
       name: row.card,
       needed,
-      rarity: lookup.rarity ?? "unknown", // ⭐ REQUIRED
+      rarity: lookup.rarity ?? "unknown",
     });
 
     entry.totalCopies += needed;

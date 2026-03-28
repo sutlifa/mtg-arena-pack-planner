@@ -1,37 +1,34 @@
-// ⭐ In-memory cache to avoid repeated Scryfall calls within a function lifetime
+// lib/scryfall.ts
+import {
+  getCardMap,
+  getCardMapBySet,
+  ScryfallCard
+} from "./cardData";
+
 const cache = new Map<string, any>();
 
 async function safeFetch(url: string, retries = 3): Promise<any> {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
 
-      // Handle Scryfall rate limits
       if (res.status === 429) {
         await new Promise((r) => setTimeout(r, 400 + i * 400));
         continue;
       }
 
-      if (!res.ok) {
-        throw new Error(`Scryfall returned ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Scryfall returned ${res.status}`);
 
       return await res.json();
     } catch (err) {
-      if (i === retries - 1) {
-        console.error("SCRYFALL LOOKUP FAILED:", url, err);
-        return null;
-      }
-
-      // Exponential backoff
+      if (i === retries - 1) return null;
       await new Promise((r) => setTimeout(r, 300 + i * 300));
     }
   }
-
   return null;
 }
 
@@ -66,30 +63,51 @@ function normalizeCardData(data: any, fallbackName: string) {
   };
 }
 
-export async function lookupCard(name: string) {
-  // Cache hit
-  if (cache.has(name)) {
-    return cache.get(name);
+export async function lookupCardLocal(name: string): Promise<ScryfallCard | null> {
+  const map = await getCardMap();
+  const mapBySet = await getCardMapBySet();
+
+  const lower = name.toLowerCase();
+
+  if (lower.includes("|")) {
+    const exact = mapBySet[lower];
+    if (exact?.length) return exact[0];
   }
 
-  // 1. Exact search
-  const exactUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(
-    name
-  )}`;
+  if (map[lower]?.length) return map[lower][0];
 
+  const fuzzy = Object.keys(map).find((k) => k.includes(lower));
+  if (fuzzy) return map[fuzzy][0];
+
+  const starts = Object.keys(map).find((k) => k.startsWith(lower));
+  if (starts) return map[starts][0];
+
+  return null;
+}
+
+async function lookupCardFromScryfall(name: string) {
+  const exactUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`;
   let data = await safeFetch(exactUrl);
 
-  // 2. Fuzzy fallback
   if (!data) {
-    const fuzzyUrl = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(
-      name
-    )}`;
+    const fuzzyUrl = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`;
     data = await safeFetch(fuzzyUrl);
   }
 
-  // 3. Normalize + cache
-  const normalized = normalizeCardData(data, name);
-  cache.set(name, normalized);
+  return normalizeCardData(data, name);
+}
 
-  return normalized;
+export async function lookupCard(name: string) {
+  if (cache.has(name)) return cache.get(name);
+
+  const local = await lookupCardLocal(name);
+  if (local) {
+    const normalized = normalizeCardData(local, name);
+    cache.set(name, normalized);
+    return normalized;
+  }
+
+  const api = await lookupCardFromScryfall(name);
+  cache.set(name, api);
+  return api;
 }

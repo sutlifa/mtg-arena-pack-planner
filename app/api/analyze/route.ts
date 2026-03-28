@@ -1,3 +1,4 @@
+// app/api/analyze/route.ts
 import { NextResponse } from "next/server";
 import { parseDecklist } from "@/lib/deckParser";
 import { parseArenaCollection } from "@/lib/collectionParser";
@@ -7,7 +8,9 @@ import { rankSets } from "@/lib/setRecommender";
 
 export const runtime = "nodejs";
 
-// ⭐ Run async tasks with a concurrency limit
+// ---------------------------------------------
+// Concurrency limiter (keeps Vercel happy)
+// ---------------------------------------------
 async function runWithLimit<T, R>(
   limit: number,
   items: T[],
@@ -37,9 +40,9 @@ export async function POST(req: Request) {
   try {
     const { decks, collection, disableArena } = await req.json();
 
-    // -----------------------------
+    // ---------------------------------------------
     // 1. UNION DECKLISTS (MAX NEEDED)
-    // -----------------------------
+    // ---------------------------------------------
     const deckUnion = new Map<string, number>();
 
     for (const deck of decks) {
@@ -50,23 +53,21 @@ export async function POST(req: Request) {
       });
     }
 
-    // -----------------------------
+    // ---------------------------------------------
     // 2. ARENA MODE vs PAPER MODE
-    // -----------------------------
+    // ---------------------------------------------
     let neededMap: Map<string, number>;
 
     if (disableArena) {
-      // PAPER MODE — ignore Arena collection
       neededMap = deckUnion;
     } else {
-      // ARENA MODE — subtract Arena collection
       const parsedCollection = parseArenaCollection(collection || "");
       neededMap = computeNeededCopies(deckUnion, parsedCollection);
     }
 
-    // -----------------------------
-    // 3. LOOKUP SCRYFALL DATA (CONCURRENT, LIMITED)
-    // -----------------------------
+    // ---------------------------------------------
+    // 3. LOOKUP CARD DATA (LOCAL BULK → API)
+    // ---------------------------------------------
     const cardEntries = Array.from(neededMap.entries()).filter(
       ([_, needed]) => needed > 0
     );
@@ -75,24 +76,22 @@ export async function POST(req: Request) {
       6,
       cardEntries,
       async ([card, needed]) => {
-        const lookup = await lookupCard(card);
+        const lookup = await lookupCard(card); // now bulk-aware
         return { card, needed, lookup };
       }
     );
 
-    const results = lookupResults;
-
-    // -----------------------------
+    // ---------------------------------------------
     // 4. SET RECOMMENDATIONS
-    // -----------------------------
-    const setRankings = await rankSets(results);
+    // ---------------------------------------------
+    const setRankings = await rankSets(lookupResults);
 
-    // -----------------------------
+    // ---------------------------------------------
     // 5. RETURN EVERYTHING
-    // -----------------------------
+    // ---------------------------------------------
     return NextResponse.json({
-      breakdown: results,
-      shoppingList: results,
+      breakdown: lookupResults,
+      shoppingList: lookupResults,
       recommendations: setRankings,
     });
   } catch (err: any) {
