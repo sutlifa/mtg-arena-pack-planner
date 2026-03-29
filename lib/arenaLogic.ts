@@ -1,51 +1,129 @@
 // lib/arenaLogic.ts
-import { resolveName } from "./aliasResolver";
+
+import { normalizeName } from "./nameUtils";
+import { lookupCard } from "./scryfall";
 
 /**
- * Computes how many copies of each card are still needed,
- * correctly handling:
- * - Adventure cards
- * - Omen / DFC / modal cards
- * - Multiple printings across sets
- *
- * Now also handles:
- * - Arena mechanical names (Detect Intrusion → Spider‑Sense)
- * - Canonical name resolution for both deck and collection
+ * Lines that should be ignored entirely.
  */
-export function computeNeededCopies(
-    deckMap: Map<string, number>,
-    collectionMap: Map<string, number>
-) {
-    const needed = new Map<string, number>();
+const IGNORE_LINES = [
+    "commander",
+    "sideboard",
+    "deck",
+    "decklist",
+    "deck list",
+    "companion",
+];
 
-    deckMap.forEach((qtyNeeded, deckKeyRaw) => {
-        // ⭐ Canonicalize deck key
-        const deckKey = resolveName(deckKeyRaw);
-        const [nameOnlyRaw] = deckKey.split("|");
+/**
+ * Extracts a printed-like name from Arena collection entries.
+ * Fully guarded against undefined/null input.
+ */
+function extractName(raw: string): string {
+    if (!raw || typeof raw !== "string") return "";
 
-        // ⭐ Canonicalize nameOnly
-        const nameOnly = resolveName(nameOnlyRaw);
+    let name = raw.trim();
+    if (!name) return "";
 
-        let totalOwned = 0;
+    // Remove DFC back faces
+    if (typeof name === "string" && name.includes("//")) {
+        const parts = name.split("//");
+        if (parts && parts[0]) name = parts[0].trim();
+    }
 
-        // ⭐ Check canonical name-only key
-        if (collectionMap.has(nameOnly)) {
-            totalOwned = collectionMap.get(nameOnly)!;
-        } else {
-            // ⭐ Sum all canonical set-specific variants
-            for (const [rawKey, qty] of collectionMap.entries()) {
-                const canonicalKey = resolveName(rawKey);
-                if (canonicalKey.startsWith(nameOnly + "|")) {
-                    totalOwned += qty;
-                }
-            }
+    // Remove parentheses (set codes, collector numbers)
+    name = name.replace(/\([^)]*\)/g, "").trim();
+
+    // Remove collector numbers like "123a" or "45"
+    name = name.replace(/\b\d+[a-zA-Z]?\b/g, "").trim();
+
+    // Remove trailing punctuation
+    name = name.replace(/[.,:;]+$/, "").trim();
+
+    // Collapse double spaces
+    name = name.replace(/\s{2,}/g, " ");
+
+    return name || "";
+}
+
+/**
+ * Parses Arena CSV format:
+ * "Card Name","Set","# Owned"
+ */
+function tryArenaCSV(lines: string[]): Map<string, number> | null {
+    const map = new Map<string, number>();
+
+    for (const line of lines) {
+        const match = line.match(/^"(.+?)","(.+?)","(\d+)"$/);
+        if (!match) return null;
+
+        const name = match[1];
+        const qty = parseInt(match[3], 10);
+
+        map.set(name, (map.get(name) ?? 0) + qty);
+    }
+
+    return map;
+}
+
+/**
+ * Unified Arena collection parser.
+ * Canonical identity key = oracle name (Scryfall's `name`).
+ */
+export async function parseArenaCollection(
+    text: string,
+    arenaMode = true
+): Promise<Map<string, number>> {
+    const lines = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+    // 1. Try Arena CSV
+    const csv = tryArenaCSV(lines);
+    if (csv) return await resolveCanonical(csv, arenaMode);
+
+    // 2. Fallback: treat each line as "1 Card Name"
+    const fallback = new Map<string, number>();
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        if (IGNORE_LINES.includes(lower)) continue;
+
+        fallback.set(line, (fallback.get(line) ?? 0) + 1);
+    }
+
+    return await resolveCanonical(fallback, arenaMode);
+}
+
+/**
+ * Converts raw names → canonical oracle-name keys.
+ * Logs "card not found: NAME" when lookup fails.
+ */
+async function resolveCanonical(
+    rawMap: Map<string, number>,
+    arenaMode: boolean
+): Promise<Map<string, number>> {
+    const final = new Map<string, number>();
+
+    for (const [rawName, qty] of rawMap.entries()) {
+        const extracted = extractName(rawName);
+        if (!extracted) continue;
+
+        const normalized = normalizeName(extracted);
+
+        // Lookup card metadata
+        const card = await lookupCard(normalized, arenaMode);
+
+        if (!card || card.failed) {
+            console.error(`card not found: ${rawName}`);
+            continue;
         }
 
-        const missing = Math.max(qtyNeeded - totalOwned, 0);
+        // ⭐ Canonical identity key = oracle name
+        const canonical = normalizeName(card.name);
 
-        // ⭐ Store result under canonical deck key
-        needed.set(deckKey, missing);
-    });
+        final.set(canonical, (final.get(canonical) ?? 0) + qty);
+    }
 
-    return needed;
+    return final;
 }

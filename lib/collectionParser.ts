@@ -1,70 +1,141 @@
 // lib/collectionParser.ts
-import { extractName } from "./deckParser";
-import { normalizeName } from "./nameUtils";
-import { resolveName } from "./aliasResolver";
 
-export function parseArenaCollection(text: string): Map<string, number> {
+import { normalizeName } from "./nameUtils";
+import { lookupCard } from "./scryfall";
+
+/**
+ * Arena CSV parser
+ */
+function tryArenaCSV(lines: string[]): Map<string, number> | null {
     const map = new Map<string, number>();
+    if (!lines[0]?.toLowerCase().includes("quantity")) return null;
+
+    for (const line of lines.slice(1)) {
+        const parts = line.split(",");
+        if (parts.length < 2) continue;
+
+        const qty = parseInt(parts[0], 10);
+        const rawName = parts[1]?.trim();
+        if (!qty || !rawName) continue;
+
+        const normalized = normalizeName(rawName);
+        map.set(normalized, (map.get(normalized) ?? 0) + qty);
+    }
+
+    return map;
+}
+
+/**
+ * Simple list parser (Aetherhub compatible)
+ */
+function trySimpleList(lines: string[]): Map<string, number> | null {
+    const map = new Map<string, number>();
+    let matched = false;
+
+    for (const line of lines) {
+        const m = line.match(/^(\d+)\s+(.+)$/);
+        if (!m) continue;
+
+        matched = true;
+        const qty = parseInt(m[1], 10);
+        let rawName = m[2];
+
+        // ⭐ Strip (SET) and collector numbers including letter suffixes
+        rawName = rawName.replace(/\([A-Za-z0-9]+\)\s*\d+[A-Za-z]*$/, "").trim();
+
+        const normalized = normalizeName(rawName);
+        map.set(normalized, (map.get(normalized) ?? 0) + qty);
+    }
+
+    return matched ? map : null;
+}
+
+/**
+ * Paper list parser
+ */
+function tryPaperList(lines: string[]): Map<string, number> | null {
+    const map = new Map<string, number>();
+    let matched = false;
+
+    for (const line of lines) {
+        // Example: "Marang River Regent (TDM) 51a"
+        const m = line.match(/^(\d+)\s+(.+?)\s+\([^)]+\)\s+\d+[A-Za-z]*$/);
+        if (!m) continue;
+
+        matched = true;
+        const qty = parseInt(m[1], 10);
+        const rawName = m[2];
+
+        const normalized = normalizeName(rawName);
+        map.set(normalized, (map.get(normalized) ?? 0) + qty);
+    }
+
+    return matched ? map : null;
+}
+
+/**
+ * Unified collection parser
+ */
+export async function parseArenaCollection(
+    text: string | undefined | null,
+    arenaMode = false
+): Promise<Map<string, number>> {
+    const finalMap = new Map<string, number>();
+
+    if (!text || typeof text !== "string") {
+        console.error("parseArenaCollection received invalid text:", text);
+        return finalMap;
+    }
 
     const lines = text
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean);
 
-    for (const line of lines) {
-        let qty: number | null = null;
-        let rawName = line;
+    const parsers = [tryArenaCSV, trySimpleList, tryPaperList];
 
-        // Format: "4 Card Name"
-        let match = line.match(/^(\d+)\s+(.+)$/);
-        if (match) {
-            qty = parseInt(match[1], 10);
-            rawName = match[2];
-        }
+    for (const parser of parsers) {
+        const parsed = parser(lines);
+        if (parsed) {
+            for (const [name, qty] of parsed.entries()) {
+                let card;
+                try {
+                    card = await lookupCard(name, arenaMode);
+                } catch {
+                    continue;
+                }
+                if (!card || card.failed) continue;
 
-        // Format: "4x Card Name"
-        if (!qty) {
-            match = line.match(/^(\d+)x\s+(.+)$/i);
-            if (match) {
-                qty = parseInt(match[1], 10);
-                rawName = match[2];
+                const canonical = normalizeName(card.name);
+
+                finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + qty);
             }
-        }
-
-        // Format: "Card Name: 4"
-        if (!qty) {
-            match = line.match(/^(.+):\s*(\d+)$/);
-            if (match) {
-                rawName = match[1];
-                qty = parseInt(match[2], 10);
-            }
-        }
-
-        if (!qty) continue;
-
-        // Extract printed-like name (removes set codes, collector numbers, DFC back faces)
-        const extracted = extractName(rawName);
-        if (!extracted) continue;
-
-        // Normalize for matching
-        const normalized = normalizeName(extracted);
-
-        // ⭐ Apply canonical alias resolution
-        const canonical = resolveName(normalized);
-
-        // Optional set code (e.g., "(MKM)")
-        const setMatch = rawName.match(/\(([A-Za-z0-9]{2,5})\)/);
-        const setCode = setMatch ? setMatch[1].toLowerCase() : null;
-
-        // Store canonical name
-        map.set(canonical, (map.get(canonical) ?? 0) + qty);
-
-        // Store canonical name + set code
-        if (setCode) {
-            const key = `${canonical}|${setCode}`;
-            map.set(key, (map.get(key) ?? 0) + qty);
+            return finalMap;
         }
     }
 
-    return map;
+    // Fallback: treat each line as qty=1
+    for (const line of lines) {
+        let rawName = line;
+
+        // Strip (SET) and collector numbers including letter suffixes
+        rawName = rawName.replace(/\([A-Za-z0-9]+\)\s*\d+[A-Za-z]*$/, "").trim();
+
+        const normalized = normalizeName(rawName);
+
+        let card;
+        try {
+            card = await lookupCard(normalized, arenaMode);
+        } catch {
+            continue;
+        }
+
+        if (!card || card.failed) continue;
+
+        const canonical = normalizeName(card.name);
+
+        finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + 1);
+    }
+
+    return finalMap;
 }

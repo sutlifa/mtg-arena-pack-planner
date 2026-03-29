@@ -1,97 +1,90 @@
 // lib/setRecommender.ts
-import { getCardMap } from "./cardData";
-import { resolveName } from "./aliasResolver";
 
-export async function rankSets(cardResults: any[]) {
-    const setMap = new Map<string, any>();
-    const setCache = new Map<string, any>();
+export interface LookupResult {
+    card: string;              // canonical name
+    displayName: string;       // printing-specific name
+    needed: number;
+    lookup: {
+        set: string | null;
+        set_name: string | null;
+        set_icon_svg_uri: string | null;
+        paper_name?: string;
+        arena_name?: string;
+        name?: string;
+        rarity?: string;
+    } | null | undefined;
+}
 
-    const bulk = await getCardMap();
+export interface RankedSet {
+    set: string;
+    set_name: string | null;
+    set_icon_svg_uri: string | null;
+    totalNeeded: number;
+    uniqueCards: number;
+    cards: {
+        canonical: string;
+        needed: number;
+        displayName: string;
+        rarity: string;
+    }[];
+}
 
-    function getBulkSetInfo(code: string) {
-        for (const name in bulk) {
-            for (const c of bulk[name]) {
-                if (c.set.toLowerCase() === code.toLowerCase()) {
-                    return {
-                        code: c.set.toUpperCase(),
-                        name: c.set_name,
-                        icon: c.set_icon_svg_uri,
-                        release: c.released_at ?? "",
-                    };
-                }
-            }
-        }
-        return null;
-    }
+/**
+ * Fully hardened set recommender.
+ */
+export function rankSets(
+    lookupResults: LookupResult[],
+    arenaMode: boolean = false
+): RankedSet[] {
+    const setMap: Map<string, RankedSet> = new Map();
 
-    async function getSetInfo(code: string) {
-        const lower = code.toLowerCase();
-        if (setCache.has(lower)) return setCache.get(lower);
+    for (const entry of lookupResults) {
+        console.log("SET RECOMMENDER ENTRY:", entry);
+        const lookup = entry.lookup;
 
-        const bulkInfo = getBulkSetInfo(code);
-        if (bulkInfo) {
-            setCache.set(lower, bulkInfo);
-            return bulkInfo;
-        }
+        if (!lookup || typeof lookup !== "object") continue;
 
-        const res = await fetch(`https://api.scryfall.com/sets/${lower}`);
-        const json = await res.json();
+        const setCode = lookup.set;
+        if (!setCode || typeof setCode !== "string") continue;
 
-        if (json.object === "error") {
-            setCache.set(lower, null);
-            return null;
-        }
-
-        const info = {
-            code: json.code?.toUpperCase() ?? code.toUpperCase(),
-            name: json.name,
-            icon: json.icon_svg_uri,
-            release: json.released_at ?? "",
-        };
-
-        setCache.set(lower, info);
-        return info;
-    }
-
-    for (const row of cardResults) {
-        const lookup = row.lookup;
-        if (!lookup) continue;
-
-        const code = lookup.set?.toUpperCase() ?? "UNKNOWN";
-        const needed = row.needed ?? 0;
-
-        // ⭐ Canonical name (fixes Detect Intrusion → Spider‑Sense)
-        const canonicalName = resolveName(row.card);
-
-        if (!setMap.has(code)) {
-            const setInfo = await getSetInfo(code);
-
-            setMap.set(code, {
-                code,
-                name: setInfo?.name ?? lookup.set_name,
-                release: setInfo?.release ?? "",
-                icon: setInfo?.icon ?? lookup.set_icon_svg_uri,
-                cards: [],
-                totalCopies: 0,
+        if (!setMap.has(setCode)) {
+            setMap.set(setCode, {
+                set: setCode,
+                set_name: lookup.set_name ?? null,
+                set_icon_svg_uri: lookup.set_icon_svg_uri ?? null,
+                totalNeeded: 0,
                 uniqueCards: 0,
+                cards: [],
             });
         }
 
-        const entry = setMap.get(code);
+        const bucket = setMap.get(setCode)!;
 
-        entry.cards.push({
-            name: canonicalName,
-            needed,
-            rarity: lookup.rarity ?? "unknown",
+        bucket.totalNeeded += entry.needed;
+        bucket.uniqueCards += 1;
+
+        const paperName =
+            lookup.paper_name ??
+            lookup.name ??
+            entry.card;
+
+        const arenaName =
+            lookup.arena_name ??
+            lookup.paper_name ??
+            lookup.name ??
+            entry.card;
+
+        const rarity = lookup.rarity ?? "unknown";
+
+        bucket.cards.push({
+            canonical: entry.card,
+            needed: entry.needed,
+            displayName: arenaMode ? arenaName : paperName,
+            rarity,
         });
-
-        entry.totalCopies += needed;
-        entry.uniqueCards += 1;
     }
 
-    return [...setMap.values()].sort((a, b) => {
-        if (b.totalCopies !== a.totalCopies)
-            return b.totalCopies - a.totalCopies;
-        return b.uniqueCards - a.uniqueCards;
-    });
+    return Array.from(setMap.values()).sort(
+        (a, b) => b.totalNeeded - a.totalNeeded
+    );
 }

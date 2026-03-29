@@ -1,67 +1,63 @@
 // lib/cardData.ts
 
-import cards from "@/public/data/cards-min.json";
-import { resolveName } from "./aliasResolver";
+import fs from "fs";
+import path from "path";
+import { normalizeName } from "./nameUtils";
 
-export type ScryfallCard = {
+export interface ScryfallCard {
     id: string;
     name: string;
+    printed_name?: string;
+    arena_name?: string;
+    paper_name?: string;
+
     set: string;
     set_name: string;
-    set_type: string | null;   // Required for Commander detection
-    collector_number: string;
-    rarity: string;
-    released_at?: string;
-
-    image_uris?: {
-        small?: string;
-        normal?: string;
-        large?: string;
-        png?: string;
-        art_crop?: string;
-        border_crop?: string;
-    };
-
+    set_type?: string;
     set_icon_svg_uri?: string;
 
-    card_faces?: Array<{
-        name: string;
-        image_uris?: {
-            small?: string;
-            normal?: string;
-            large?: string;
-            png?: string;
-            art_crop?: string;
-            border_crop?: string;
-        };
-    }>;
+    rarity?: string;
+    digital?: boolean;
+    games?: string[];
 
-    [key: string]: any;
-};
+    image_uris?: { normal?: string };
+    card_faces?: {
+        name?: string;
+        printed_name?: string;
+        image_uris?: { normal?: string };
+        set_icon_svg_uri?: string;
+    }[];
+}
 
-export type CardMap = Record<string, ScryfallCard[]>;
-
-let cardMap: CardMap | null = null;
+let cardMapCache: Record<string, ScryfallCard[]> | null = null;
 
 /**
- * Builds a map of canonical card name → all printings.
- * Uses resolveName() to ensure Arena names collapse into printed names.
+ * Load cards-min.json at runtime (server-only).
+ * Prevents Next.js from bundling the 139MB JSON into the client.
  */
-export async function getCardMap(): Promise<CardMap> {
-    if (cardMap) return cardMap;
+function loadCards(): ScryfallCard[] {
+    const filePath = path.join(process.cwd(), "lib/data/cards-min.json");
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+}
 
-    cardMap = {};
+/**
+ * Build the normalized card map.
+ */
+export async function getCardMap(): Promise<Record<string, ScryfallCard[]>> {
+    if (cardMapCache) return cardMapCache;
 
-    for (const card of cards as ScryfallCard[]) {
-        // Normalize + alias → canonical printed name
-        const canonical = resolveName(card.name.toLowerCase());
+    const cards = loadCards();
+    const map: Record<string, ScryfallCard[]> = {};
 
-        if (!cardMap[canonical]) {
-            cardMap[canonical] = [];
-        }
+    for (const card of cards) {
+        const key = normalizeName(card.printed_name ?? card.name);
+        if (!key) continue;
 
-        cardMap[canonical].push(card);
+        if (!map[key]) map[key] = [];
+        map[key].push(card);
     }
 
-    return cardMap;
+    cardMapCache = map;
+    return map;
 }

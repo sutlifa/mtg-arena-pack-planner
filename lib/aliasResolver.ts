@@ -1,5 +1,12 @@
+// lib/aliasResolver.ts
+
+declare global {
+  interface Window {
+    __CARD_ALIASES__?: Record<string, string>;
+  }
+}
+
 export function resolveName(name: string): string {
-  if (!name) return "";
   const key = name.toLowerCase().trim();
 
   if (typeof window !== "undefined" && window.__CARD_ALIASES__) {

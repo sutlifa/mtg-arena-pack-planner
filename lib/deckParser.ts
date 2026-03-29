@@ -1,66 +1,67 @@
 // lib/deckParser.ts
-console.log(">>> USING DECK PARSER FROM:", __filename);
 
 import { normalizeName } from "./nameUtils";
-import { resolveNameServer } from "./serverAliasMap";
+import { lookupCard } from "./scryfall";
 
-export function extractName(raw: string): string {
-    let name = raw.trim();
+/**
+ * Extracts "3 Card Name" or "3x Card Name" or "Card Name 3"
+ */
+function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
+    let m = line.match(/^(\d+)\s+(.+)$/);
+    if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
 
-    // Remove DFC back faces
-    if (name.includes("//")) name = name.split("//")[0].trim();
+    m = line.match(/^(\d+)x\s+(.+)$/i);
+    if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
 
-    // Remove parentheses (set codes, collector numbers)
-    name = name.replace(/\([^)]*\)/g, "").trim();
+    m = line.match(/^(.+)\s+(\d+)$/);
+    if (m) return { qty: parseInt(m[2], 10), rawName: m[1].trim() };
 
-    // Remove collector numbers like "123a" or "45"
-    name = name.replace(/\b\d+[a-zA-Z]?\b/g, "").trim();
-
-    // Remove trailing punctuation
-    name = name.replace(/[.,:;]+$/, "").trim();
-
-    // Collapse double spaces
-    name = name.replace(/\s{2,}/g, " ");
-
-    return name;
+    return null;
 }
 
-export function parseDecklist(text: string): Map<string, number> {
-    const map = new Map<string, number>();
+/**
+ * Hardened decklist parser.
+ * Sideboard header ignored, all cards included.
+ */
+export async function parseDecklist(
+    text: string | undefined | null,
+    arenaMode = false
+): Promise<Map<string, number>> {
+    const finalMap = new Map<string, number>();
+
+    if (!text || typeof text !== "string") {
+        console.error("parseDecklist received invalid text:", text);
+        return finalMap;
+    }
 
     const lines = text
         .split("\n")
         .map((l) => l.trim())
-        .filter(Boolean);
+        .filter((l) => l.length > 0);
 
     for (const line of lines) {
-        const match = line.match(/^(\d+)\s+(.+)$/);
-        if (!match) continue;
+        // Ignore section headers
+        if (/^sideboard$/i.test(line)) continue;
 
-        const qty = parseInt(match[1], 10);
-        const rawName = match[2];
+        const parsed = extractQtyAndName(line);
+        if (!parsed) continue;
 
-        // Extract printed-like name
-        const extracted = extractName(rawName);
-        if (!extracted) continue;
+        const { qty, rawName } = parsed;
+        const normalized = normalizeName(rawName);
 
-        // Normalize for matching
-        const normalized = normalizeName(extracted);
+        let card;
+        try {
+            card = await lookupCard(normalized, arenaMode);
+        } catch {
+            continue;
+        }
 
-        // Apply canonical alias resolution
-        const canonical = resolveNameServer(normalizeName(extracted));
+        if (!card || card.failed) continue;
 
-        // 🔥 DEBUG LOG — this is the key
-        console.log("PARSED CARD:", {
-            rawName,
-            extracted,
-            normalized,
-            canonical,
-            aliasExists: canonical !== normalized
-        });
+        const canonical = normalizeName(card.name);
 
-        map.set(canonical, (map.get(canonical) ?? 0) + qty);
+        finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + qty);
     }
 
-    return map;
+    return finalMap;
 }
