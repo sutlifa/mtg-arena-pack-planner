@@ -22,6 +22,17 @@ function extractQtyAndName(line: string): { qty: number; rawName: string } | nul
 /**
  * Hardened decklist parser.
  * Sideboard header ignored, all cards included.
+ *
+ * ⭐ IMPORTANT:
+ * When merging multiple decklists, we take the MAX quantity needed
+ * across all decks (capped at 4), NOT the sum.
+ *
+ * Example:
+ *   Deck 1: 4 Phlage
+ *   Deck 2: 4 Phlage
+ *   Deck 3: 4 Phlage
+ *
+ * Correct merged result: 4 (not 12)
  */
 export async function parseDecklist(
     text: string | undefined | null,
@@ -60,7 +71,11 @@ export async function parseDecklist(
 
         const canonical = normalizeName(card.name);
 
-        finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + qty);
+        // ⭐ FIX: Use MAX per deck, cap at 4 — do NOT sum across decks
+        const current = finalMap.get(canonical) ?? 0;
+        const newQty = Math.min(4, Math.max(current, qty));
+
+        finalMap.set(canonical, newQty);
     }
 
     return finalMap;
