@@ -30,7 +30,10 @@ The result is a **fast, accurate, visually polished** way to plan purchases for 
 Paste one deck or ten — the tool merges them intelligently using a **max‑per‑deck** rule so you never see inflated card counts.
 
 ### **✔ Arena Collection Integration**
+
 Paste your Arena text export. The app automatically:
+
+Paste your Arena CSV or text export. The app automatically:
 
 - Parses quantities  
 - Strips set codes and collector numbers  

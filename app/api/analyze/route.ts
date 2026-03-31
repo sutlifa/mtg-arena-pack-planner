@@ -5,14 +5,18 @@ import { parseDecklist } from "@/lib/deckParser";
 import { parseArenaCollection } from "@/lib/collectionParser";
 import { lookupCard } from "@/lib/scryfall";
 import { rankSets } from "@/lib/setRecommender";
+import { normalizeName } from "@/lib/nameUtils";
 
 export async function POST(req: Request) {
     try {
         const { decklist, collection, arenaMode } = await req.json();
 
-        // Parse deck + collection
+        // Parse decklist using arenaMode (affects lookup + display)
         const deckMap = await parseDecklist(decklist, arenaMode);
-        const collectionMap = await parseArenaCollection(collection, arenaMode);
+
+        // ⭐ Collection should ALWAYS be parsed in paper mode
+        // This ensures stable canonicalization and correct matching
+        const collectionMap = await parseArenaCollection(collection, false);
 
         const lookupResults: any[] = [];
 
@@ -31,16 +35,16 @@ export async function POST(req: Request) {
             });
         }
 
-        // Only needed cards go into breakdown + shopping list + set recommender
+        // Only needed cards go into breakdown + shopping list + recommender
         const neededCards = lookupResults.filter((c) => c.needed > 0);
 
-        // Set recommender
+        // Set recommender only sees needed cards
         const ranked = rankSets(neededCards, arenaMode);
 
         return NextResponse.json({
             breakdown: neededCards,
             shoppingList: neededCards,
-            recommendations: ranked,   // <-- FIXED KEY
+            recommendations: ranked,
         });
 
     } catch (err) {
