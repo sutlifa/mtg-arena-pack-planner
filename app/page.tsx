@@ -142,10 +142,10 @@ export default function Page() {
 
             {/* COLLECTION INPUT */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                <h2 className="text-2xl font-title">Arena Collection</h2>
+                <h2 className="text-2xl font-title">MTG Collection (Paper OR Arena)</h2>
                 <textarea
                     className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                    placeholder="Paste your Arena collection here..."
+                    placeholder="Paste your MTG collection here..."
                     value={collection}
                     onChange={(e) => setCollection(e.target.value)}
                 />
