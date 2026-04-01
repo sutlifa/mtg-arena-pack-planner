@@ -192,8 +192,8 @@ export default function Page() {
                     breakdown.map((item, i) => {
                         const img =
                             item.lookup?.image_uris?.normal ||
-                            item.lookup?.card_faces?.[0]?.image_uris?.normal;
-
+                            item.lookup?.raw?.card_faces?.[0]?.image_uris?.normal ||
+                            item.lookup?.raw?.card_faces?.[1]?.image_uris?.normal;
                         const setSymbol = item.lookup?.set_icon_svg_uri;
 
                         return (

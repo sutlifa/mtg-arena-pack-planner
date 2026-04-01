@@ -5,9 +5,8 @@
     "\\app\\api",
     "\\app\\api\\analyze",
     "\\lib",
-    "\\lib\\data",
-    "\\public\\data"
+    "\\lib\\data"
   ],
-  "SelectedNode": "\\app\\globals.css",
+  "SelectedNode": "\\app\\page.tsx",
   "PreviewInSolutionExplorer": false
 }
