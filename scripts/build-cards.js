@@ -90,6 +90,38 @@ async function run() {
         // ENGLISH ONLY
         if (card.lang !== "en") return;
 
+        // 🔥 FILTER A: Skip promos, Secret Lair, The List, Masterpieces, etc.
+        if (
+            card.promo === true ||
+            card.set_type === "promo" ||
+            card.set_type === "memorabilia" ||
+            card.set_type === "token" ||
+            card.set_type === "funny" ||
+            card.set_type === "alchemy" ||
+            card.set_type === "arsenal" ||
+            card.set_type === "starter" ||
+            card.set_type === "box" ||
+            card.set_type === "masterpiece" ||
+            card.set === "slx" ||
+            card.set_name?.toLowerCase().includes("secret lair") ||
+            card.set_name === "The List"
+        ) {
+            return;
+        }
+
+        // 🔥 FILTER B: Skip alternate-frame variants (borderless, showcase, extended art, etc.)
+        if (
+            card.frame_effects?.includes("extendedart") ||
+            card.frame_effects?.includes("showcase") ||
+            card.frame_effects?.includes("inverted") ||
+            card.frame_effects?.includes("etched") ||
+            card.border_color === "borderless" ||
+            card.full_art === true ||
+            card.promo_types?.includes("boosterfun")
+        ) {
+            return;
+        }
+
         // Normalize dual-face cards (Adventure, OMEN, MDFC)
         if (card.layout === "adventure" || card.layout === "modal_dfc" || card.card_faces) {
             card = normalizeFaces(card, setIconMap);
@@ -140,8 +172,8 @@ async function run() {
                     image_uris: face.image_uris?.normal
                         ? { normal: face.image_uris.normal }
                         : card.image_uris?.normal
-                        ? { normal: card.image_uris.normal }
-                        : undefined,
+                            ? { normal: card.image_uris.normal }
+                            : undefined,
                     set: face.set,
                     set_name: face.set_name,
                     set_type: face.set_type,

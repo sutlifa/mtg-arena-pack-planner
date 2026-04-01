@@ -5,8 +5,9 @@
     "\\app\\api",
     "\\app\\api\\analyze",
     "\\lib",
-    "\\lib\\data"
+    "\\lib\\data",
+    "\\scripts"
   ],
-  "SelectedNode": "\\app\\page.tsx",
+  "SelectedNode": "\\lib\\scryfall.ts",
   "PreviewInSolutionExplorer": false
 }
