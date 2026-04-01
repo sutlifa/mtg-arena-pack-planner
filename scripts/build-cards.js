@@ -1,0 +1,177 @@
+const fs = require("fs");
+const path = require("path");
+const https = require("https");
+const JSONStream = require("JSONStream");
+
+// Fetch JSON helper
+async function fetchJson(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed fetch ${url}: ${res.status} ${res.statusText}`);
+    return res.json();
+}
+
+// Stream the giant all-cards JSON array
+function streamAllCards(downloadUrl, onCard) {
+    return new Promise((resolve, reject) => {
+        https.get(downloadUrl, (res) => {
+            if (res.statusCode !== 200) {
+                reject(new Error(`Failed to stream all-cards: ${res.statusCode}`));
+                return;
+            }
+
+            const parser = JSONStream.parse("*");
+
+            parser.on("data", onCard);
+            parser.on("end", resolve);
+            parser.on("error", reject);
+
+            res.pipe(parser);
+        }).on("error", reject);
+    });
+}
+
+// Determine category for a printing
+function getCategory(card) {
+    const set = card.set?.toLowerCase() || "";
+    const games = card.games || [];
+
+    if (set.startsWith("om")) return "marvel";
+    if (set.startsWith("otp")) return "omenpaths";
+
+    if (games.includes("arena")) return "arena";
+    if (games.includes("mtgo")) return "mtgo";
+    if (games.includes("paper")) return "paper";
+
+    return "bonus"; // supplemental, commander, bonus sheets, etc.
+}
+
+// Normalize dual-face cards (Adventure, OMEN, MDFC)
+function normalizeFaces(card, setIconMap) {
+    if (!card.card_faces) return card;
+
+    const canonicalFace = card.card_faces[0];
+
+    // Canonical name = front face name
+    card.name = canonicalFace.name;
+
+    // Copy set metadata to faces
+    for (const face of card.card_faces) {
+        face.set = card.set;
+        face.set_name = card.set_name;
+        face.set_type = card.set_type;
+        face.collector_number = card.collector_number;
+        face.set_icon_svg_uri = setIconMap[card.set?.toLowerCase()] ?? null;
+    }
+
+    return card;
+}
+
+async function run() {
+    console.log("Fetching Scryfall bulk-data list...");
+    const bulkList = await fetchJson("https://api.scryfall.com/bulk-data");
+
+    const allCardsEntry = bulkList.data.find((b) => b.type === "all_cards");
+    if (!allCardsEntry) throw new Error("Could not find all-cards bulk entry");
+
+    console.log("Downloading Scryfall set metadata...");
+    const setsJson = await fetchJson("https://api.scryfall.com/sets");
+
+    const setIconMap = {};
+    for (const s of setsJson.data) {
+        if (s.code && s.icon_svg_uri) {
+            setIconMap[s.code.toLowerCase()] = s.icon_svg_uri;
+        }
+    }
+
+    console.log("Streaming all-cards JSON and filtering...");
+    const best = {}; // { cardName: { category: card } }
+
+    await streamAllCards(allCardsEntry.download_uri, (card) => {
+        // ENGLISH ONLY
+        if (card.lang !== "en") return;
+
+        // Normalize dual-face cards (Adventure, OMEN, MDFC)
+        if (card.layout === "adventure" || card.layout === "modal_dfc" || card.card_faces) {
+            card = normalizeFaces(card, setIconMap);
+        }
+
+        const category = getCategory(card);
+        const name = card.name;
+
+        if (!best[name]) best[name] = {};
+
+        const existing = best[name][category];
+
+        // Keep the newest printing by released_at
+        if (!existing || (card.released_at && card.released_at > existing.released_at)) {
+            best[name][category] = card;
+        }
+    });
+
+    console.log("Building final filtered dataset...");
+    const final = [];
+
+    for (const name of Object.keys(best)) {
+        for (const category of Object.keys(best[name])) {
+            const card = best[name][category];
+
+            const base = {
+                name: card.name,
+                printed_name: card.printed_name,
+                arena_name: card.arena_name,
+                set: card.set,
+                set_name: card.set_name,
+                set_type: card.set_type,
+                collector_number: card.collector_number,
+                rarity: card.rarity,
+                released_at: card.released_at,
+                games: card.games,
+                set_icon_svg_uri: setIconMap[card.set?.toLowerCase()] ?? null,
+            };
+
+            if (card.image_uris?.normal) {
+                base.image_uris = { normal: card.image_uris.normal };
+            }
+
+            if (card.card_faces) {
+                base.card_faces = card.card_faces.map((face) => ({
+                    name: face.name,
+                    printed_name: face.printed_name,
+                    image_uris: face.image_uris?.normal
+                        ? { normal: face.image_uris.normal }
+                        : card.image_uris?.normal
+                        ? { normal: card.image_uris.normal }
+                        : undefined,
+                    set: face.set,
+                    set_name: face.set_name,
+                    set_type: face.set_type,
+                    collector_number: face.collector_number,
+                    set_icon_svg_uri: face.set_icon_svg_uri,
+                }));
+            }
+
+            final.push(base);
+        }
+    }
+
+    console.log(`Final dataset size: ${final.length} cards. Writing output...`);
+
+    const libDir = path.join(process.cwd(), "lib/data");
+    const publicDir = path.join(process.cwd(), "public/data");
+    if (!fs.existsSync(libDir)) fs.mkdirSync(libDir, { recursive: true });
+    if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+
+    const libPath = path.join(libDir, "cards-min.json");
+    const publicPath = path.join(publicDir, "cards-min.json");
+
+    fs.writeFileSync(libPath, JSON.stringify(final));
+    fs.writeFileSync(publicPath, JSON.stringify(final));
+
+    const sizeMB = (fs.statSync(libPath).size / 1024 / 1024).toFixed(2);
+    console.log(`Done. Wrote ${final.length} cards (${sizeMB} MB)`);
+}
+
+run().catch((e) => {
+    console.error(e);
+    process.exit(1);
+});

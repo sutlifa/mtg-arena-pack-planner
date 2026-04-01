@@ -1,0 +1,26 @@
+{
+  "name": "mtg-arena-pack-planner",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "build:cards": "node scripts/build-cards.js"
+  },
+  "dependencies": {
+    "JSONStream": "^1.3.5",
+    "next": "^16.2.1",
+    "node": "^25.8.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "stream-json": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "@types/react": "19.2.14",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "6.0.2"
+  }
+}

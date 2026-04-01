@@ -1,0 +1,15 @@
+# Ignore build artifacts
+.next/
+.vercel/
+.vs/
+node_modules/
+
+*.log
+*.map
+*.cache
+*.tmp
+*.tsbuildinfo
+
+# Ignore accidental Next.js bundles of the dataset
+lib_data_cards-min_json*
+*.node
