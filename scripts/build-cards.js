@@ -30,21 +30,6 @@ function streamAllCards(downloadUrl, onCard) {
     });
 }
 
-// Determine category for a printing
-function getCategory(card) {
-    const set = card.set?.toLowerCase() || "";
-    const games = card.games || [];
-
-    if (set.startsWith("om")) return "marvel";
-    if (set.startsWith("otp")) return "omenpaths";
-
-    if (games.includes("arena")) return "arena";
-    if (games.includes("mtgo")) return "mtgo";
-    if (games.includes("paper")) return "paper";
-
-    return "bonus"; // supplemental, commander, bonus sheets, etc.
-}
-
 // Normalize dual-face cards (Adventure, OMEN, MDFC)
 function normalizeFaces(card, setIconMap) {
     if (!card.card_faces) return card;
@@ -84,7 +69,7 @@ async function run() {
     }
 
     console.log("Streaming all-cards JSON and filtering...");
-    const best = {}; // { cardName: { category: card } }
+    const best = {}; // { cardName: { paper, arena, mtgo } }
 
     await streamAllCards(allCardsEntry.download_uri, (card) => {
         // ENGLISH ONLY
@@ -113,7 +98,6 @@ async function run() {
         if (
             card.frame_effects?.includes("extendedart") ||
             card.frame_effects?.includes("showcase") ||
-            card.frame_effects?.includes("inverted") ||
             card.frame_effects?.includes("etched") ||
             card.border_color === "borderless" ||
             card.full_art === true ||
@@ -122,30 +106,49 @@ async function run() {
             return;
         }
 
+        // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
+        if (
+            card.set === "tsr" &&
+            (card.rarity === "special" || card.frame === "1997")
+        ) {
+            return;
+        }
+
+        // 🔥 FILTER D: Skip Mystery Booster Playtest Cards (MB1/MB2)
+        if (card.set === "mb1" || card.set === "mb2") {
+            return;
+        }
+
         // Normalize dual-face cards (Adventure, OMEN, MDFC)
         if (card.layout === "adventure" || card.layout === "modal_dfc" || card.card_faces) {
             card = normalizeFaces(card, setIconMap);
         }
 
-        const category = getCategory(card);
         const name = card.name;
 
-        if (!best[name]) best[name] = {};
+        if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
 
-        const existing = best[name][category];
+        // Split printings by actual game availability
+        const update = (slot) => {
+            const existing = best[name][slot];
+            if (!existing || (card.released_at && card.released_at > existing.released_at)) {
+                best[name][slot] = card;
+            }
+        };
 
-        // Keep the newest printing by released_at
-        if (!existing || (card.released_at && card.released_at > existing.released_at)) {
-            best[name][category] = card;
-        }
+        if (card.games?.includes("paper")) update("paper");
+        if (card.games?.includes("arena")) update("arena");
+        if (card.games?.includes("mtgo")) update("mtgo");
     });
 
     console.log("Building final filtered dataset...");
     const final = [];
 
     for (const name of Object.keys(best)) {
-        for (const category of Object.keys(best[name])) {
-            const card = best[name][category];
+        const slots = best[name];
+        for (const slot of ["paper", "arena", "mtgo"]) {
+            const card = slots[slot];
+            if (!card) continue;
 
             const base = {
                 name: card.name,
