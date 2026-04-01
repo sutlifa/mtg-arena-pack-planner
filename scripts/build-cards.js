@@ -94,19 +94,20 @@ async function run() {
             return;
         }
 
-        // 🔥 FILTER B: Skip alternate-frame variants (borderless, showcase, extended art, etc.)
+        // 🔥 FILTER B: Skip alternate-frame variants AND all promo variants
         if (
             card.frame_effects?.includes("extendedart") ||
             card.frame_effects?.includes("showcase") ||
             card.frame_effects?.includes("etched") ||
+            card.frame_effects?.includes("inverted") ||      // NEW
             card.border_color === "borderless" ||
             card.full_art === true ||
-            card.promo_types?.includes("boosterfun")
+            (card.promo_types && card.promo_types.length > 0) // NEW: skip ALL promo variants
         ) {
             return;
         }
-
-        // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
+          
+              // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
         if (
             card.set === "tsr" &&
             (card.rarity === "special" || card.frame === "1997")
@@ -128,14 +129,31 @@ async function run() {
 
         if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
 
-        // Split printings by actual game availability
+    
+        // Skip Commander printings if a non-Commander printing exists
+        const isCommander = card.set_type === "commander";
+
         const update = (slot) => {
             const existing = best[name][slot];
+
+            // If existing is non-commander and new is commander → skip
+            if (existing && existing.set_type !== "commander" && isCommander) {
+                return;
+            }
+
+            // If existing is commander and new is non-commander → replace
+            if (existing && existing.set_type === "commander" && !isCommander) {
+                best[name][slot] = card;
+                return;
+            }
+
+            // Otherwise: pick newest
             if (!existing || (card.released_at && card.released_at > existing.released_at)) {
                 best[name][slot] = card;
             }
         };
 
+        // Apply to all game modes
         if (card.games?.includes("paper")) update("paper");
         if (card.games?.includes("arena")) update("arena");
         if (card.games?.includes("mtgo")) update("mtgo");
