@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Page() {
     const [decks, setDecks] = useState<string[]>([""]);
@@ -13,7 +13,8 @@ export default function Page() {
     const [disableArena, setDisableArena] = useState(false);
     const [openSets, setOpenSets] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
-    const [zoomImage, setZoomImage] = useState<string | null>(null);
+    const [zoomCard, setZoomCard] = useState<any>(null);
+    const [flip, setFlip] = useState(false);
 
     const toggleSet = (code: string) => {
         setOpenSets((prev) => ({
@@ -22,6 +23,18 @@ export default function Page() {
         }));
     };
 
+    // ✅ ESC key closes modal
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setZoomCard(null);
+                setFlip(false);
+            }
+        };
+
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+    }, []);
     const rarityColor = (rarity: string) => {
         switch (rarity) {
             case "common":
@@ -206,7 +219,7 @@ export default function Page() {
                                     src={img}
                                     alt={item.displayName}
                                     className="w-24 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
-                                    onClick={() => setZoomImage(img)}
+                                    onClick={() => setZoomCard(item)}
                                 />
 
                                 <div className="flex flex-col">
@@ -321,18 +334,58 @@ export default function Page() {
                     })
                 )}
             </section>
-            {zoomImage && (
+
+            {zoomCard && (
                 <div
                     className="card-zoom-backdrop"
-                    onClick={() => setZoomImage(null)}
+                    onClick={() => {
+                        setZoomCard(null);
+                        setFlip(false);
+                    }}
                 >
-                    <img
-                        src={zoomImage}
-                        alt="Zoomed card"
-                        className="card-zoom-image"
-                    />
+                    {(() => {
+                        const front =
+                            zoomCard.lookup?.image_uris?.normal ||
+                            zoomCard.lookup?.raw?.card_faces?.[0]?.image_uris?.normal;
+
+                        const back =
+                            zoomCard.lookup?.raw?.card_faces?.[1]?.image_uris?.normal;
+
+                        return (
+                            <div className={`flip-wrapper ${flip ? "flipped" : ""}`}>
+                                {/* Front face */}
+                                <img
+                                    src={front}
+                                    alt={zoomCard.lookup?.name}
+                                    className="card-face front"
+                                />
+
+                                {/* Back face (only if double-faced) */}
+                                {back && (
+                                    <img
+                                        src={back}
+                                        alt={zoomCard.lookup?.name}
+                                        className="card-face back"
+                                    />
+                                )}
+
+                                {/* 🔥 Only this element receives clicks to flip */}
+                                <div
+                                    className="flip-hitbox"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (back) setFlip(!flip);
+                                    }}
+                                />
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
+              
+           
+                   
+          
         </main>
     );
 }

@@ -4,28 +4,25 @@
 
 /* Light mode variables */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+    --background: #ffffff;
+    --foreground: #171717;
 }
 
 /* Dark mode variables */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+    :root {
+        --background: #0a0a0a;
+        --foreground: #ededed;
+    }
 }
 
 /* Global body styles */
 body {
-  /* IMPORTANT:
-     Use background-color instead of background
-     so we don't override your parchment background image.
-  */
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: Arial, Helvetica, sans-serif;
 }
+
 /* Modal backdrop */
 .card-zoom-backdrop {
     position: fixed;
@@ -37,11 +34,86 @@ body {
     z-index: 200;
 }
 
-/* Modal image */
+/* Modal image (legacy) */
 .card-zoom-image {
     max-width: 90vw;
     max-height: 90vh;
     border-radius: 8px;
     box-shadow: 0 0 25px rgba(0,0,0,0.6);
     transition: transform 0.2s ease;
+}
+
+/* OLD flip-card (unused now) */
+.flip-card {
+    transition: transform 0.4s ease;
+    transform-style: preserve-3d;
+}
+
+    .flip-card.flipped {
+        transform: rotateY(180deg);
+    }
+
+/* ----------------------------- */
+/* 🔥 FINAL FLIP SYSTEM (WORKING) */
+/* ----------------------------- */
+
+.flip-wrapper {
+    position: relative;
+    width: 90vw; /* wrapper now has real width */
+    max-width: 500px; /* keeps card from being huge */
+    aspect-ratio: 488 / 680; /* MTG card ratio */
+    transform-style: preserve-3d;
+    transition: transform 0.5s ease;
+    margin: 0 auto;
+    pointer-events: none; /* wrapper is NOT clickable */
+}
+
+    .flip-wrapper.flipped {
+        transform: rotateY(180deg);
+    }
+
+.card-face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    backface-visibility: hidden;
+    pointer-events: none; /* images are NOT clickable */
+}
+
+    .card-face.back {
+        transform: rotateY(180deg);
+    }
+
+/* 🔥 Only this element receives clicks */
+.flip-hitbox {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+}
+    .flip-wrapper.flipped {
+        transform: rotateY(180deg);
+    }
+
+.card-face {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    backface-visibility: hidden;
+    pointer-events: none; /* images are NOT clickable */
+}
+
+    .card-face.back {
+        transform: rotateY(180deg);
+    }
+
+/* 🔥 Only this element receives clicks */
+.flip-hitbox {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto; /* only this flips the card */
 }
