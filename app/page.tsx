@@ -297,70 +297,72 @@ export default function Page() {
                 )}
             </section>
 
-            {/* SET RECOMMENDATIONS */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                <h2 className="text-2xl font-title">Set Recommendations</h2>
+            {/* SET RECOMMENDATIONS — Only show in Arena Mode */}
+            {!disableArena && (
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <h2 className="text-2xl font-title">Set Recommendations</h2>
 
-                {recommendations.length === 0 ? (
-                    <p className="text-ink">No recommendations yet.</p>
-                ) : (
-                    recommendations.map((set, i) => {
-                        const code = set.set;
-                        const isOpen = openSets[code] ?? false;
+                    {recommendations.length === 0 ? (
+                        <p className="text-ink">No recommendations yet.</p>
+                    ) : (
+                        recommendations.map((set, i) => {
+                            const code = set.set;
+                            const isOpen = openSets[code] ?? false;
 
-                        return (
-                            <div key={i} className="space-y-3">
-                                {i > 0 && (
-                                    <div className="border-t border-[#5a4632] opacity-40 my-2" />
-                                )}
-
-                                <div
-                                    className="p-4 bg-parchment rounded shadow-inner-parchment cursor-pointer"
-                                    onClick={() => toggleSet(code)}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-2xl font-title select-none">
-                                            {isOpen ? "▼" : "▶"}
-                                        </span>
-
-                                        {set.set_icon_svg_uri && (
-                                            <img
-                                                src={set.set_icon_svg_uri}
-                                                alt={code}
-                                                className="w-10 h-10 opacity-90"
-                                            />
-                                        )}
-
-                                        <div>
-                                            <p className="text-ink font-title text-xl">
-                                                {set.set_name}
-                                            </p>
-                                            <p className="text-ink text-sm">
-                                                {set.uniqueCards} unique cards needed —{" "}
-                                                {set.totalNeeded} total copies
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {isOpen && (
-                                        <div className="mt-3 ml-14 space-y-1">
-                                            {set.cards.map((c: any, idx: number) => (
-                                                <p
-                                                    key={idx}
-                                                    className={`text-sm ${rarityColor(c.rarity)}`}
-                                                >
-                                                    • {c.printed_name} — Need {c.needed} ({c.rarity})
-                                                </p>
-                                            ))}
-
-                                        </div>
+                            return (
+                                <div key={i} className="space-y-3">
+                                    {i > 0 && (
+                                        <div className="border-t border-[#5a4632] opacity-40 my-2" />
                                     )}
+
+                                    <div
+                                        className="p-4 bg-parchment rounded shadow-inner-parchment cursor-pointer"
+                                        onClick={() => toggleSet(code)}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-2xl font-title select-none">
+                                                {isOpen ? "▼" : "▶"}
+                                            </span>
+
+                                            {set.set_icon_svg_uri && (
+                                                <img
+                                                    src={set.set_icon_svg_uri}
+                                                    alt={code}
+                                                    className="w-10 h-10 opacity-90"
+                                                />
+                                            )}
+
+                                            <div>
+                                                <p className="text-ink font-title text-xl">
+                                                    {set.set_name}
+                                                </p>
+                                                <p className="text-ink text-sm">
+                                                    {set.uniqueCards} unique cards needed —{" "}
+                                                    {set.totalNeeded} total copies
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {isOpen && (
+                                            <div className="mt-3 ml-14 space-y-1">
+                                                {set.cards.map((c: any, idx: number) => (
+                                                    <p
+                                                        key={idx}
+                                                        className={`text-sm ${rarityColor(c.rarity)}`}
+                                                    >
+                                                        • {c.printed_name} — Need {c.needed} ({c.rarity})
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })
-                )}
-            </section>
+                            );
+                        })
+                    )}
+                </section>
+            )}
+
 
             {zoomCard && (
                 <div

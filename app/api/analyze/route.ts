@@ -33,14 +33,16 @@ export async function POST(req: Request) {
         }
 
         const neededCards = lookupResults.filter((c) => c.needed > 0);
-        const ranked = rankSets(neededCards, arenaMode);
+
+        // ⭐ NEW: Only run set recommender in Arena Mode
+        const ranked = arenaMode ? rankSets(neededCards, arenaMode) : [];
 
         return NextResponse.json({
             breakdown: neededCards,
             shoppingList: neededCards,
-            recommendations: ranked,
+            recommendations: ranked,   // ⭐ Will be [] in Paper Mode
 
-            // ⭐ NEW: return missing card names to the UI
+            // ⭐ Missing card names for UI
             missingCards: missingDeckCards,
         });
 
