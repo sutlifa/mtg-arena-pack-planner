@@ -99,13 +99,18 @@ async function run() {
             card.frame_effects?.includes("extendedart") ||
             card.frame_effects?.includes("showcase") ||
             card.frame_effects?.includes("etched") ||
-            card.frame_effects?.includes("inverted") ||      // NEW
+            card.frame_effects?.includes("inverted") ||
             card.border_color === "borderless" ||
-            card.full_art === true ||
-            (card.promo_types && card.promo_types.length > 0) // NEW: skip ALL promo variants
+            card.full_art === true
         ) {
             return;
         }
+
+        // Only skip REAL promo variants, not Universes Beyond cards
+        if (card.promo === true) {
+            return;
+        }
+
           
               // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
         if (

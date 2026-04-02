@@ -2,13 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light mode variables */
+/* ========================================= */
+/* Light mode variables + global fonts       */
+/* ========================================= */
 :root {
     --background: #ffffff;
     --foreground: #171717;
+    /* Fantasy heading font */
+    --font-heading: "MedievalSharp", serif;
+    /* Clean UI body font */
+    --font-body: Arial, Helvetica, sans-serif;
 }
 
-/* Dark mode variables */
+/* ========================================= */
+/* Dark mode variables                       */
+/* ========================================= */
 @media (prefers-color-scheme: dark) {
     :root {
         --background: #0a0a0a;
@@ -16,14 +24,24 @@
     }
 }
 
-/* Global body styles */
+/* ========================================= */
+/* Global body styles                        */
+/* ========================================= */
 body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--font-body) !important;
 }
 
-/* Modal backdrop */
+/* Headings + banner use fantasy font */
+h1, h2, h3, h4, h5, h6,
+.title-banner {
+    font-family: var(--font-heading) !important;
+}
+
+/* ========================================= */
+/* Modal backdrop                            */
+/* ========================================= */
 .card-zoom-backdrop {
     position: fixed;
     inset: 0;
@@ -53,19 +71,18 @@ body {
         transform: rotateY(180deg);
     }
 
-/* ----------------------------- */
-/* 🔥 FINAL FLIP SYSTEM (WORKING) */
-/* ----------------------------- */
-
+/* ========================================= */
+/* 🔥 FINAL FLIP SYSTEM (WORKING)            */
+/* ========================================= */
 .flip-wrapper {
     position: relative;
-    width: 90vw; /* wrapper now has real width */
-    max-width: 500px; /* keeps card from being huge */
-    aspect-ratio: 488 / 680; /* MTG card ratio */
+    width: 90vw;
+    max-width: 500px;
+    aspect-ratio: 488 / 680;
     transform-style: preserve-3d;
     transition: transform 0.5s ease;
     margin: 0 auto;
-    pointer-events: none; /* wrapper is NOT clickable */
+    pointer-events: none;
 }
 
     .flip-wrapper.flipped {
@@ -79,41 +96,89 @@ body {
     height: 100%;
     object-fit: contain;
     backface-visibility: hidden;
-    pointer-events: none; /* images are NOT clickable */
+    pointer-events: none;
 }
 
     .card-face.back {
         transform: rotateY(180deg);
     }
 
-/* 🔥 Only this element receives clicks */
 .flip-hitbox {
     position: absolute;
     inset: 0;
     pointer-events: auto;
 }
-    .flip-wrapper.flipped {
-        transform: rotateY(180deg);
-    }
 
-.card-face {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    backface-visibility: hidden;
-    pointer-events: none; /* images are NOT clickable */
+/* ========================================= */
+/* 🔥 INFERNAL FORGED FLAMES BANNER          */
+/* ========================================= */
+
+/* Wrapper that holds the flames */
+.inferno-wrapper {
+    position: relative;
+    display: inline-block;
+    padding: 0;
+    z-index: 9999;
 }
 
-    .card-face.back {
-        transform: rotateY(180deg);
+/* Core banner (forged metal plaque + molten text) */
+.title-banner {
+    position: relative;
+    font-size: 3.2rem;
+    letter-spacing: 3px;
+    text-align: center;
+    padding: 32px 80px;
+    background: linear-gradient(180deg, #3a1f0f 0%, #2a140a 40%, #1a0c06 100%);
+    border: 3px solid #8b3a12;
+    border-radius: 14px;
+    box-shadow: inset 0 0 25px rgba(255,120,20,0.35), inset 0 0 60px rgba(255,60,0,0.25), 0 0 20px rgba(0,0,0,0.7);
+    color: #ffe9b0;
+    text-shadow: 0 0 3px #000, 0 0 6px #000, 0 0 12px rgba(255,180,80,1), 0 0 28px rgba(255,120,20,0.9), 0 0 45px rgba(255,60,0,0.8);
+    margin: 20px auto;
+    width: fit-content;
+    z-index: 2;
+}
+
+/* FULL SURROUND FLAMES (tight, controlled) */
+.inferno-wrapper::before,
+.inferno-wrapper::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 115%;
+    height: 115%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Top flames */
+.inferno-wrapper::before {
+    top: -15%;
+    background: radial-gradient(circle at 50% 100%, rgba(255,120,20,0.85) 0%, transparent 65%), radial-gradient(circle at 25% 90%, rgba(255,160,40,0.75) 0%, transparent 70%), radial-gradient(circle at 75% 90%, rgba(255,80,0,0.75) 0%, transparent 70%);
+    filter: blur(14px);
+    animation: inferno-flicker 2.6s infinite ease-in-out alternate;
+}
+
+/* Bottom flames */
+.inferno-wrapper::after {
+    bottom: -15%;
+    background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.75) 0%, transparent 65%), radial-gradient(circle at 30% 10%, rgba(255,60,0,0.65) 0%, transparent 70%), radial-gradient(circle at 70% 10%, rgba(255,140,0,0.65) 0%, transparent 70%);
+    filter: blur(16px);
+    animation: inferno-flicker 3.1s infinite ease-in-out alternate-reverse;
+}
+
+/* Flicker animation */
+@keyframes inferno-flicker {
+    0% {
+        transform: translateX(-50%) scale(1);
     }
 
-/* 🔥 Only this element receives clicks */
-.flip-hitbox {
-    position: absolute;
-    inset: 0;
-    pointer-events: auto; /* only this flips the card */
+    50% {
+        transform: translateX(-50%) scale(1.08);
+    }
+
+    100% {
+        transform: translateX(-50%) scale(0.96);
+    }
 }

@@ -109,14 +109,17 @@ export default function Page() {
     return (
         <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
 
-            {/* TITLE */}
-            <div className="relative flex justify-center mb-10">
-                <span className="absolute inset-0 bg-black/50 blur-2xl rounded-xl -z-10"></span>
-
-                <h1 className="text-6xl font-title tracking-wide text-center text-[#fff4c2] drop-shadow-[0_0_15px_rgba(255,200,80,1)] shadow-[0_0_45px_rgba(255,120,20,0.9)] filter brightness-150 contrast-125">
-                    MTG Card Acquiring Tool
-                </h1>
+            {/* Banner */}
+            <div className="relative overflow-visible">
+                <div className="flex justify-center mb-10">
+                    <div className="inferno-wrapper">
+                        <div className="title-banner">
+                            MTG Card Acquiring Tool
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
             {/* DECK INPUTS */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
