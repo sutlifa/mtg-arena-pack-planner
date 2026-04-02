@@ -8,6 +8,6 @@
     "\\lib\\data",
     "\\scripts"
   ],
-  "SelectedNode": "\\lib\\collectionParser.ts",
+  "SelectedNode": "\\app\\api\\analyze\\route.ts",
   "PreviewInSolutionExplorer": false
 }

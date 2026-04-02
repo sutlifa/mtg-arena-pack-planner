@@ -98,21 +98,23 @@ export async function parseArenaCollection(
         if (parsed) {
             for (const [name, qty] of parsed.entries()) {
 
-                // ⭐ Apply alias BEFORE lookupCard
-                const aliasName = serverAliasMap[name] ?? name;
+                // ⭐ Arena mode uses alias; Paper mode uses raw name
+                const lookupName = arenaMode
+                    ? (serverAliasMap[name] ?? name)
+                    : name;
 
                 let card;
                 try {
-                    card = await lookupCard(aliasName, arenaMode);
+                    card = await lookupCard(lookupName, arenaMode);
                 } catch {
                     continue;
                 }
                 if (!card || card.failed) continue;
 
-                // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
+                // ⭐ Canonical key unified across deck + collection
                 const canonical = normalizeName(
-                    arenaMode && card.printed_name && card.printed_name !== card.name
-                        ? card.printed_name
+                    arenaMode
+                        ? (card.printed_name ?? card.name)
                         : card.name
                 );
 
@@ -130,22 +132,22 @@ export async function parseArenaCollection(
 
         const normalized = normalizeName(rawName);
 
-        // ⭐ Apply alias BEFORE lookupCard
-        const aliasName = serverAliasMap[normalized] ?? normalized;
+        const lookupName = arenaMode
+            ? (serverAliasMap[normalized] ?? normalized)
+            : normalized;
 
         let card;
         try {
-            card = await lookupCard(aliasName, arenaMode);
+            card = await lookupCard(lookupName, arenaMode);
         } catch {
             continue;
         }
 
         if (!card || card.failed) continue;
 
-        // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
         const canonical = normalizeName(
-            arenaMode && card.printed_name && card.printed_name !== card.name
-                ? card.printed_name
+            arenaMode
+                ? (card.printed_name ?? card.name)
                 : card.name
         );
 

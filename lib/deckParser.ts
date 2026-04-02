@@ -37,26 +37,27 @@ async function parseSingleDeck(
         const { qty, rawName } = parsed;
         const normalized = normalizeName(rawName);
 
-        // ⭐ Apply alias BEFORE lookupCard
-        const aliasName = serverAliasMap[normalized] ?? normalized;
+        // ⭐ Arena mode uses alias; Paper mode uses raw normalized name
+        const lookupName = arenaMode
+            ? (serverAliasMap[normalized] ?? normalized)
+            : normalized;
 
         let card;
         try {
-            card = await lookupCard(aliasName, arenaMode);
+            card = await lookupCard(lookupName, arenaMode);
         } catch {
             continue;
         }
 
         if (!card || card.failed) continue;
 
-        // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
+        // ⭐ Canonical key unified across deck + collection
         const canonical = normalizeName(
-            arenaMode && card.printed_name && card.printed_name !== card.name
-                ? card.printed_name
-                : card.name
+            arenaMode
+                ? (card.printed_name ?? card.name) // Arena name
+                : card.name                        // Paper/oracle name
         );
 
-        // SUM within a single deck, cap at 4
         const current = deckMap.get(canonical) ?? 0;
         deckMap.set(canonical, Math.min(4, current + qty));
     }
