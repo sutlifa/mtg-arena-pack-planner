@@ -182,3 +182,38 @@ h1, h2, h3, h4, h5, h6,
         transform: translateX(-50%) scale(0.96);
     }
 }
+/* ============================
+   TIP JAR SIDEBAR STYLES
+   ============================ */
+
+.tipjar-container {
+    @apply bg-parchment-dark rounded-lg shadow-card p-3 w-40;
+}
+
+.tipjar-header {
+    @apply font-title text-xl text-ink mb-4 text-center;
+}
+
+.tipjar-button {
+    @apply flex items-center justify-center gap-3 
+           bg-parchment hover:bg-parchment-dark 
+           rounded shadow-inner-parchment 
+           px-4 py-3 font-title text-ink 
+           transition-colors cursor-pointer;
+}
+
+/* Tip jar icon: molten coin glow */
+.tipjar-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #f7d37a 0%, #c48a2c 60%, #8b5a3c 100%);
+    box-shadow: 0 0 8px rgba(255, 200, 80, 0.7), inset 0 0 4px rgba(0, 0, 0, 0.4);
+    animation: tipjar-pulse 2.2s infinite ease-in-out;
+}
+
+@keyframes tipjar-pulse {
+    0% { box-shadow: 0 0 6px rgba(255, 200, 80, 0.6); }
+    50% { box-shadow: 0 0 14px rgba(255, 200, 80, 0.9); }
+    100% { box-shadow: 0 0 6px rgba(255, 200, 80, 0.6); }
+}

@@ -113,10 +113,26 @@ export default function Page() {
     };
 
     return (
-        <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+    <>
+            {/* FLOATING TIP JAR */}
+            <div className="fixed top-6 left-6 z-50 pointer-events-auto">
+                <aside className="tipjar-container">
+                    <h2 className="tipjar-header">Support the Creator</h2>
 
-            {/* Banner */}
-            <div className="relative overflow-visible">
+                    <a
+                        href="https://www.paypal.com/donate/?business=VLDPL87EZ58L6&no_recurring=0&currency_code=USD"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tipjar-button"
+                    >
+                        <div className="tipjar-icon"></div>
+                        <span>Tip Jar</span>
+                    </a>
+                </aside>
+            </div>
+
+            {/* FULL-WIDTH BANNER */}
+            <div className="relative overflow-visible py-10">
                 <div className="flex justify-center mb-10">
                     <div className="inferno-wrapper">
                         <div className="title-banner">
@@ -126,7 +142,12 @@ export default function Page() {
                 </div>
             </div>
 
-
+            {/* SIDEBAR + MAIN CONTENT LAYOUT */}
+            <div className="px-6">
+                            
+                {/* MAIN CONTENT */}
+                <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+                    
             {/* DECK INPUTS */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
                 <div className="flex justify-between items-center">
@@ -437,6 +458,10 @@ export default function Page() {
            
                    
           
-        </main>
+            </main>
+
+           </div>
+        </>
+
     );
 }
