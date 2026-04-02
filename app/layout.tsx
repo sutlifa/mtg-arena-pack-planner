@@ -2,8 +2,8 @@ import "./globals.css";
 import AliasLoader from "./AliasLoader";
 
 export const metadata = {
-    title: "MTG Arena Pack Planner",
-    description: "Analyze decks, Arena collection, and pack recommendations.",
+    title: "MTG Card Acquiring Tool",
+    description: "Analyze decks against your collection, and get pack recommendations for arena or a shopping list for TCGPlayer.",
 };
 
 export default function RootLayout({

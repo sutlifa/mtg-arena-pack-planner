@@ -195,16 +195,35 @@ export default function Page() {
 
             {/* TOGGLE + BUTTON */}
             <div className="text-center space-y-3">
-                <label className="flex items-center justify-center gap-3 font-title text-lg">
-                    <input
-                        type="checkbox"
-                        checked={disableArena}
-                        onChange={(e) => setDisableArena(e.target.checked)}
-                        className="w-5 h-5"
-                    />
-                    Disable Arena Comparison (Paper Mode)
-                </label>
 
+                {/* Toggle Row */}
+                <div className="flex items-center justify-center gap-6 font-title text-lg text-ink">
+
+                    {/* Left label — always visible */}
+                    <span className="select-none">Arena Mode</span>
+
+                    {/* Toggle */}
+                    <button
+                        onClick={() => setDisableArena(!disableArena)}
+                        className={`
+                relative w-20 h-10 rounded-full transition-colors duration-300
+                ${disableArena ? "bg-[#8b5a3c]" : "bg-[#d4b48c]"}
+                shadow-inner-parchment
+            `}
+                    >
+                        <span
+                            className={`
+                    absolute top-1 left-1 w-8 h-8 rounded-full bg-parchment shadow-card transition-all duration-300
+                    ${disableArena ? "translate-x-10" : "translate-x-0"}
+                `}
+                        />
+                    </button>
+
+                    {/* Right label — always visible */}
+                    <span className="select-none">Paper Mode</span>
+                </div>
+
+                {/* Analyze Button */}
                 <button
                     onClick={processAll}
                     disabled={loading}
@@ -222,7 +241,7 @@ export default function Page() {
                     </div>
                 )}
             </div>
-
+                                        
             {/* BREAKDOWN */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                 <h2 className="text-2xl font-title">Card Breakdown</h2>
@@ -272,7 +291,10 @@ export default function Page() {
 
             {/* SHOPPING LIST */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                <h2 className="text-2xl font-title">Shopping List (Paper Mode Friendly)</h2>
+                <h2 className="text-2xl font-title">
+                    {disableArena ? "TCGPlayer Shopping List" : "Arena Import"}
+                </h2>
+
 
                 {shoppingList.length === 0 ? (
                     <p className="text-ink">No missing cards yet.</p>
