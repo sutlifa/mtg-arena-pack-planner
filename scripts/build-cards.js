@@ -75,10 +75,16 @@ async function run() {
         // ENGLISH ONLY
         if (card.lang !== "en") return;
 
-        // 🔥 FILTER A: Skip promos, Secret Lair, The List, Masterpieces, etc.
+        // 🔥 FILTER A: Promo logic
+        // Allow ONLY Universes Beyond promos (OM1 paper printings)
+        if (card.promo === true) {
+            if (!card.promo_types || !card.promo_types.includes("universesbeyond")) {
+                return; // skip all other promos
+            }
+        }
+
+        // Skip unwanted set types
         if (
-            card.promo === true ||
-            card.set_type === "promo" ||
             card.set_type === "memorabilia" ||
             card.set_type === "token" ||
             card.set_type === "funny" ||
@@ -100,19 +106,17 @@ async function run() {
             card.frame_effects?.includes("showcase") ||
             card.frame_effects?.includes("etched") ||
             card.frame_effects?.includes("inverted") ||
-            card.border_color === "borderless" ||
             card.full_art === true
         ) {
             return;
         }
 
-        // Only skip REAL promo variants, not Universes Beyond cards
-        if (card.promo === true) {
-            return;
-        }
+        // ❌ REMOVED — this was deleting ALL promos, including Universes Beyond
+        // if (card.promo === true) {
+        //     return;
+        // }
 
-          
-              // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
+        // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
         if (
             card.set === "tsr" &&
             (card.rarity === "special" || card.frame === "1997")
@@ -134,7 +138,6 @@ async function run() {
 
         if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
 
-    
         // Skip Commander printings if a non-Commander printing exists
         const isCommander = card.set_type === "commander";
 
