@@ -2,6 +2,7 @@
 
 import { normalizeName } from "./nameUtils";
 import { lookupCard } from "./scryfall";
+import { serverAliasMap } from "./serverAliasMap";
 
 function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
     let m = line.match(/^(\d+)\s+(.+)$/);
@@ -36,16 +37,24 @@ async function parseSingleDeck(
         const { qty, rawName } = parsed;
         const normalized = normalizeName(rawName);
 
+        // ⭐ Apply alias BEFORE lookupCard
+        const aliasName = serverAliasMap[normalized] ?? normalized;
+
         let card;
         try {
-            card = await lookupCard(normalized, arenaMode);
+            card = await lookupCard(aliasName, arenaMode);
         } catch {
             continue;
         }
 
         if (!card || card.failed) continue;
 
-        const canonical = normalizeName(card.name);
+        // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
+        const canonical = normalizeName(
+            arenaMode && card.printed_name && card.printed_name !== card.name
+                ? card.printed_name
+                : card.name
+        );
 
         // SUM within a single deck, cap at 4
         const current = deckMap.get(canonical) ?? 0;

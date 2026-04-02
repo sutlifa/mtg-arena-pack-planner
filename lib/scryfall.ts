@@ -17,9 +17,7 @@ async function loadData() {
     cardData = JSON.parse(fileContents);
 
     for (const card of cardData) {
-        // ⭐ FIXED: canonical grouping MUST use oracle name
         const key = normalizeName(card.name);
-
         if (!cardMap[key]) cardMap[key] = [];
         cardMap[key].push(card);
     }
@@ -40,29 +38,52 @@ export async function lookupCard(
 
     const printings = cardMap[lookupKey];
 
+    console.log("LOOKUP DEBUG:", {
+        input: name,
+        normalized,
+        alias,
+        lookupKey,
+        hasPrintings: !!printings,
+        printingCount: printings?.length ?? 0,
+        printingsPreview: printings?.map(p => ({
+            name: p.name,
+            printed_name: p.printed_name,
+            set: p.set,
+            games: p.games,
+        })),
+    });
+
     if (!printings || printings.length === 0) {
         return { failed: true };
     }
 
-    // ⭐ FIXED: correct Arena vs Paper selection
+    // ⭐ NEW: detect if this card has ANY true paper printing
+    const hasPaperPrinting = printings.some(c => !c.games?.includes("arena"));
+
     let selected;
 
     if (arenaMode) {
-        // Prefer Arena printings
+        // ⭐ Arena mode → prefer Arena printings (original working logic)
         selected =
             printings.find(c => c.games?.includes("arena")) ??
             printings[0];
     } else {
-        // Prefer Paper printings
-        selected =
-            printings.find(c => !c.games?.includes("arena")) ??
-            printings[0];
+        if (hasPaperPrinting) {
+            // ⭐ Paper mode → use real paper printing if it exists
+            selected =
+                printings.find(c => !c.games?.includes("arena")) ??
+                printings[0];
+        } else {
+            // ⭐ Paper mode but NO paper printing exists (Ademi case)
+            // → use Arena printing but with paper/oracle name
+            selected = printings[0];
+        }
     }
 
-    // ⭐ FIXED: printed_name is ALWAYS the correct display name
-    const displayName =
-        selected.printed_name ??
-        selected.name;
+    // ⭐ Display name depends on mode
+    const displayName = arenaMode
+        ? (selected.printed_name ?? selected.name) // Arena name
+        : selected.name;                           // Paper/oracle name
 
     return {
         failed: false,
@@ -70,7 +91,7 @@ export async function lookupCard(
         // canonical oracle name
         name: selected.name,
 
-        // correct printing-specific display name
+        // mode-appropriate display name
         printed_name: displayName,
 
         // metadata

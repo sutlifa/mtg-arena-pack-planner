@@ -2,6 +2,7 @@
 
 import { normalizeName } from "./nameUtils";
 import { lookupCard } from "./scryfall";
+import { serverAliasMap } from "./serverAliasMap";
 
 /**
  * Arena CSV parser
@@ -40,7 +41,6 @@ function trySimpleList(lines: string[]): Map<string, number> | null {
         const qty = parseInt(m[1], 10);
         let rawName = m[2];
 
-        // ⭐ Strip (SET) and collector numbers including letter suffixes
         rawName = rawName.replace(/\([A-Za-z0-9]+\)\s*\d+[A-Za-z]*$/, "").trim();
 
         const normalized = normalizeName(rawName);
@@ -58,7 +58,6 @@ function tryPaperList(lines: string[]): Map<string, number> | null {
     let matched = false;
 
     for (const line of lines) {
-        // Example: "Marang River Regent (TDM) 51a"
         const m = line.match(/^(\d+)\s+(.+?)\s+\([^)]+\)\s+\d+[A-Za-z]*$/);
         if (!m) continue;
 
@@ -98,15 +97,24 @@ export async function parseArenaCollection(
         const parsed = parser(lines);
         if (parsed) {
             for (const [name, qty] of parsed.entries()) {
+
+                // ⭐ Apply alias BEFORE lookupCard
+                const aliasName = serverAliasMap[name] ?? name;
+
                 let card;
                 try {
-                    card = await lookupCard(name, arenaMode);
+                    card = await lookupCard(aliasName, arenaMode);
                 } catch {
                     continue;
                 }
                 if (!card || card.failed) continue;
 
-                const canonical = normalizeName(card.name);
+                // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
+                const canonical = normalizeName(
+                    arenaMode && card.printed_name && card.printed_name !== card.name
+                        ? card.printed_name
+                        : card.name
+                );
 
                 finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + qty);
             }
@@ -118,21 +126,28 @@ export async function parseArenaCollection(
     for (const line of lines) {
         let rawName = line;
 
-        // Strip (SET) and collector numbers including letter suffixes
         rawName = rawName.replace(/\([A-Za-z0-9]+\)\s*\d+[A-Za-z]*$/, "").trim();
 
         const normalized = normalizeName(rawName);
 
+        // ⭐ Apply alias BEFORE lookupCard
+        const aliasName = serverAliasMap[normalized] ?? normalized;
+
         let card;
         try {
-            card = await lookupCard(normalized, arenaMode);
+            card = await lookupCard(aliasName, arenaMode);
         } catch {
             continue;
         }
 
         if (!card || card.failed) continue;
 
-        const canonical = normalizeName(card.name);
+        // ⭐ Arena dual-name fix (ONLY affects cards like Ademi)
+        const canonical = normalizeName(
+            arenaMode && card.printed_name && card.printed_name !== card.name
+                ? card.printed_name
+                : card.name
+        );
 
         finalMap.set(canonical, (finalMap.get(canonical) ?? 0) + 1);
     }
