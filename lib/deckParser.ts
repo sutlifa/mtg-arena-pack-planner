@@ -20,8 +20,10 @@ function extractQtyAndName(line: string): { qty: number; rawName: string } | nul
 async function parseSingleDeck(
     text: string,
     arenaMode: boolean
-): Promise<Map<string, number>> {
+): Promise<{ deckMap: Map<string, number>, missing: string[] }> {
+
     const deckMap = new Map<string, number>();
+    const missing: string[] = [];   // ⭐ NEW
 
     const lines = text
         .split("\n")
@@ -46,10 +48,14 @@ async function parseSingleDeck(
         try {
             card = await lookupCard(lookupName, arenaMode);
         } catch {
+            missing.push(rawName);   // ⭐ NEW
             continue;
         }
 
-        if (!card || card.failed) continue;
+        if (!card || (card as any).failed) {
+            missing.push(rawName);   // ⭐ NEW
+            continue;
+        }
 
         // ⭐ Canonical key unified across deck + collection
         const canonical = normalizeName(
@@ -62,18 +68,20 @@ async function parseSingleDeck(
         deckMap.set(canonical, Math.min(4, current + qty));
     }
 
-    return deckMap;
+    return { deckMap, missing };   // ⭐ NEW
 }
 
 export async function parseDecklist(
     input: string | string[] | undefined | null,
     arenaMode = false
-): Promise<Map<string, number>> {
+): Promise<{ map: Map<string, number>, missing: string[] }> {   // ⭐ NEW
+
     const finalMap = new Map<string, number>();
+    const finalMissing: string[] = [];   // ⭐ NEW
 
     if (!input) {
         console.error("parseDecklist received invalid input:", input);
-        return finalMap;
+        return { map: finalMap, missing: finalMissing };
     }
 
     let deckTexts: string[];
@@ -89,11 +97,14 @@ export async function parseDecklist(
         if (deckTexts.length === 0) deckTexts = [input];
     } else {
         console.error("parseDecklist received invalid input type:", typeof input);
-        return finalMap;
+        return { map: finalMap, missing: finalMissing };
     }
 
     for (const deckText of deckTexts) {
-        const deckMap = await parseSingleDeck(deckText, arenaMode);
+        const { deckMap, missing } = await parseSingleDeck(deckText, arenaMode);  // ⭐ NEW
+
+        // Merge missing card names
+        for (const m of missing) finalMissing.push(m);   // ⭐ NEW
 
         for (const [canonical, qty] of deckMap.entries()) {
             const current = finalMap.get(canonical) ?? 0;
@@ -101,5 +112,5 @@ export async function parseDecklist(
         }
     }
 
-    return finalMap;
+    return { map: finalMap, missing: finalMissing };   // ⭐ NEW
 }

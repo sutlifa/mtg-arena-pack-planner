@@ -10,8 +10,9 @@ export async function POST(req: Request) {
     try {
         const { decklist, collection, arenaMode } = await req.json();
 
-        // Deck parsed in current mode
-        const deckMap = await parseDecklist(decklist, arenaMode);
+        // ⭐ Deck parsed in current mode (now returns { map, missing })
+        const { map: deckMap, missing: missingDeckCards } =
+            await parseDecklist(decklist, arenaMode);
 
         // Collection MUST use the same mode so canonical keys match
         const collectionMap = await parseArenaCollection(collection, arenaMode);
@@ -38,6 +39,9 @@ export async function POST(req: Request) {
             breakdown: neededCards,
             shoppingList: neededCards,
             recommendations: ranked,
+
+            // ⭐ NEW: return missing card names to the UI
+            missingCards: missingDeckCards,
         });
 
     } catch (err) {

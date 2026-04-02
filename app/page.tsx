@@ -9,6 +9,7 @@ export default function Page() {
     const [breakdown, setBreakdown] = useState<any[]>([]);
     const [shoppingList, setShoppingList] = useState<any[]>([]);
     const [recommendations, setRecommendations] = useState<any[]>([]);
+    const [missingCards, setMissingCards] = useState<string[]>([]);
 
     const [disableArena, setDisableArena] = useState(false);
     const [openSets, setOpenSets] = useState<Record<string, boolean>>({});
@@ -91,6 +92,9 @@ export default function Page() {
             setBreakdown(data.breakdown || []);
             setShoppingList(data.shoppingList || []);
             setRecommendations(data.recommendations || []);
+            setMissingCards(data.missingCards ?? []);
+
+
         } catch (err) {
             console.error("Request failed:", err);
         }
@@ -158,6 +162,25 @@ export default function Page() {
                     </div>
                 ))}
             </section>
+            {/* Missing Cards Panel */}
+            {missingCards.length > 0 && (
+                <section className="bg-parchment-dark border border-red-700 shadow-card rounded-lg p-4 mt-4">
+                    <h2 className="text-xl font-title text-red-600 mb-2">
+                        Missing or Unrecognized Cards
+                    </h2>
+
+                    <p className="text-ink mb-2">
+                        These card names could not be matched. Check for typos or formatting:
+                    </p>
+
+                    <ul className="list-disc list-inside text-ink">
+                        {missingCards.map((name, i) => (
+                            <li key={i}>{name}</li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+
 
             {/* COLLECTION INPUT */}
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
