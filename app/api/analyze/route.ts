@@ -29,10 +29,11 @@ export async function POST(req: Request) {
 
             lookupResults.push({
                 card: canonical,
-                displayName: card.printed_name ?? card.name,
                 needed,
                 lookup: card,
             });
+
+
         }
 
         // Only needed cards go into breakdown + shopping list + recommender

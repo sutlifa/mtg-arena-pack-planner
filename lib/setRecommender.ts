@@ -2,15 +2,12 @@
 
 export interface LookupResult {
     card: string;              // canonical name
-    displayName: string;       // printing-specific name
     needed: number;
     lookup: {
         set: string | null;
         set_name: string | null;
         set_icon_svg_uri: string | null;
-        paper_name?: string;
-        arena_name?: string;
-        name?: string;
+        printed_name?: string;   // printing-specific name (Detect Intrusion)
         rarity?: string;
     } | null | undefined;
 }
@@ -24,7 +21,7 @@ export interface RankedSet {
     cards: {
         canonical: string;
         needed: number;
-        displayName: string;
+        printed_name: string;    // always present
         rarity: string;
     }[];
 }
@@ -39,9 +36,7 @@ export function rankSets(
     const setMap: Map<string, RankedSet> = new Map();
 
     for (const entry of lookupResults) {
-        console.log("SET RECOMMENDER ENTRY:", entry);
         const lookup = entry.lookup;
-
         if (!lookup || typeof lookup !== "object") continue;
 
         const setCode = lookup.set;
@@ -63,15 +58,10 @@ export function rankSets(
         bucket.totalNeeded += entry.needed;
         bucket.uniqueCards += 1;
 
-        const paperName =
-            lookup.paper_name ??
-            lookup.name ??
-            entry.card;
-
-        const arenaName =
-            lookup.arena_name ??
-            lookup.paper_name ??
-            lookup.name ??
+        // ⭐ Always use lookup.printed_name (Detect Intrusion / Spider-Sense)
+        // Fallback to canonical name if somehow missing
+        const printedName =
+            lookup.printed_name ??
             entry.card;
 
         const rarity = lookup.rarity ?? "unknown";
@@ -79,7 +69,7 @@ export function rankSets(
         bucket.cards.push({
             canonical: entry.card,
             needed: entry.needed,
-            displayName: arenaMode ? arenaName : paperName,
+            printed_name: printedName,
             rarity,
         });
     }

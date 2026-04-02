@@ -100,10 +100,12 @@ export default function Page() {
 
     const copyShoppingList = () => {
         const text = shoppingList
-            .map((item) => `${item.needed} ${item.displayName ?? item.card}`)
+            .map((item) => `${item.needed} ${item.lookup?.printed_name ?? item.card}`)
             .join("\n");
 
         navigator.clipboard.writeText(text);
+    
+
     };
 
     return (
@@ -220,20 +222,17 @@ export default function Page() {
                                 {/* SINGLE CARD IMAGE */}
                                 <img
                                     src={img}
-                                    alt={item.displayName}
+                                    alt={item.lookup?.printed_name ?? item.card}
                                     className="w-24 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
                                     onClick={() => setZoomCard(item)}
                                 />
 
+
                                 <div className="flex flex-col">
                                     <p className="text-ink font-title text-lg">
-                                        {item.lookup?.arena_name ??
-                                            item.lookup?.printed_name ??
-                                            item.displayName ??
-                                            item.card}{" "}
-                                        — Need {item.needed}
+                                        {item.lookup?.printed_name ?? item.card} — Need {item.needed}
                                     </p>
-
+                                
                                     {setSymbol && (
                                         <img
                                             src={setSymbol}
@@ -263,13 +262,14 @@ export default function Page() {
                             Copy to Clipboard
                         </button>
 
-                        <div className="bg-parchment rounded shadow-inner-parchment p-4">
-                            <pre className="whitespace-pre-wrap text-ink text-lg leading-relaxed">
-                                {shoppingList
-                                    .map((item) => `${item.needed} ${item.displayName ?? item.card}`)
-                                    .join("\n")}
-                            </pre>
-                        </div>
+                            <div className="bg-parchment rounded shadow-inner-parchment p-4">
+                                <pre className="whitespace-pre-wrap text-ink text-lg leading-relaxed">
+                                    {shoppingList
+                                        .map((item) => `${item.needed} ${item.lookup?.printed_name ?? item.card}`)
+                                        .join("\n")}
+                                </pre>
+                            </div>
+
                     </>
                 )}
             </section>
@@ -326,9 +326,10 @@ export default function Page() {
                                                     key={idx}
                                                     className={`text-sm ${rarityColor(c.rarity)}`}
                                                 >
-                                                    • {c.displayName} — Need {c.needed} ({c.rarity})
+                                                    • {c.printed_name} — Need {c.needed} ({c.rarity})
                                                 </p>
                                             ))}
+
                                         </div>
                                     )}
                                 </div>

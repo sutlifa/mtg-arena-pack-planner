@@ -6,7 +6,7 @@ import { normalizeName } from "./nameUtils";
 import { serverAliasMap } from "./serverAliasMap";
 
 let cardData: any[] = [];
-let cardMap: Record<string, any> = {};
+let cardMap: Record<string, any[]> = {}; // store arrays of printings
 let loaded = false;
 
 async function loadData() {
@@ -17,8 +17,11 @@ async function loadData() {
     cardData = JSON.parse(fileContents);
 
     for (const card of cardData) {
-        const key = normalizeName(card.printed_name ?? card.name);
-        cardMap[key] = card;
+        // ⭐ FIXED: canonical grouping MUST use oracle name
+        const key = normalizeName(card.name);
+
+        if (!cardMap[key]) cardMap[key] = [];
+        cardMap[key].push(card);
     }
 
     loaded = true;
@@ -35,27 +38,50 @@ export async function lookupCard(
     const alias = serverAliasMap[normalized];
     const lookupKey = alias ?? normalized;
 
-    const card = cardMap[lookupKey];
-    if (!card) {
+    const printings = cardMap[lookupKey];
+
+    if (!printings || printings.length === 0) {
         return { failed: true };
     }
 
-    const displayName = card.printed_name ?? card.name;
+    // ⭐ FIXED: correct Arena vs Paper selection
+    let selected;
+
+    if (arenaMode) {
+        // Prefer Arena printings
+        selected =
+            printings.find(c => c.games?.includes("arena")) ??
+            printings[0];
+    } else {
+        // Prefer Paper printings
+        selected =
+            printings.find(c => !c.games?.includes("arena")) ??
+            printings[0];
+    }
+
+    // ⭐ FIXED: printed_name is ALWAYS the correct display name
+    const displayName =
+        selected.printed_name ??
+        selected.name;
 
     return {
         failed: false,
-        name: card.name,
+
+        // canonical oracle name
+        name: selected.name,
+
+        // correct printing-specific display name
         printed_name: displayName,
-        arena_name: card.arena_name ?? null,
 
-        // FULL Scryfall metadata
-        image_uris: card.image_uris ?? null,
-        set: card.set ?? null,
-        set_name: card.set_name ?? null,
-        collector_number: card.collector_number ?? null,
-        set_icon_svg_uri: card.set_icon_svg_uri ?? null,
-        rarity: card.rarity ?? null,
+        // metadata
+        arena_name: selected.arena_name ?? null,
+        image_uris: selected.image_uris ?? null,
+        set: selected.set ?? null,
+        set_name: selected.set_name ?? null,
+        collector_number: selected.collector_number ?? null,
+        set_icon_svg_uri: selected.set_icon_svg_uri ?? null,
+        rarity: selected.rarity ?? null,
 
-        raw: card
+        raw: selected
     };
 }
