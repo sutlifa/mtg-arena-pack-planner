@@ -25,26 +25,39 @@ export async function POST(req: Request) {
 
             const card = await lookupCard(canonical, arenaMode);
 
+            // ⭐ Extract both printings from the lookup result
+            const arenaPrinting = card?.arenaPrinting ?? null;
+            const paperPrinting = card?.paperPrinting ?? null;
+
             lookupResults.push({
                 card: canonical,
                 needed,
-                lookup: card,
+                lookup: {
+                    ...card,
+                    arenaPrinting,
+                    paperPrinting,
+                },
             });
         }
 
         const neededCards = lookupResults.filter((c) => c.needed > 0);
 
-        // ⭐ NEW: Only run set recommender in Arena Mode
-        const ranked = arenaMode ? rankSets(neededCards, arenaMode) : [];
+        // ⭐ FIX: Only compute recommendations in Arena Mode.
+        // ⭐ In Paper Mode, DO NOT overwrite previous recommendations.
+        const ranked = arenaMode ? rankSets(neededCards, arenaMode) : null;
 
-        return NextResponse.json({
+        // ⭐ FIX: Only include recommendations key when arenaMode = true
+        const response: any = {
             breakdown: neededCards,
             shoppingList: neededCards,
-            recommendations: ranked,   // ⭐ Will be [] in Paper Mode
-
-            // ⭐ Missing card names for UI
             missingCards: missingDeckCards,
-        });
+        };
+
+        if (arenaMode) {
+            response.recommendations = ranked;
+        }
+
+        return NextResponse.json(response);
 
     } catch (err) {
         console.error("ANALYZE ERROR:", err);
