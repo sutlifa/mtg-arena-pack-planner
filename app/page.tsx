@@ -69,7 +69,7 @@ export default function Page() {
 
         try {
             const res = await fetch("/api/analyze", {
-      
+
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -77,9 +77,9 @@ export default function Page() {
                     collection,
                     arenaMode: !disableArena,
                 }),
-                
+
             });
-            
+
             if (!res.ok) {
                 console.error("API error:", await res.text());
                 setLoading(false);
@@ -92,7 +92,7 @@ export default function Page() {
             setShoppingList(data.shoppingList || []);
 
             // ⭐ Only update recommendations when backend includes them
-            
+
             if (data.recommendations !== undefined) {
                 setRecommendations(data.recommendations);
             }
@@ -114,14 +114,14 @@ export default function Page() {
             .join("\n");
 
         navigator.clipboard.writeText(text);
-    
+
 
     };
 
     return (
-    <>
-            {/* FLOATING TIP JAR */}
-            <div className="fixed top-6 left-6 z-50 pointer-events-auto">
+        <>
+            {/* FLOATING TIP JAR - DESKTOP ONLY */}
+            <div className="hidden md:block fixed top-6 left-6 z-50 pointer-events-auto">
                 <aside className="tipjar-container">
                     <h2 className="tipjar-header">Support the Creator</h2>
 
@@ -137,6 +137,7 @@ export default function Page() {
                 </aside>
             </div>
 
+
             {/* FULL-WIDTH BANNER */}
             <div className="relative overflow-visible py-10">
                 <div className="flex justify-center mb-10">
@@ -150,124 +151,152 @@ export default function Page() {
 
             {/* SIDEBAR + MAIN CONTENT LAYOUT */}
             <div className="px-6">
-                            
+
                 {/* MAIN CONTENT */}
                 <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
-                    
-            {/* DECK INPUTS */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-title">Deck Lists</h2>
-                    <button
-                        onClick={addDeck}
-                        className="px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
-                    >
-                        + Add Deck
-                    </button>
-                </div>
 
-                {decks.map((deck, index) => (
-                    <div key={index} className="space-y-2">
+                    {/* DECK INPUTS */}
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
                         <div className="flex justify-between items-center">
-                            <h3 className="font-title text-xl">Deck {index + 1}</h3>
-                            {index > 0 && (
-                                <button
-                                    onClick={() => removeDeck(index)}
-                                    className="text-red-800 font-title hover:underline"
-                                >
-                                    Remove
-                                </button>
+                            <h2 className="text-2xl font-title">Deck Lists</h2>
+                            <button
+                                onPointerUp={addDeck}
+                                className="px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
+                            >
+                                + Add Deck
+                            </button>
+                        </div>
+
+                        {decks.map((deck, index) => (
+                            <div key={index} className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-title text-xl">Deck {index + 1}</h3>
+                                    {index > 0 && (
+                                        <button
+                                            onPointerUp={() => removeDeck(index)}
+                                            className="text-red-800 font-title hover:underline"
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                </div>
+
+                                <textarea
+                                    className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
+                                    placeholder="Paste deck list here..."
+                                    value={deck}
+                                    onChange={(e) => updateDeck(index, e.target.value)}
+                                />
+                            </div>
+                        ))}
+                    </section>
+                    {/* Missing Cards Panel */}
+                    {missingCards.length > 0 && (
+                        <section className="bg-parchment-dark border border-red-700 shadow-card rounded-lg p-4 mt-4">
+                            <h2 className="text-xl font-title text-red-600 mb-2">
+                                Missing or Unrecognized Cards
+                            </h2>
+
+                            <p className="text-ink mb-2">
+                                These card names could not be matched. Check for typos or formatting:
+                            </p>
+
+                            <ul className="list-disc list-inside text-ink">
+                                {missingCards.map((name, i) => (
+                                    <li key={i}>{name}</li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
+
+                    {/* COLLECTION INPUT */}
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                        <h2 className="text-2xl font-title">MTG Collection (Paper OR Arena)</h2>
+                        <textarea
+                            className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
+                            placeholder="Paste your MTG collection here..."
+                            value={collection}
+                            onChange={(e) => setCollection(e.target.value)}
+                        />
+                    </section>
+
+                    {/* TOGGLE + BUTTON */}
+                    <div className="text-center space-y-3">
+
+                        {/* Toggle Row */}
+                        <div className="flex items-center justify-center gap-6 font-title text-lg text-ink">
+
+                            {/* Left label — always visible */}
+                            <span className="select-none">Arena Mode</span>
+
+                            {/* Toggle */}
+                            <button
+                                onPointerUp={() => setDisableArena(!disableArena)}
+                                className={
+                                    "relative w-20 h-10 rounded-full transition-colors duration-300 shadow-inner-parchment " +
+                                    (disableArena ? "bg-[#8b5a3c]" : "bg-[#d4b48c]")
+                                }
+                            >
+                                <span
+                                    className={
+                                        "absolute top-1 left-1 w-8 h-8 rounded-full bg-parchment shadow-card transition-all duration-300 " +
+                                        (disableArena ? "translate-x-10" : "translate-x-0")
+                                    }
+                                />
+                            </button>
+
+                            {/* Right label — always visible */}
+                            <span className="select-none">Paper Mode</span>
+                        </div>
+
+                        {/* DESKTOP ANALYZE BUTTON */}
+                        <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
+                            <button
+                                onPointerUp={!loading ? processAll : undefined}
+                                disabled={loading}
+                                className={
+                                    "px-6 py-3 rounded shadow-card font-title text-xl " +
+                                    (loading
+                                        ? "bg-gray-400 cursor-not-allowed"
+                                        : "bg-parchment-dark hover:bg-parchment")
+                                }
+                            >
+                                {loading ? "Analyzing..." : "Analyze Decks & Collection"}
+                            </button>
+
+                            {loading && (
+                                <div className="flex justify-center mt-3">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-4 border-ink border-t-transparent"></div>
+                                </div>
                             )}
                         </div>
 
-                        <textarea
-                            className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                            placeholder="Paste deck list here..."
-                            value={deck}
-                            onChange={(e) => updateDeck(index, e.target.value)}
-                        />
                     </div>
-                ))}
-            </section>
-            {/* Missing Cards Panel */}
-            {missingCards.length > 0 && (
-                <section className="bg-parchment-dark border border-red-700 shadow-card rounded-lg p-4 mt-4">
-                    <h2 className="text-xl font-title text-red-600 mb-2">
-                        Missing or Unrecognized Cards
-                    </h2>
+                    {/* MOBILE ANALYZE BUTTON */}
+                    <div className="md:hidden w-full flex flex-col items-center mt-10 mb-16 relative z-20">
+                        <button
+                            onPointerUp={!loading ? processAll : undefined}
+                            disabled={loading}
+                            className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
+                                ? "bg-gray-400 cursor-not-allowed"
+                                : "bg-parchment-dark hover:bg-parchment"
+                                }`}
+                        >
+                            {loading ? "Analyzing..." : "Analyze Decks & Collection"}
+                        </button>
 
-                    <p className="text-ink mb-2">
-                        These card names could not be matched. Check for typos or formatting:
-                    </p>
-
-                    <ul className="list-disc list-inside text-ink">
-                        {missingCards.map((name, i) => (
-                            <li key={i}>{name}</li>
-                        ))}
-                    </ul>
-                </section>
-            )}
-
-
-            {/* COLLECTION INPUT */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                <h2 className="text-2xl font-title">MTG Collection (Paper OR Arena)</h2>
-                <textarea
-                    className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                    placeholder="Paste your MTG collection here..."
-                    value={collection}
-                    onChange={(e) => setCollection(e.target.value)}
-                />
-            </section>
-
-            {/* TOGGLE + BUTTON */}
-            <div className="text-center space-y-3">
-
-                {/* Toggle Row */}
-                <div className="flex items-center justify-center gap-6 font-title text-lg text-ink">
-
-                    {/* Left label — always visible */}
-                    <span className="select-none">Arena Mode</span>
-
-                    {/* Toggle */}
-                    <button
-                        onClick={() => setDisableArena(!disableArena)}
-                        className={`
-                relative w-20 h-10 rounded-full transition-colors duration-300
-                ${disableArena ? "bg-[#8b5a3c]" : "bg-[#d4b48c]"}
-                shadow-inner-parchment
-            `}
-                    >
-                        <span
-                            className={`
-                    absolute top-1 left-1 w-8 h-8 rounded-full bg-parchment shadow-card transition-all duration-300
-                    ${disableArena ? "translate-x-10" : "translate-x-0"}
-                `}
-                        />
-                    </button>
-
-                    {/* Right label — always visible */}
-                    <span className="select-none">Paper Mode</span>
-                </div>
-
-                {/* Analyze Button */}
-                <button
-                    onClick={processAll}
-                    disabled={loading}
-                    className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-parchment-dark hover:bg-parchment"
-                        }`}
-                >
-                    {loading ? "Analyzing..." : "Analyze Decks & Collection"}
-                </button>
-
-                {loading && (
-                    <div className="flex justify-center mt-2">
-                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-ink border-t-transparent"></div>
+                        {loading && (
+                            <div className="flex justify-center mt-3">
+                                <div className="animate-spin rounded-full h-8 w-8 border-4 border-ink border-t-transparent"></div>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
+
+
+
+
+
                     {/* BREAKDOWN */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                         <h2 className="text-2xl font-title">Card Breakdown</h2>
@@ -328,7 +357,7 @@ export default function Page() {
                         )}
                     </section>
 
-                           
+
                     {/* SHOPPING LIST */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                         <h2 className="text-2xl font-title">
@@ -340,7 +369,7 @@ export default function Page() {
                         ) : (
                             <>
                                 <button
-                                    onClick={copyShoppingList}
+                                    onPointerUp={copyShoppingList}
                                     className="px-4 py-2 bg-parchment rounded shadow-inner-parchment font-title hover:bg-parchment-dark"
                                 >
                                     Copy to Clipboard
@@ -451,7 +480,7 @@ export default function Page() {
                     )}
 
 
-            
+
                     {zoomCard && (
                         <div
                             className="card-zoom-backdrop"
@@ -507,10 +536,14 @@ export default function Page() {
                                             }}
                                         />
                                     </div>
+
                                 );
+
                             })()}
                         </div>
+
                     )}
+
 
 
                 </main>

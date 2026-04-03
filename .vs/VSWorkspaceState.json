@@ -1,12 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\app",
-    "\\app\\api",
-    "\\app\\api\\analyze",
-    "\\lib",
-    "\\lib\\data",
-    "\\scripts"
+    "\\app"
   ],
+  "SelectedNode": "\\next.config.js",
   "PreviewInSolutionExplorer": false
 }

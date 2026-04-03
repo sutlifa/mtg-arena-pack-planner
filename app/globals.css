@@ -218,9 +218,56 @@ h1, h2, h3, h4, h5, h6,
     position: relative;
     min-height: 100vh;
     overflow-x: hidden;
-    background-image: url('/fantasybackground.jpg');
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-attachment: fixed;
+}
+
+    .bg-fantasy-parchment::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: url('/fantasybackground.jpg');
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-position: center;
+        z-index: -1;
+        pointer-events: none;
+    }
+
+/* ========================================= */
+/* 📱 MOBILE OVERRIDES — FIX ANALYZE + SLIDER */
+/* ========================================= */
+@media (max-width: 640px) {
+
+    /* Collapse flip-wrapper so it cannot cover UI */
+    .flip-wrapper {
+        height: auto !important;
+        aspect-ratio: auto !important;
+        overflow: visible !important;
+        pointer-events: none !important;
+    }
+
+    /* Disable all flip/zoom layers */
+    .flip-hitbox,
+    .card-face,
+    .card-zoom-backdrop {
+        pointer-events: none !important;
+    }
+
+    /* Fix Analyze button tap area */
+    main {
+        padding-bottom: 40px !important;
+    }
+
+    /* Fix slider sizing */
+    input[type="range"] {
+        width: 160px !important;
+        max-width: 160px !important;
+    }
+
+        input[type="range"]::-webkit-slider-thumb {
+            width: 28px !important;
+            height: 28px !important;
+            border-radius: 50%;
+            background: #8b3a12;
+            -webkit-appearance: none;
+        }
 }
