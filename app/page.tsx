@@ -254,7 +254,13 @@ export default function Page() {
                         {/* DESKTOP ANALYZE BUTTON */}
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             <button
+                                type="button"
                                 onPointerUp={!loading ? processAll : undefined}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !loading) {
+                                        processAll();
+                                    }
+                                }}
                                 disabled={loading}
                                 className={
                                     "px-6 py-3 rounded shadow-card font-title text-xl " +
@@ -554,14 +560,36 @@ export default function Page() {
                                                 </div>
                                             </div>
 
-                                            {/* MOBILE STATIC CARD */}
+                                            {/* MOBILE FLIP CARD */}
                                             <div className="md:hidden">
-                                                <img
-                                                    src={front}
-                                                    alt={displayName}
-                                                    className="w-[90vw] max-w-[500px] mx-auto rounded shadow-xl"
-                                                />
+                                                <div className={`flip-wrapper ${back && flip ? "flipped" : ""}`}>
+                                                    <img
+                                                        src={front}
+                                                        alt={displayName}
+                                                        className="card-face front"
+                                                    />
+
+                                                    {back && (
+                                                        <img
+                                                            src={back}
+                                                            alt={displayName}
+                                                            className="card-face back"
+                                                        />
+                                                    )}
+
+                                                    {/* MOBILE flip hitbox */}
+                                                    {back && (
+                                                        <div
+                                                            className="flip-hitbox"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFlip(!flip);
+                                                            }}
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
+
                                         </>
                                     );
                                 })()}

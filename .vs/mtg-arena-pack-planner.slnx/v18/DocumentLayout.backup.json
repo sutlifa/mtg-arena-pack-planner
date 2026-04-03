@@ -3,12 +3,20 @@
   "WorkspaceRootPath": "C:\\mtg-arena-pack-planner\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\app\\page.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:app\\page.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\app\\globals.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:app\\globals.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\app\\page.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:app\\page.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\app\\layout.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:app\\layout.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\tsconfig.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:tsconfig.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\mtg-arena-pack-planner\\next.config.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
@@ -22,11 +30,37 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 1,
+          "SelectedChildIndex": 4,
           "Children": [
             {
               "$type": "Document",
               "DocumentIndex": 2,
+              "Title": "layout.tsx",
+              "DocumentMoniker": "C:\\mtg-arena-pack-planner\\app\\layout.tsx",
+              "RelativeDocumentMoniker": "app\\layout.tsx",
+              "ToolTip": "C:\\mtg-arena-pack-planner\\app\\layout.tsx",
+              "RelativeToolTip": "app\\layout.tsx",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2026-04-03T18:20:39.855Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "tsconfig.json",
+              "DocumentMoniker": "C:\\mtg-arena-pack-planner\\tsconfig.json",
+              "RelativeDocumentMoniker": "tsconfig.json",
+              "ToolTip": "C:\\mtg-arena-pack-planner\\tsconfig.json",
+              "RelativeToolTip": "tsconfig.json",
+              "ViewState": "AgIAAAUAAAAAAAAAAAAqwCoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-04-03T17:43:06.869Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
               "Title": "next.config.js",
               "DocumentMoniker": "C:\\mtg-arena-pack-planner\\next.config.js",
               "RelativeDocumentMoniker": "next.config.js",
@@ -39,26 +73,26 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "globals.css",
               "DocumentMoniker": "C:\\mtg-arena-pack-planner\\app\\globals.css",
               "RelativeDocumentMoniker": "app\\globals.css",
               "ToolTip": "C:\\mtg-arena-pack-planner\\app\\globals.css",
               "RelativeToolTip": "app\\globals.css",
-              "ViewState": "AgIAABgBAAAAAAAAAAAgwCQBAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAD4BAAAAAAAAAAAAAEoBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
               "WhenOpened": "2026-04-03T15:49:34.327Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "page.tsx",
               "DocumentMoniker": "C:\\mtg-arena-pack-planner\\app\\page.tsx",
               "RelativeDocumentMoniker": "app\\page.tsx",
               "ToolTip": "C:\\mtg-arena-pack-planner\\app\\page.tsx",
               "RelativeToolTip": "app\\page.tsx",
-              "ViewState": "AgIAAAsCAAAAAAAAAAAwwCICAAA8AAAAAAAAAA==",
+              "ViewState": "AgIAABYCAAAAAAAAAAAAACgCAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
               "WhenOpened": "2026-04-03T15:37:36.786Z",
               "EditorCaption": ""
