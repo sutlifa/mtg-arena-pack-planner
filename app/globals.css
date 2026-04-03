@@ -8,9 +8,7 @@
 :root {
     --background: #ffffff;
     --foreground: #171717;
-    /* Fantasy heading font */
     --font-heading: "MedievalSharp", serif;
-    /* Clean UI body font */
     --font-body: Arial, Helvetica, sans-serif;
 }
 
@@ -28,7 +26,6 @@
 /* Global body styles                        */
 /* ========================================= */
 body {
-    background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-body) !important;
 }
@@ -112,8 +109,6 @@ h1, h2, h3, h4, h5, h6,
 /* ========================================= */
 /* 🔥 INFERNAL FORGED FLAMES BANNER          */
 /* ========================================= */
-
-/* Wrapper that holds the flames */
 .inferno-wrapper {
     position: relative;
     display: inline-block;
@@ -121,7 +116,6 @@ h1, h2, h3, h4, h5, h6,
     z-index: 9999;
 }
 
-/* Core banner (forged metal plaque + molten text) */
 .title-banner {
     position: relative;
     font-size: 3.2rem;
@@ -139,7 +133,6 @@ h1, h2, h3, h4, h5, h6,
     z-index: 2;
 }
 
-/* FULL SURROUND FLAMES (tight, controlled) */
 .inferno-wrapper::before,
 .inferno-wrapper::after {
     content: "";
@@ -152,7 +145,6 @@ h1, h2, h3, h4, h5, h6,
     pointer-events: none;
 }
 
-/* Top flames */
 .inferno-wrapper::before {
     top: -15%;
     background: radial-gradient(circle at 50% 100%, rgba(255,120,20,0.85) 0%, transparent 65%), radial-gradient(circle at 25% 90%, rgba(255,160,40,0.75) 0%, transparent 70%), radial-gradient(circle at 75% 90%, rgba(255,80,0,0.75) 0%, transparent 70%);
@@ -160,7 +152,6 @@ h1, h2, h3, h4, h5, h6,
     animation: inferno-flicker 2.6s infinite ease-in-out alternate;
 }
 
-/* Bottom flames */
 .inferno-wrapper::after {
     bottom: -15%;
     background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.75) 0%, transparent 65%), radial-gradient(circle at 30% 10%, rgba(255,60,0,0.65) 0%, transparent 70%), radial-gradient(circle at 70% 10%, rgba(255,140,0,0.65) 0%, transparent 70%);
@@ -168,7 +159,6 @@ h1, h2, h3, h4, h5, h6,
     animation: inferno-flicker 3.1s infinite ease-in-out alternate-reverse;
 }
 
-/* Flicker animation */
 @keyframes inferno-flicker {
     0% {
         transform: translateX(-50%) scale(1);
@@ -182,10 +172,10 @@ h1, h2, h3, h4, h5, h6,
         transform: translateX(-50%) scale(0.96);
     }
 }
+
 /* ============================
    TIP JAR SIDEBAR STYLES
    ============================ */
-
 .tipjar-container {
     @apply bg-parchment-dark rounded-lg shadow-card p-3 w-40;
 }
@@ -195,14 +185,9 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .tipjar-button {
-    @apply flex items-center justify-center gap-3 
-           bg-parchment hover:bg-parchment-dark 
-           rounded shadow-inner-parchment 
-           px-4 py-3 font-title text-ink 
-           transition-colors cursor-pointer;
+    @apply flex items-center justify-center gap-3 bg-parchment hover:bg-parchment-dark rounded shadow-inner-parchment px-4 py-3 font-title text-ink transition-colors cursor-pointer;
 }
 
-/* Tip jar icon: molten coin glow */
 .tipjar-icon {
     width: 20px;
     height: 20px;
@@ -213,7 +198,29 @@ h1, h2, h3, h4, h5, h6,
 }
 
 @keyframes tipjar-pulse {
-    0% { box-shadow: 0 0 6px rgba(255, 200, 80, 0.6); }
-    50% { box-shadow: 0 0 14px rgba(255, 200, 80, 0.9); }
-    100% { box-shadow: 0 0 6px rgba(255, 200, 80, 0.6); }
+    0% {
+        box-shadow: 0 0 6px rgba(255, 200, 80, 0.6);
+    }
+
+    50% {
+        box-shadow: 0 0 14px rgba(255, 200, 80, 0.9);
+    }
+
+    100% {
+        box-shadow: 0 0 6px rgba(255, 200, 80, 0.6);
+    }
+}
+
+/* ========================================= */
+/* ⭐ FANTASY PARCHMENT BACKGROUND            */
+/* ========================================= */
+.bg-fantasy-parchment {
+    position: relative;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: url('/fantasybackground.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-attachment: fixed;
 }
