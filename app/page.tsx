@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
+ import { createPortal } from "react-dom";
 export default function Page() {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
@@ -16,6 +16,7 @@ export default function Page() {
     const [loading, setLoading] = useState(false);
     const [zoomCard, setZoomCard] = useState<any>(null);
     const [flip, setFlip] = useState(false);
+   
 
     const toggleSet = (code: string) => {
         setOpenSets((prev) => ({
@@ -119,7 +120,8 @@ export default function Page() {
     };
 
     return (
-        <>
+        <div className="bg-fantasy-parchment min-h-screen">
+
             {/* FLOATING TIP JAR - DESKTOP ONLY */}
             <div className="hidden md:block fixed top-6 left-6 z-50 pointer-events-auto">
                 <aside className="tipjar-container">
@@ -137,7 +139,6 @@ export default function Page() {
                 </aside>
             </div>
 
-
             {/* FULL-WIDTH BANNER */}
             <div className="relative overflow-visible py-10">
                 <div className="flex justify-center mb-10">
@@ -148,7 +149,7 @@ export default function Page() {
                     </div>
                 </div>
             </div>
-
+             
             {/* SIDEBAR + MAIN CONTENT LAYOUT */}
             <div className="px-6">
 
@@ -480,7 +481,6 @@ export default function Page() {
                     )}
 
 
-
                     {zoomCard && (
                         <div
                             className="card-zoom-backdrop"
@@ -489,66 +489,93 @@ export default function Page() {
                                 setFlip(false);
                             }}
                         >
-                            {(() => {
-                                // ⭐ Dynamic printing selection (same rule as Breakdown/Shopping List)
-                                const printing = disableArena
-                                    ? zoomCard.lookup?.paperPrinting
-                                    : zoomCard.lookup?.arenaPrinting ?? zoomCard.lookup?.paperPrinting;
+                            <div
+                                className="relative"
+                                onClick={(e) => e.stopPropagation()} // prevent backdrop close when tapping card
+                            >
+                                {/* CLOSE BUTTON (top-right) */}
+                                <button
+                                    type="button"
+                                    className="absolute -top-3 -right-3 z-[1000] rounded-full bg-black/80 text-white px-2 py-1 text-sm md:text-base shadow-lg"
+                                    onClick={() => {
+                                        setZoomCard(null);
+                                        setFlip(false);
+                                    }}
+                                >
+                                    ✕
+                                </button>
 
-                                // ⭐ Universal image resolver (front/back)
-                                const front =
-                                    printing?.image_uris?.normal ||
-                                    printing?.card_faces?.[0]?.image_uris?.normal;
+                                {(() => {
+                                    const printing = disableArena
+                                        ? zoomCard.lookup?.paperPrinting
+                                        : zoomCard.lookup?.arenaPrinting ?? zoomCard.lookup?.paperPrinting;
 
-                                const back =
-                                    printing?.card_faces?.[1]?.image_uris?.normal;
+                                    const front =
+                                        printing?.image_uris?.normal ||
+                                        printing?.card_faces?.[0]?.image_uris?.normal;
 
-                                // ⭐ Correct display name (normalized in lookupCard)
-                                const displayName =
-                                    printing?.printed_name ??
-                                    printing?.name ??
-                                    zoomCard.card;
+                                    const back =
+                                        printing?.card_faces?.[1]?.image_uris?.normal;
 
-                                return (
-                                    <div className={`flip-wrapper ${flip ? "flipped" : ""}`}>
-                                        {/* Front face */}
-                                        <img
-                                            src={front}
-                                            alt={displayName}
-                                            className="card-face front"
-                                        />
+                                    const displayName =
+                                        printing?.printed_name ??
+                                        printing?.name ??
+                                        zoomCard.card;
 
-                                        {/* Back face (only if double-faced) */}
-                                        {back && (
-                                            <img
-                                                src={back}
-                                                alt={displayName}
-                                                className="card-face back"
-                                            />
-                                        )}
+                                    return (
+                                        <>
+                                            {/* DESKTOP FLIP CARD */}
+                                            <div className="hidden md:block">
+                                                <div className={`flip-wrapper ${back && flip ? "flipped" : ""}`}>
 
-                                        {/* 🔥 Only this element receives clicks to flip */}
-                                        <div
-                                            className="flip-hitbox"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (back) setFlip(!flip);
-                                            }}
-                                        />
-                                    </div>
+                                                    <img
+                                                        src={front}
+                                                        alt={displayName}
+                                                        className="card-face front"
+                                                    />
+                                                    {back && (
+                                                        <img
+                                                            src={back}
+                                                            alt={displayName}
+                                                            className="card-face back"
+                                                        />
+                                                    )}
 
-                                );
+                                                    {back && (
+                                                        <div
+                                                            className="flip-hitbox hidden md:block"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFlip(!flip);
+                                                            }}
+                                                        />
+                                                    )}
 
-                            })()}
+                                                </div>
+                                            </div>
+
+                                            {/* MOBILE STATIC CARD */}
+                                            <div className="md:hidden">
+                                                <img
+                                                    src={front}
+                                                    alt={displayName}
+                                                    className="w-[90vw] max-w-[500px] mx-auto rounded shadow-xl"
+                                                />
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
                         </div>
-
                     )}
 
 
-
+                                        
                 </main>
 
             </div>
-        </>
+        </div>
     );
+
+    
 }
