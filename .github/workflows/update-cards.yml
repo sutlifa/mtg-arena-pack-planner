@@ -46,3 +46,5 @@ jobs:
           to: ${{ secrets.MAIL_USERNAME }}
           from: "MTG Arena Pack Planner Bot <${{ secrets.MAIL_USERNAME }}>"
           body: "The daily cards update workflow has completed successfully."
+
+# force reindex
