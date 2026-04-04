@@ -2,19 +2,16 @@ name: Daily Cards Update
 
 on:
   schedule:
-    # 21:30 UTC = 4 PM Eastern
-    - cron: "0 20 * * *"
+    - cron: "30 21 * * *"   # 5:30 PM Eastern / 21:30 UTC
   workflow_dispatch:
 
 jobs:
-  update:
+  update-cards:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -22,38 +19,34 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build cards-min.json
-        run: npm run build:cards
+      - name: Run build script
+        run: node scripts/build-cards.js
 
-      - name: Commit changes
-        id: commit
+      - name: Commit updated cards-min.json
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "Daily card update" || echo "No changes to commit"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add public/data/cards-min.json
+          git commit -m "Daily cards update" || echo "No changes to commit"
 
-      - name: Push changes to master
-        id: push
-        run: git push origin master
+      - name: Push changes
+        run: |
+          git push origin master || echo "No changes to push"
 
-      - name: Send Gmail notification
-        if: always()
+      - name: Trigger Vercel Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
+
+      - name: Send Gmail Notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: ${{ secrets.MAIL_SERVER }}
-          server_port: ${{ secrets.MAIL_PORT }}
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: "Daily Cards Update Completed"
-          to: ${{ secrets.MAIL_USERNAME }}
-          from: "MTG Tool Bot <${{ secrets.MAIL_USERNAME }}>"
-          body: |
-            The daily cards-min.json update has completed.
-
-            Commit step: ${{ steps.commit.outcome }}
-            Push step:   ${{ steps.push.outcome }}
-
-            If commit was 'success', Vercel will automatically deploy to production.
+          to: ${{ secrets.GMAIL_TO }}
+          from: "MTG Arena Pack Planner Bot <${{ secrets.GMAIL_USERNAME }}>"
+          body: "The daily cards update workflow has completed successfully."
