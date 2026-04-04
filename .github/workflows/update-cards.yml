@@ -43,6 +43,6 @@ jobs:
           username: ${{ secrets.GMAIL_USERNAME }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: "Daily Cards Update Completed"
-          to: ${{ secrets.GMAIL_TO }}
+          to: ${{ secrets.GMAIL_USERNAME }}
           from: "MTG Arena Pack Planner Bot <${{ secrets.GMAIL_USERNAME }}>"
           body: "The daily cards update workflow has completed successfully."
