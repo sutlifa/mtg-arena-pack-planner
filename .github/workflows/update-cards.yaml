@@ -1,0 +1,59 @@
+name: Daily Cards Update
+
+on:
+  schedule:
+    # 21:30 UTC = 4 PM Eastern
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build cards-min.json
+        run: npm run build:cards
+
+      - name: Commit changes
+        id: commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Daily card update" || echo "No changes to commit"
+
+      - name: Push changes to master
+        id: push
+        run: git push origin master
+
+      - name: Send Gmail notification
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Daily Cards Update Completed"
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: "MTG Tool Bot <${{ secrets.MAIL_USERNAME }}>"
+          body: |
+            The daily cards-min.json update has completed.
+
+            Commit step: ${{ steps.commit.outcome }}
+            Push step:   ${{ steps.push.outcome }}
+
+            If commit was 'success', Vercel will automatically deploy to production.
