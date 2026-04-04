@@ -40,9 +40,9 @@ jobs:
         with:
           server_address: smtp.gmail.com
           server_port: 465
-          username: ${{ secrets.GMAIL_USERNAME }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_APP_PASSWORD }}
           subject: "Daily Cards Update Completed"
-          to: ${{ secrets.GMAIL_USERNAME }}
-          from: "MTG Arena Pack Planner Bot <${{ secrets.GMAIL_USERNAME }}>"
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: "MTG Arena Pack Planner Bot <${{ secrets.MAIL_USERNAME }}>"
           body: "The daily cards update workflow has completed successfully."
