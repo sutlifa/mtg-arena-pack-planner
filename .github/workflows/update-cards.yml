@@ -34,17 +34,14 @@ jobs:
       - name: Push changes
         run: |
           git push origin master || echo "No changes to push"
-
-      - name: Debug email secret
-        run: 'echo "TO VALUE: ${{ secrets.GMAIL_USERNAME }}"'
-
+     
       - name: Send Gmail Notification
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_APP_PASSWORD }}
+          password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Daily Cards Update Completed"
           to: ${{ secrets.MAIL_USERNAME }}
           from: "MTG Arena Pack Planner Bot <${{ secrets.MAIL_USERNAME }}>"
