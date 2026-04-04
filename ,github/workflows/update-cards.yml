@@ -1,0 +1,52 @@
+name: Daily Cards Update
+
+on:
+  schedule:
+    - cron: "30 21 * * *"   # 5:30 PM Eastern / 21:30 UTC
+  workflow_dispatch:
+
+jobs:
+  update-cards:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build script
+        run: node scripts/build-cards.js
+
+      - name: Commit updated cards-min.json
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add public/data/cards-min.json
+          git commit -m "Daily cards update" || echo "No changes to commit"
+
+      - name: Push changes
+        run: |
+          git push origin master || echo "No changes to push"
+
+      - name: Trigger Vercel Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
+
+      - name: Send Gmail Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: "Daily Cards Update Completed"
+          to: ${{ secrets.GMAIL_TO }}
+          from: "MTG Arena Pack Planner Bot <${{ secrets.GMAIL_USERNAME }}>"
+          body: "The daily cards update workflow has completed successfully."
