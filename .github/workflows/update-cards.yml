@@ -35,10 +35,6 @@ jobs:
         run: |
           git push origin master || echo "No changes to push"
 
-      - name: Trigger Vercel Deploy Hook
-        run: |
-          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
-
       - name: Send Gmail Notification
         uses: dawidd6/action-send-mail@v3
         with:
