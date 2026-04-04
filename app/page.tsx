@@ -111,14 +111,23 @@ export default function Page() {
 
     const copyShoppingList = () => {
         const text = shoppingList
-            .map((item) => `${item.needed} ${item.lookup?.printed_name ?? item.card}`)
+            .map((item) => {
+                const printing = disableArena
+                    ? item.lookup?.paperPrinting
+                    : item.lookup?.arenaPrinting ?? item.lookup?.paperPrinting;
+
+                const displayName =
+                    printing?.printed_name ??
+                    printing?.name ??
+                    item.card;
+
+                return `${item.needed} ${displayName}`;
+            })
             .join("\n");
 
         navigator.clipboard.writeText(text);
-
-
     };
-
+                
     return (
         <div className="bg-fantasy-parchment min-h-screen">
 
