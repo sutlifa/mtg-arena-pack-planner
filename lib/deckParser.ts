@@ -23,7 +23,7 @@ async function parseSingleDeck(
 ): Promise<{ deckMap: Map<string, number>, missing: string[] }> {
 
     const deckMap = new Map<string, number>();
-    const missing: string[] = [];   // ⭐ NEW
+    const missing: string[] = [];
 
     const lines = text
         .split("\n")
@@ -39,7 +39,6 @@ async function parseSingleDeck(
         const { qty, rawName } = parsed;
         const normalized = normalizeName(rawName);
 
-        // ⭐ Arena mode uses alias; Paper mode uses raw normalized name
         const lookupName = arenaMode
             ? (serverAliasMap[normalized] ?? normalized)
             : normalized;
@@ -48,36 +47,43 @@ async function parseSingleDeck(
         try {
             card = await lookupCard(lookupName, arenaMode);
         } catch {
-            missing.push(rawName);   // ⭐ NEW
+            missing.push(rawName);
             continue;
         }
 
         if (!card || (card as any).failed) {
-            missing.push(rawName);   // ⭐ NEW
+            missing.push(rawName);
             continue;
         }
 
-        // ⭐ Canonical key unified across deck + collection
         const canonical = normalizeName(
             arenaMode
-                ? (card.printed_name ?? card.name) // Arena name
-                : card.name                        // Paper/oracle name
+                ? (card.printed_name ?? card.name)
+                : card.name
         );
 
         const current = deckMap.get(canonical) ?? 0;
-        deckMap.set(canonical, Math.min(4, current + qty));
+
+        if (arenaMode) {
+            // Arena Mode: sum within deck, cap at 4
+            deckMap.set(canonical, Math.min(4, current + qty));
+        } else {
+            // Paper Mode: ALWAYS sum within a single deck
+            deckMap.set(canonical, current + qty);
+        }
     }
 
-    return { deckMap, missing };   // ⭐ NEW
+    return { deckMap, missing };
 }
 
 export async function parseDecklist(
     input: string | string[] | undefined | null,
-    arenaMode = false
-): Promise<{ map: Map<string, number>, missing: string[] }> {   // ⭐ NEW
+    arenaMode = false,
+    mergePaperCounts = false
+): Promise<{ map: Map<string, number>, missing: string[] }> {
 
     const finalMap = new Map<string, number>();
-    const finalMissing: string[] = [];   // ⭐ NEW
+    const finalMissing: string[] = [];
 
     if (!input) {
         console.error("parseDecklist received invalid input:", input);
@@ -101,16 +107,27 @@ export async function parseDecklist(
     }
 
     for (const deckText of deckTexts) {
-        const { deckMap, missing } = await parseSingleDeck(deckText, arenaMode);  // ⭐ NEW
+        const { deckMap, missing } = await parseSingleDeck(deckText, arenaMode);
 
-        // Merge missing card names
-        for (const m of missing) finalMissing.push(m);   // ⭐ NEW
+        for (const m of missing) finalMissing.push(m);
 
         for (const [canonical, qty] of deckMap.entries()) {
             const current = finalMap.get(canonical) ?? 0;
-            finalMap.set(canonical, Math.max(current, qty));
+
+            if (arenaMode) {
+                // Arena Mode: merge decks using MAX, cap at 4
+                finalMap.set(canonical, Math.min(4, Math.max(current, qty)));
+            } else {
+                if (mergePaperCounts) {
+                    // Paper SUM MODE: sum across decks
+                    finalMap.set(canonical, current + qty);
+                } else {
+                    // Paper MAX MODE: max across decks
+                    finalMap.set(canonical, Math.max(current, qty));
+                }
+            }
         }
     }
 
-    return { map: finalMap, missing: finalMissing };   // ⭐ NEW
+    return { map: finalMap, missing: finalMissing };
 }

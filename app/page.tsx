@@ -10,7 +10,7 @@ export default function Page() {
     const [shoppingList, setShoppingList] = useState<any[]>([]);
     const [recommendations, setRecommendations] = useState<any[]>([]);
     const [missingCards, setMissingCards] = useState<string[]>([]);
-
+    const [mergePaperCounts, setMergePaperCounts] = useState(false);
     const [disableArena, setDisableArena] = useState(false);
     const [openSets, setOpenSets] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
@@ -33,10 +33,18 @@ export default function Page() {
                 setFlip(false);
             }
         };
-
+     
         window.addEventListener("keydown", handleKey);
         return () => window.removeEventListener("keydown", handleKey);
     }, []);
+
+    // Re-run analysis when Paper Mode "Add counts together" changes
+    useEffect(() => {
+        if (disableArena && (breakdown.length > 0 || shoppingList.length > 0)) {
+            processAll();
+        }
+    }, [mergePaperCounts]);
+
     const rarityColor = (rarity: string) => {
         switch (rarity) {
             case "common":
@@ -77,6 +85,7 @@ export default function Page() {
                     decklist: decks,
                     collection,
                     arenaMode: !disableArena,
+                    mergePaperCounts,
                 }),
 
             });
@@ -260,7 +269,19 @@ export default function Page() {
                             <span className="select-none">Paper Mode</span>
                         </div>
 
-                        {/* DESKTOP ANALYZE BUTTON */}
+                        {/* Checkbox for merge card counts in paper only */}
+                        {disableArena && (
+                            <label className="flex items-center gap-2 font-title text-ink mt-2">
+                                <input
+                                    type="checkbox"
+                                    checked={mergePaperCounts}
+                                    onChange={(e) => setMergePaperCounts(e.target.checked)}
+                                />
+                                <span>Add card counts together</span>
+                            </label>
+                        )}
+
+                        
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             <button
                                 type="button"

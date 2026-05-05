@@ -8,24 +8,25 @@ import { rankSets } from "@/lib/setRecommender";
 
 export async function POST(req: Request) {
     try {
-        const { decklist, collection, arenaMode } = await req.json();
+        const { decklist, collection, arenaMode, mergePaperCounts } = await req.json();
 
-        // ⭐ Deck parsed in current mode (now returns { map, missing })
+        // Deck parsed in current mode (Paper: max/sum; Arena: capped by parser)
         const { map: deckMap, missing: missingDeckCards } =
-            await parseDecklist(decklist, arenaMode);
+            await parseDecklist(decklist, arenaMode, mergePaperCounts);
 
-        // Collection MUST use the same mode so canonical keys match
+        // Collection MUST use same mode so canonical keys match
         const collectionMap = await parseArenaCollection(collection, arenaMode);
 
         const lookupResults: any[] = [];
 
         for (const [canonical, deckQty] of deckMap.entries()) {
             const owned = collectionMap.get(canonical) ?? 0;
+
+            // 🔥 Single, simple rule for all modes
             const needed = Math.max(0, deckQty - owned);
 
             const card = await lookupCard(canonical, arenaMode);
 
-            // ⭐ Extract both printings from the lookup result
             const arenaPrinting = card?.arenaPrinting ?? null;
             const paperPrinting = card?.paperPrinting ?? null;
 
@@ -42,11 +43,9 @@ export async function POST(req: Request) {
 
         const neededCards = lookupResults.filter((c) => c.needed > 0);
 
-        // ⭐ FIX: Only compute recommendations in Arena Mode.
-        // ⭐ In Paper Mode, DO NOT overwrite previous recommendations.
+        // Arena Mode only: compute recommendations
         const ranked = arenaMode ? rankSets(neededCards, arenaMode) : null;
 
-        // ⭐ FIX: Only include recommendations key when arenaMode = true
         const response: any = {
             breakdown: neededCards,
             shoppingList: neededCards,
