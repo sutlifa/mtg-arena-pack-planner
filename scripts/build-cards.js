@@ -3,11 +3,28 @@ const path = require("path");
 const https = require("https");
 const JSONStream = require("JSONStream");
 
-// Fetch JSON helper
+// Fetch JSON helper (patched with User-Agent)
 async function fetchJson(url) {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+        headers: {
+            "User-Agent": "MTG Arena Pack Planner (GitHub Actions)"
+        }
+    });
+
     if (!res.ok) throw new Error(`Failed fetch ${url}: ${res.status} ${res.statusText}`);
     return res.json();
+}
+
+// Minimal retry wrapper (ONLY used for bulk-data)
+async function fetchJsonRetry(url, retries = 4) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fetchJson(url);
+        } catch (err) {
+            if (i === retries - 1) throw err;
+            await new Promise(r => setTimeout(r, 500 * (i + 1))); // small backoff
+        }
+    }
 }
 
 // Stream the giant all-cards JSON array
@@ -53,7 +70,7 @@ function normalizeFaces(card, setIconMap) {
 
 async function run() {
     console.log("Fetching Scryfall bulk-data list...");
-    const bulkList = await fetchJson("https://api.scryfall.com/bulk-data");
+    const bulkList = await fetchJsonRetry("https://api.scryfall.com/bulk-data");
 
     const allCardsEntry = bulkList.data.find((b) => b.type === "all_cards");
     if (!allCardsEntry) throw new Error("Could not find all-cards bulk entry");
@@ -110,11 +127,6 @@ async function run() {
         ) {
             return;
         }
-
-        // ❌ REMOVED — this was deleting ALL promos, including Universes Beyond
-        // if (card.promo === true) {
-        //     return;
-        // }
 
         // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
         if (
