@@ -9,6 +9,13 @@ export default function Page() {
     const [breakdown, setBreakdown] = useState<any[]>([]);
     const [shoppingList, setShoppingList] = useState<any[]>([]);
     const [recommendations, setRecommendations] = useState<any[]>([]);
+    const [wildcards, setWildcards] = useState<{
+        common: number;
+        uncommon: number;
+        rare: number;
+        mythic: number;
+        other: number;
+    } | null>(null);
     const [missingCards, setMissingCards] = useState<string[]>([]);
     const [mergePaperCounts, setMergePaperCounts] = useState(false);
     const [disableArena, setDisableArena] = useState(false);
@@ -74,6 +81,7 @@ export default function Page() {
                 setRecommendations(data.recommendations);
             }
 
+            setWildcards(data.wildcards ?? null);
             setMissingCards(data.missingCards ?? []);
 
 
@@ -140,7 +148,24 @@ export default function Page() {
 
         navigator.clipboard.writeText(text);
     };
-                
+
+    // Paper Mode only: sum estimated market price across the shopping list.
+    const shoppingListTotal = () => {
+        let total = 0;
+        let missingPriceCount = 0;
+
+        for (const item of shoppingList) {
+            const price = parseFloat(item.lookup?.paperPrinting?.prices_usd);
+            if (Number.isNaN(price)) {
+                missingPriceCount += 1;
+            } else {
+                total += price * item.needed;
+            }
+        }
+
+        return { total, missingPriceCount };
+    };
+
     return (
         <div className="bg-fantasy-parchment min-h-screen">
 
@@ -367,6 +392,11 @@ export default function Page() {
                                 const displayName =
                                     printing?.printed_name ?? printing?.name ?? item.card;
 
+                                // Paper Mode only: per-card estimated price
+                                const unitPrice = disableArena
+                                    ? parseFloat(printing?.prices_usd)
+                                    : NaN;
+
                                 return (
                                     <div
                                         key={i}
@@ -382,6 +412,12 @@ export default function Page() {
                                         <div className="flex flex-col">
                                             <p className="text-ink font-title text-lg">
                                                 {displayName} — Need {item.needed}
+                                                {!Number.isNaN(unitPrice) && (
+                                                    <span className="text-sm text-ink/70">
+                                                        {" "}
+                                                        · ${unitPrice.toFixed(2)} ea (${(unitPrice * item.needed).toFixed(2)} total)
+                                                    </span>
+                                                )}
                                             </p>
 
                                             {setSymbol && (
@@ -409,6 +445,21 @@ export default function Page() {
                             <p className="text-ink">No missing cards yet.</p>
                         ) : (
                             <>
+                                {disableArena && (() => {
+                                    const { total, missingPriceCount } = shoppingListTotal();
+                                    return (
+                                        <p className="text-ink font-title text-lg">
+                                            Estimated Total: ${total.toFixed(2)}
+                                            {missingPriceCount > 0 && (
+                                                <span className="text-sm text-ink/70">
+                                                    {" "}
+                                                    ({missingPriceCount} card{missingPriceCount === 1 ? "" : "s"} missing price data)
+                                                </span>
+                                            )}
+                                        </p>
+                                    );
+                                })()}
+
                                 <button
                                     onPointerUp={copyShoppingList}
                                     className="px-4 py-2 bg-parchment rounded shadow-inner-parchment font-title hover:bg-parchment-dark"
@@ -516,6 +567,53 @@ export default function Page() {
                                         </div>
                                     );
                                 })
+                            )}
+                        </section>
+                    )}
+
+                    {/* WILDCARDS NEEDED — Arena Mode only */}
+                    {!disableArena && (
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                            <h2 className="text-2xl font-title">Wildcards Needed</h2>
+
+                            {!wildcards ? (
+                                <p className="text-ink">No wildcards needed yet. Process your decks.</p>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                                        <div>
+                                            <p className={`text-3xl font-title ${rarityColor("common")}`}>
+                                                {wildcards.common}
+                                            </p>
+                                            <p className="text-ink text-sm">Common</p>
+                                        </div>
+                                        <div>
+                                            <p className={`text-3xl font-title ${rarityColor("uncommon")}`}>
+                                                {wildcards.uncommon}
+                                            </p>
+                                            <p className="text-ink text-sm">Uncommon</p>
+                                        </div>
+                                        <div>
+                                            <p className={`text-3xl font-title ${rarityColor("rare")}`}>
+                                                {wildcards.rare}
+                                            </p>
+                                            <p className="text-ink text-sm">Rare</p>
+                                        </div>
+                                        <div>
+                                            <p className={`text-3xl font-title ${rarityColor("mythic")}`}>
+                                                {wildcards.mythic}
+                                            </p>
+                                            <p className="text-ink text-sm">Mythic</p>
+                                        </div>
+                                    </div>
+
+                                    {wildcards.other > 0 && (
+                                        <p className="text-ink text-sm text-center">
+                                            + {wildcards.other} card{wildcards.other === 1 ? "" : "s"} with a
+                                            non-standard rarity (not craftable via wildcards)
+                                        </p>
+                                    )}
+                                </>
                             )}
                         </section>
                     )}
