@@ -4,6 +4,16 @@ import { normalizeName } from "./nameUtils";
 import { lookupCard } from "./scryfall";
 import { serverAliasMap } from "./serverAliasMap";
 
+// Basic lands are exempt from the 4-copy cap in every mode — a deck can
+// legitimately run more than 4 Plains.
+const UNLIMITED_CARDS = new Set(
+    ["Plains", "Island", "Swamp", "Mountain", "Forest"].map(normalizeName)
+);
+
+function capFor(canonical: string, capAt4: boolean): number {
+    return capAt4 && !UNLIMITED_CARDS.has(canonical) ? 4 : Infinity;
+}
+
 function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
     let m = line.match(/^(\d+)\s+(.+)$/);
     if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
@@ -19,7 +29,8 @@ function extractQtyAndName(line: string): { qty: number; rawName: string } | nul
 
 async function parseSingleDeck(
     text: string,
-    arenaMode: boolean
+    arenaMode: boolean,
+    capAt4: boolean
 ): Promise<{ deckMap: Map<string, number>, missing: string[] }> {
 
     const deckMap = new Map<string, number>();
@@ -64,13 +75,10 @@ async function parseSingleDeck(
 
         const current = deckMap.get(canonical) ?? 0;
 
-        if (arenaMode) {
-            // Arena Mode: sum within deck, cap at 4
-            deckMap.set(canonical, Math.min(4, current + qty));
-        } else {
-            // Paper Mode: ALWAYS sum within a single deck
-            deckMap.set(canonical, current + qty);
-        }
+        // Sum within a single deck, capped at 4 unless this card is exempt
+        // (basic lands) or the cap doesn't apply in this mode (Paper Mode
+        // with "add counts together" enabled).
+        deckMap.set(canonical, Math.min(capFor(canonical, capAt4), current + qty));
     }
 
     return { deckMap, missing };
@@ -106,25 +114,26 @@ export async function parseDecklist(
         return { map: finalMap, missing: finalMissing };
     }
 
+    // Cap needed copies at 4 per card unless Paper Mode's "add counts
+    // together" is enabled — merging separate decks' needs can legitimately
+    // exceed 4. Basic lands (see UNLIMITED_CARDS) are always exempt.
+    const capAt4 = arenaMode || !mergePaperCounts;
+
     for (const deckText of deckTexts) {
-        const { deckMap, missing } = await parseSingleDeck(deckText, arenaMode);
+        const { deckMap, missing } = await parseSingleDeck(deckText, arenaMode, capAt4);
 
         for (const m of missing) finalMissing.push(m);
 
         for (const [canonical, qty] of deckMap.entries()) {
             const current = finalMap.get(canonical) ?? 0;
+            const cap = capFor(canonical, capAt4);
 
-            if (arenaMode) {
-                // Arena Mode: merge decks using MAX, cap at 4
-                finalMap.set(canonical, Math.min(4, Math.max(current, qty)));
+            if (!arenaMode && mergePaperCounts) {
+                // Paper SUM MODE: sum across decks
+                finalMap.set(canonical, Math.min(cap, current + qty));
             } else {
-                if (mergePaperCounts) {
-                    // Paper SUM MODE: sum across decks
-                    finalMap.set(canonical, current + qty);
-                } else {
-                    // Paper MAX MODE: max across decks
-                    finalMap.set(canonical, Math.max(current, qty));
-                }
+                // Arena Mode, and Paper MAX MODE: merge decks using MAX
+                finalMap.set(canonical, Math.min(cap, Math.max(current, qty)));
             }
         }
     }
