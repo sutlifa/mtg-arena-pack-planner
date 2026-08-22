@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import HelpTip from "./components/HelpTip";
 
 // A deck box counts as "just a link" only if it's a single bare
@@ -483,12 +484,17 @@ export default function Page() {
                                         key={i}
                                         className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment"
                                     >
-                                        <img
-                                            src={img}
-                                            alt={displayName}
-                                            className="w-24 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
-                                            onClick={() => setZoomCard(item)}
-                                        />
+                                        {img && (
+                                            <Image
+                                                unoptimized
+                                                src={img}
+                                                alt={displayName}
+                                                width={96}
+                                                height={134}
+                                                className="w-24 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
+                                                onClick={() => setZoomCard(item)}
+                                            />
+                                        )}
 
                                         <div className="flex flex-col">
                                             <p className="text-ink font-title text-lg">
@@ -502,9 +508,11 @@ export default function Page() {
                                             </p>
 
                                             {setSymbol && (
-                                                <img
+                                                <Image
                                                     src={setSymbol}
-                                                    alt={printing?.set}
+                                                    alt={printing?.set ?? "Set icon"}
+                                                    width={24}
+                                                    height={24}
                                                     className="w-6 h-6 mt-1 opacity-90"
                                                 />
                                             )}
@@ -604,9 +612,11 @@ export default function Page() {
                                                     </span>
 
                                                     {set.set_icon_svg_uri && (
-                                                        <img
+                                                        <Image
                                                             src={set.set_icon_svg_uri}
-                                                            alt={code}
+                                                            alt={code ?? "Set icon"}
+                                                            width={40}
+                                                            height={40}
                                                             className="w-10 h-10 opacity-90"
                                                         />
                                                     )}
@@ -754,15 +764,23 @@ export default function Page() {
                                             <div className="hidden md:block">
                                                 <div className={`flip-wrapper ${back && flip ? "flipped" : ""}`}>
 
-                                                    <img
-                                                        src={front}
-                                                        alt={displayName}
-                                                        className="card-face front"
-                                                    />
+                                                    {front && (
+                                                        <Image
+                                                            unoptimized
+                                                            fill
+                                                            src={front}
+                                                            alt={displayName}
+                                                            sizes="(max-width: 640px) 90vw, 500px"
+                                                            className="card-face front"
+                                                        />
+                                                    )}
                                                     {back && (
-                                                        <img
+                                                        <Image
+                                                            unoptimized
+                                                            fill
                                                             src={back}
                                                             alt={displayName}
+                                                            sizes="(max-width: 640px) 90vw, 500px"
                                                             className="card-face back"
                                                         />
                                                     )}
@@ -783,16 +801,24 @@ export default function Page() {
                                             {/* MOBILE FLIP CARD */}
                                             <div className="md:hidden">
                                                 <div className={`flip-wrapper ${back && flip ? "flipped" : ""}`}>
-                                                    <img
-                                                        src={front}
-                                                        alt={displayName}
-                                                        className="card-face front"
-                                                    />
+                                                    {front && (
+                                                        <Image
+                                                            unoptimized
+                                                            fill
+                                                            src={front}
+                                                            alt={displayName}
+                                                            sizes="90vw"
+                                                            className="card-face front"
+                                                        />
+                                                    )}
 
                                                     {back && (
-                                                        <img
+                                                        <Image
+                                                            unoptimized
+                                                            fill
                                                             src={back}
                                                             alt={displayName}
+                                                            sizes="90vw"
                                                             className="card-face back"
                                                         />
                                                     )}
