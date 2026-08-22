@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
- import { createPortal } from "react-dom";
+
 export default function Page() {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
@@ -37,39 +37,6 @@ export default function Page() {
         window.addEventListener("keydown", handleKey);
         return () => window.removeEventListener("keydown", handleKey);
     }, []);
-
-    // Re-run analysis when Paper Mode "Add counts together" changes
-    useEffect(() => {
-        if (disableArena && (breakdown.length > 0 || shoppingList.length > 0)) {
-            processAll();
-        }
-    }, [mergePaperCounts]);
-
-    const rarityColor = (rarity: string) => {
-        switch (rarity) {
-            case "common":
-                return "text-gray-700";
-            case "uncommon":
-                return "text-blue-700";
-            case "rare":
-                return "text-yellow-700";
-            case "mythic":
-            case "mythic rare":
-                return "text-red-700";
-            default:
-                return "text-ink";
-        }
-    };
-
-    const updateDeck = (index: number, value: string) => {
-        const updated = [...decks];
-        updated[index] = value;
-        setDecks(updated);
-    };
-
-    const addDeck = () => setDecks([...decks, ""]);
-    const removeDeck = (index: number) =>
-        setDecks(decks.filter((_, i) => i !== index));
 
     const processAll = async () => {
         setBreakdown([]);
@@ -117,6 +84,43 @@ export default function Page() {
 
         setLoading(false);
     };
+
+    // Re-run analysis when Paper Mode "Add counts together" changes.
+    // Intentionally scoped to mergePaperCounts only, and intentionally
+    // re-triggers the async fetch+setState chain in processAll().
+    /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
+    useEffect(() => {
+        if (disableArena && (breakdown.length > 0 || shoppingList.length > 0)) {
+            processAll();
+        }
+    }, [mergePaperCounts]);
+    /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
+
+    const rarityColor = (rarity: string) => {
+        switch (rarity) {
+            case "common":
+                return "text-gray-700";
+            case "uncommon":
+                return "text-blue-700";
+            case "rare":
+                return "text-yellow-700";
+            case "mythic":
+            case "mythic rare":
+                return "text-red-700";
+            default:
+                return "text-ink";
+        }
+    };
+
+    const updateDeck = (index: number, value: string) => {
+        const updated = [...decks];
+        updated[index] = value;
+        setDecks(updated);
+    };
+
+    const addDeck = () => setDecks([...decks, ""]);
+    const removeDeck = (index: number) =>
+        setDecks(decks.filter((_, i) => i !== index));
 
     const copyShoppingList = () => {
         const text = shoppingList

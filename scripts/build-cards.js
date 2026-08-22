@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
-const JSONStream = require("JSONStream");
+const zlib = require("zlib");
+const readline = require("readline");
+const { Readable } = require("stream");
 
 // Fetch JSON helper (patched with User-Agent)
 async function fetchJson(url) {
@@ -27,24 +28,35 @@ async function fetchJsonRetry(url, retries = 4) {
     }
 }
 
-// Stream the giant all-cards JSON array
-function streamAllCards(downloadUrl, onCard) {
-    return new Promise((resolve, reject) => {
-        https.get(downloadUrl, (res) => {
-            if (res.statusCode !== 200) {
-                reject(new Error(`Failed to stream all-cards: ${res.statusCode}`));
-                return;
-            }
+// Stream the giant all-cards bulk file.
+// Scryfall now serves bulk data as gzip-compressed JSON Lines
+// (one card object per line) via `jsonl_download_uri`, not a plain
+// JSON array via `download_uri` (that field no longer exists).
+async function streamAllCards(downloadUrl, onCard) {
+    if (!downloadUrl) {
+        throw new Error("streamAllCards: downloadUrl is missing/empty");
+    }
 
-            const parser = JSONStream.parse("*");
-
-            parser.on("data", onCard);
-            parser.on("end", resolve);
-            parser.on("error", reject);
-
-            res.pipe(parser);
-        }).on("error", reject);
+    const res = await fetch(downloadUrl, {
+        headers: {
+            "User-Agent": "MTG Arena Pack Planner (GitHub Actions)"
+        }
     });
+
+    if (!res.ok || !res.body) {
+        throw new Error(`Failed to stream all-cards: ${res.status} ${res.statusText}`);
+    }
+
+    const gunzip = zlib.createGunzip();
+    const lines = readline.createInterface({
+        input: Readable.fromWeb(res.body).pipe(gunzip),
+        crlfDelay: Infinity,
+    });
+
+    for await (const line of lines) {
+        if (!line) continue;
+        onCard(JSON.parse(line));
+    }
 }
 
 // Normalize dual-face cards (Adventure, OMEN, MDFC)
@@ -88,7 +100,7 @@ async function run() {
     console.log("Streaming all-cards JSON and filtering...");
     const best = {}; // { cardName: { paper, arena, mtgo } }
 
-    await streamAllCards(allCardsEntry.download_uri, (card) => {
+    await streamAllCards(allCardsEntry.jsonl_download_uri, (card) => {
         // ENGLISH ONLY
         if (card.lang !== "en") return;
 

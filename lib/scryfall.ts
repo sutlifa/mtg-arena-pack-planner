@@ -6,7 +6,7 @@ import { normalizeName } from "./nameUtils";
 import { serverAliasMap } from "./serverAliasMap";
 
 let cardData: any[] = [];
-let cardMap: Record<string, any[]> = {}; // store arrays of printings
+const cardMap: Record<string, any[]> = {}; // store arrays of printings
 let loaded = false;
 
 async function loadData() {

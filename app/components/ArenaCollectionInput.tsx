@@ -1,1 +1,0 @@
-// collection input component
