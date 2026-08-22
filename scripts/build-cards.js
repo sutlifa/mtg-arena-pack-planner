@@ -59,6 +59,47 @@ async function streamAllCards(downloadUrl, onCard) {
     }
 }
 
+const NUMBER_WORDS = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+    nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+    fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+    twenty: 20,
+};
+
+function wordToNumber(word) {
+    const n = NUMBER_WORDS[word.toLowerCase()];
+    if (n != null) return n;
+    const parsed = parseInt(word, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+// A handful of cards override the normal "max 4 copies" deckbuilding rule
+// in their own rules text (e.g. Relentless Rats: "A deck can have any
+// number of cards named Relentless Rats"; Nazgûl: "...up to nine cards
+// named Nazgûl"). Detect that from oracle text so the app can allow more
+// than 4 copies for exactly these cards, driven by real card data instead
+// of a hardcoded list.
+// Returns: null = unlimited, a number = "up to N", undefined = no override.
+function detectDeckLimit(card) {
+    const text =
+        card.oracle_text ||
+        (card.card_faces ? card.card_faces.map((f) => f.oracle_text || "").join("\n") : "");
+
+    if (!text) return undefined;
+
+    if (/a deck can have any number of cards named/i.test(text)) {
+        return null;
+    }
+
+    const upTo = text.match(/a deck can have up to (\w+) cards named/i);
+    if (upTo) {
+        const n = wordToNumber(upTo[1]);
+        if (n) return n;
+    }
+
+    return undefined;
+}
+
 // Normalize dual-face cards (Adventure, OMEN, MDFC)
 function normalizeFaces(card, setIconMap) {
     if (!card.card_faces) return card;
@@ -226,6 +267,11 @@ async function run() {
                 // Nonfoil market price, falling back to foil for foil-only printings.
                 prices_usd: card.prices?.usd ?? card.prices?.usd_foil ?? null,
             };
+
+            const deckLimit = detectDeckLimit(card);
+            if (deckLimit !== undefined) {
+                base.deck_limit = deckLimit;
+            }
 
             if (card.image_uris?.normal) {
                 base.image_uris = { normal: card.image_uris.normal };

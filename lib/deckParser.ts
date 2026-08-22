@@ -3,6 +3,7 @@
 import { normalizeName } from "./nameUtils";
 import { lookupCard } from "./scryfall";
 import { serverAliasMap } from "./serverAliasMap";
+import { deckLimits } from "./deckLimits";
 
 // Basic lands are exempt from the 4-copy cap in every mode — a deck can
 // legitimately run more than 4 Plains.
@@ -11,6 +12,13 @@ const UNLIMITED_CARDS = new Set(
 );
 
 function capFor(canonical: string, capAt4: boolean): number {
+    // Cards whose own rules text overrides the 4-copy limit (Relentless
+    // Rats, Nazgûl, etc.) always use that limit, in every mode.
+    if (canonical in deckLimits) {
+        const limit = deckLimits[canonical];
+        return limit === null ? Infinity : limit;
+    }
+
     return capAt4 && !UNLIMITED_CARDS.has(canonical) ? 4 : Infinity;
 }
 
