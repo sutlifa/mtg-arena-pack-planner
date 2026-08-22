@@ -76,8 +76,8 @@ Built with a parchment‑and‑ink aesthetic using Tailwind CSS, including:
 ## 🏗 **Tech Stack**
 
 ### **Frontend**
-- **Next.js 14+ (App Router)**
-- **React 18**
+- **Next.js 16 (App Router)**
+- **React 19**
 - **Tailwind CSS**
 - Custom parchment‑style UI components
 

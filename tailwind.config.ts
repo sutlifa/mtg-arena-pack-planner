@@ -17,8 +17,8 @@ const config: Config = {
         ink: "#2c1a0e",         // deep brown ink for body text
       },
       fontFamily: {
-        // "font-title" → Cinzel (loaded via Google Fonts in layout.tsx)
-        title: ["Cinzel", "serif"],
+        // "font-title" → MedievalSharp (loaded via Google Fonts in layout.tsx)
+        title: ["MedievalSharp", "serif"],
       },
       boxShadow: {
         // Outer card shadow — warm amber glow

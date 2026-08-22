@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         const neededCards = lookupResults.filter((c) => c.needed > 0);
 
         // Arena Mode only: compute recommendations
-        const ranked = arenaMode ? rankSets(neededCards, arenaMode) : null;
+        const ranked = arenaMode ? rankSets(neededCards) : null;
 
         const response: any = {
             breakdown: neededCards,

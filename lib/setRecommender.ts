@@ -29,10 +29,7 @@ export interface RankedSet {
 /**
  * Fully hardened set recommender.
  */
-export function rankSets(
-    lookupResults: LookupResult[],
-    arenaMode: boolean = false
-): RankedSet[] {
+export function rankSets(lookupResults: LookupResult[]): RankedSet[] {
     const setMap: Map<string, RankedSet> = new Map();
 
     for (const entry of lookupResults) {
