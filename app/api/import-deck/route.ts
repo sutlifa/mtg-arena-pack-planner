@@ -2,10 +2,18 @@
 
 import { NextResponse } from "next/server";
 
-// Only ever fetch mtggoldfish.com's own decklist download endpoint —
+const GOLDFISH_UA = "MTG Arena Pack Planner (deck import)";
+
+function isGoldfishUrl(url: URL): boolean {
+    const host = url.hostname.toLowerCase();
+    return host === "mtggoldfish.com" || host === "www.mtggoldfish.com";
+}
+
+// Resolves a pasted MTGGoldfish URL to the plain-text decklist download
+// URL for the deck it points at. Only ever touches mtggoldfish.com —
 // never an arbitrary user-supplied URL — to avoid turning this into an
 // open server-side fetch proxy.
-function extractGoldfishDeckId(rawUrl: string): string | null {
+async function resolveDownloadUrl(rawUrl: string): Promise<string | null> {
     let url: URL;
     try {
         url = new URL(rawUrl);
@@ -13,13 +21,31 @@ function extractGoldfishDeckId(rawUrl: string): string | null {
         return null;
     }
 
-    const host = url.hostname.toLowerCase();
-    if (host !== "mtggoldfish.com" && host !== "www.mtggoldfish.com") {
-        return null;
+    if (!isGoldfishUrl(url)) return null;
+
+    // Direct deck link, e.g. /deck/1234567 or /deck/download/1234567
+    const deckMatch = url.pathname.match(/^\/deck\/(?:download\/)?(\d+)/);
+    if (deckMatch) {
+        return `https://www.mtggoldfish.com/deck/download/${deckMatch[1]}`;
     }
 
-    const match = url.pathname.match(/\/deck\/(?:download\/)?(\d+)/);
-    return match ? match[1] : null;
+    // Archetype "home page" for a deck, e.g.
+    // /archetype/standard-4c-control-woe — no direct decklist here, but the
+    // page embeds a download link for its featured representative deck.
+    if (/^\/archetype\//.test(url.pathname)) {
+        const pageRes = await fetch(url.toString(), {
+            headers: { "User-Agent": GOLDFISH_UA },
+        });
+        if (!pageRes.ok) return null;
+
+        const html = await pageRes.text();
+        const downloadMatch = html.match(/href="(\/deck\/download\/\d+)"/);
+        if (!downloadMatch) return null;
+
+        return `https://www.mtggoldfish.com${downloadMatch[1]}`;
+    }
+
+    return null;
 }
 
 export async function POST(req: Request) {
@@ -30,16 +56,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Missing deck URL" }, { status: 400 });
         }
 
-        const deckId = extractGoldfishDeckId(url.trim());
-        if (!deckId) {
+        const downloadUrl = await resolveDownloadUrl(url.trim());
+        if (!downloadUrl) {
             return NextResponse.json(
-                { error: "That doesn't look like an MTGGoldfish deck link" },
+                { error: "That doesn't look like an MTGGoldfish deck or archetype link" },
                 { status: 400 }
             );
         }
 
-        const res = await fetch(`https://www.mtggoldfish.com/deck/download/${deckId}`, {
-            headers: { "User-Agent": "MTG Arena Pack Planner (deck import)" },
+        const res = await fetch(downloadUrl, {
+            headers: { "User-Agent": GOLDFISH_UA },
         });
 
         if (!res.ok) {
