@@ -5,6 +5,7 @@ import { parseDecklist } from "@/lib/deckParser";
 import { parseArenaCollection } from "@/lib/collectionParser";
 import { lookupCard } from "@/lib/scryfall";
 import { rankSets } from "@/lib/setRecommender";
+import { estimateWildcards } from "@/lib/wildcardEstimator";
 
 export async function POST(req: Request) {
     try {
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
 
         if (arenaMode) {
             response.recommendations = ranked;
+            response.wildcards = estimateWildcards(neededCards);
         }
 
         return NextResponse.json(response);

@@ -212,6 +212,8 @@ async function run() {
                 released_at: card.released_at,
                 games: card.games,
                 set_icon_svg_uri: setIconMap[card.set?.toLowerCase()] ?? null,
+                // Nonfoil market price, falling back to foil for foil-only printings.
+                prices_usd: card.prices?.usd ?? card.prices?.usd_foil ?? null,
             };
 
             if (card.image_uris?.normal) {
