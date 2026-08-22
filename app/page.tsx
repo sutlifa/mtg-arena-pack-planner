@@ -2,6 +2,25 @@
 
 import { useState, useEffect } from "react";
 
+// A deck box counts as "just a link" only if it's a single bare
+// MTGGoldfish deck URL with nothing else pasted alongside it.
+function isGoldfishDeckUrl(text: string): boolean {
+    if (!text || text.includes("\n")) return false;
+
+    let url: URL;
+    try {
+        url = new URL(text);
+    } catch {
+        return false;
+    }
+
+    const host = url.hostname.toLowerCase();
+    return (
+        (host === "mtggoldfish.com" || host === "www.mtggoldfish.com") &&
+        /\/deck\//.test(url.pathname)
+    );
+}
+
 export default function Page() {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
@@ -17,6 +36,7 @@ export default function Page() {
         other: number;
     } | null>(null);
     const [missingCards, setMissingCards] = useState<string[]>([]);
+    const [importError, setImportError] = useState<string | null>(null);
     const [mergePaperCounts, setMergePaperCounts] = useState(false);
     const [disableArena, setDisableArena] = useState(false);
     const [openSets, setOpenSets] = useState<Record<string, boolean>>({});
@@ -51,12 +71,54 @@ export default function Page() {
         setLoading(true);
 
         try {
+            // Resolve any deck box that's just a pasted MTGGoldfish link into
+            // its real decklist text before analyzing.
+            let currentDecks = decks;
+
+            if (decks.some((d) => isGoldfishDeckUrl(d.trim()))) {
+                let anyFailed = false;
+
+                currentDecks = await Promise.all(
+                    decks.map(async (d) => {
+                        const trimmed = d.trim();
+                        if (!isGoldfishDeckUrl(trimmed)) return d;
+
+                        try {
+                            const importRes = await fetch("/api/import-deck", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ url: trimmed }),
+                            });
+                            const importData = await importRes.json();
+
+                            if (importRes.ok && importData.decklist) {
+                                return importData.decklist;
+                            }
+                        } catch {
+                            // fall through to anyFailed below
+                        }
+
+                        anyFailed = true;
+                        return d;
+                    })
+                );
+
+                setDecks(currentDecks);
+                setImportError(
+                    anyFailed
+                        ? "Couldn't import one or more MTGGoldfish links — check the URL and try again."
+                        : null
+                );
+            } else {
+                setImportError(null);
+            }
+
             const res = await fetch("/api/analyze", {
 
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    decklist: decks,
+                    decklist: currentDecks,
                     collection,
                     arenaMode: !disableArena,
                     mergePaperCounts,
@@ -231,12 +293,16 @@ export default function Page() {
 
                                 <textarea
                                     className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                                    placeholder="Paste deck list here..."
+                                    placeholder="Paste deck list here, or paste an MTGGoldfish deck link..."
                                     value={deck}
                                     onChange={(e) => updateDeck(index, e.target.value)}
                                 />
                             </div>
                         ))}
+
+                        {importError && (
+                            <p className="text-red-700 text-sm">{importError}</p>
+                        )}
                     </section>
                     {/* Missing Cards Panel */}
                     {missingCards.length > 0 && (
