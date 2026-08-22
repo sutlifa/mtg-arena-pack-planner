@@ -17,7 +17,7 @@ function isGoldfishDeckUrl(text: string): boolean {
     const host = url.hostname.toLowerCase();
     return (
         (host === "mtggoldfish.com" || host === "www.mtggoldfish.com") &&
-        /\/deck\//.test(url.pathname)
+        (/\/deck\//.test(url.pathname) || /\/archetype\//.test(url.pathname))
     );
 }
 
