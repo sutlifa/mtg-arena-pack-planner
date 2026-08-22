@@ -1,5 +1,7 @@
 // lib/wildcardEstimator.ts
 
+import { BASIC_LAND_NAMES } from "./basicLands";
+
 export interface WildcardNeed {
     card: string;
     needed: number;
@@ -27,7 +29,8 @@ const RARITY_BUCKET: Record<string, keyof WildcardCounts> = {
 /**
  * Counts how many of each wildcard type are needed to craft the missing
  * cards, one wildcard per missing copy (Arena Mode only — wildcard rarity
- * follows the Arena printing's rarity from the resolved lookup).
+ * follows the Arena printing's rarity from the resolved lookup). Basic
+ * lands are excluded — Arena grants those for free, they're never crafted.
  */
 export function estimateWildcards(neededCards: WildcardNeed[]): WildcardCounts {
     const counts: WildcardCounts = {
@@ -39,6 +42,8 @@ export function estimateWildcards(neededCards: WildcardNeed[]): WildcardCounts {
     };
 
     for (const entry of neededCards) {
+        if (BASIC_LAND_NAMES.has(entry.card)) continue;
+
         const rarity = entry.lookup?.rarity?.toLowerCase();
         const bucket = (rarity && RARITY_BUCKET[rarity]) || "other";
         counts[bucket] += entry.needed;

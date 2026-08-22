@@ -155,15 +155,17 @@ export default function Page() {
         setLoading(false);
     };
 
-    // Re-run analysis when Paper Mode "Add counts together" changes.
-    // Intentionally scoped to mergePaperCounts only, and intentionally
-    // re-triggers the async fetch+setState chain in processAll().
+    // Re-run analysis when switching Arena/Paper mode, or when Paper Mode's
+    // "Add counts together" changes — both change how needed counts (and
+    // Arena-only data like wildcards/recommendations) are computed, so a
+    // stale result from the previous mode would otherwise stick around
+    // until the user manually clicks Analyze again.
     /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
     useEffect(() => {
-        if (disableArena && (breakdown.length > 0 || shoppingList.length > 0)) {
+        if (breakdown.length > 0 || shoppingList.length > 0) {
             processAll();
         }
-    }, [mergePaperCounts]);
+    }, [disableArena, mergePaperCounts]);
     /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
     const rarityColor = (rarity: string) => {

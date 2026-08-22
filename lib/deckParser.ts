@@ -4,12 +4,7 @@ import { normalizeName } from "./nameUtils";
 import { lookupCard } from "./scryfall";
 import { serverAliasMap } from "./serverAliasMap";
 import { deckLimits } from "./deckLimits";
-
-// Basic lands are exempt from the 4-copy cap in every mode — a deck can
-// legitimately run more than 4 Plains.
-const UNLIMITED_CARDS = new Set(
-    ["Plains", "Island", "Swamp", "Mountain", "Forest"].map(normalizeName)
-);
+import { BASIC_LAND_NAMES } from "./basicLands";
 
 function capFor(canonical: string, capAt4: boolean): number {
     // Cards whose own rules text overrides the 4-copy limit (Relentless
@@ -19,7 +14,7 @@ function capFor(canonical: string, capAt4: boolean): number {
         return limit === null ? Infinity : limit;
     }
 
-    return capAt4 && !UNLIMITED_CARDS.has(canonical) ? 4 : Infinity;
+    return capAt4 && !BASIC_LAND_NAMES.has(canonical) ? 4 : Infinity;
 }
 
 function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
@@ -124,7 +119,7 @@ export async function parseDecklist(
 
     // Cap needed copies at 4 per card unless Paper Mode's "add counts
     // together" is enabled — merging separate decks' needs can legitimately
-    // exceed 4. Basic lands (see UNLIMITED_CARDS) are always exempt.
+    // exceed 4. Basic lands (see BASIC_LAND_NAMES) are always exempt.
     const capAt4 = arenaMode || !mergePaperCounts;
 
     for (const deckText of deckTexts) {
