@@ -23,6 +23,8 @@ function isGoldfishDeckUrl(text: string): boolean {
     );
 }
 
+const COLLECTION_STORAGE_KEY = "mtgpp:collection";
+
 export default function Page() {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
@@ -62,10 +64,39 @@ export default function Page() {
                 setFlip(false);
             }
         };
-     
+
         window.addEventListener("keydown", handleKey);
         return () => window.removeEventListener("keydown", handleKey);
     }, []);
+
+    // Load any previously-saved collection once, after mount (not during the
+    // initial render, so the server-rendered and first client render both
+    // start empty and hydration stays consistent).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(COLLECTION_STORAGE_KEY);
+            if (saved) setCollection(saved);
+        } catch {
+            // localStorage unavailable (private browsing, etc.) — ignore
+        }
+    }, []);
+    /* eslint-enable react-hooks/set-state-in-effect */
+
+    // Keep the saved collection in sync as the user edits it.
+    useEffect(() => {
+        try {
+            if (collection) {
+                localStorage.setItem(COLLECTION_STORAGE_KEY, collection);
+            } else {
+                localStorage.removeItem(COLLECTION_STORAGE_KEY);
+            }
+        } catch {
+            // localStorage unavailable — ignore
+        }
+    }, [collection]);
+
+    const clearCollection = () => setCollection("");
 
     const processAll = async () => {
         setBreakdown([]);
@@ -333,10 +364,20 @@ export default function Page() {
 
                     {/* COLLECTION INPUT */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title flex items-center">
-                            MTG Collection (Paper OR Arena)
-                            <HelpTip text="Paste what you already own — an Arena collection export, a CSV, or any list with quantities. We'll subtract this from what your decks need so you only see what's missing." />
-                        </h2>
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-2xl font-title flex items-center">
+                                MTG Collection (Paper OR Arena)
+                                <HelpTip text="Paste what you already own — an Arena collection export, a CSV, or any list with quantities. We'll subtract this from what your decks need so you only see what's missing. Saved automatically in this browser, so you won't need to paste it again next time." />
+                            </h2>
+                            {collection && (
+                                <button
+                                    onPointerUp={clearCollection}
+                                    className="text-red-800 font-title hover:underline"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                         <textarea
                             className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
                             placeholder="Paste your MTG collection here..."
