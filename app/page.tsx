@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import HelpTip from "./components/HelpTip";
 
 // A deck box counts as "just a link" only if it's a single bare
 // MTGGoldfish deck URL with nothing else pasted alongside it.
@@ -270,7 +271,10 @@ export default function Page() {
                     {/* DECK INPUTS */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
                         <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-title">Deck Lists</h2>
+                            <h2 className="text-2xl font-title flex items-center">
+                                Deck Lists
+                                <HelpTip text="Paste one or more decklists — plain text like '4 Lightning Bolt', or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you. Add more decks with '+ Add Deck' if you're comparing needs across several." />
+                            </h2>
                             <button
                                 onPointerUp={addDeck}
                                 className="px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
@@ -328,7 +332,10 @@ export default function Page() {
 
                     {/* COLLECTION INPUT */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title">MTG Collection (Paper OR Arena)</h2>
+                        <h2 className="text-2xl font-title flex items-center">
+                            MTG Collection (Paper OR Arena)
+                            <HelpTip text="Paste what you already own — an Arena collection export, a CSV, or any list with quantities. We'll subtract this from what your decks need so you only see what's missing." />
+                        </h2>
                         <textarea
                             className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
                             placeholder="Paste your MTG collection here..."
@@ -364,17 +371,20 @@ export default function Page() {
 
                             {/* Right label — always visible */}
                             <span className="select-none">Paper Mode</span>
+
+                            <HelpTip text="Arena Mode looks up Arena printings, caps most cards at 4 copies (basics and a few special cards are unlimited), and shows wildcard costs. Paper Mode looks up paper printings and shows real-world prices instead." />
                         </div>
 
                         {/* Checkbox for merge card counts in paper only */}
                         {disableArena && (
-                            <label className="flex items-center gap-2 font-title text-ink mt-2">
+                            <label className="flex items-center justify-center gap-2 font-title text-ink mt-2">
                                 <input
                                     type="checkbox"
                                     checked={mergePaperCounts}
                                     onChange={(e) => setMergePaperCounts(e.target.checked)}
                                 />
                                 <span>Add card counts together</span>
+                                <HelpTip text="By default, if a card appears in multiple decks we only count the most any single deck needs (since you can share cards between decks). Turn this on to add every deck's need together instead — useful if you're building more than one deck at once." />
                             </label>
                         )}
 
@@ -433,7 +443,10 @@ export default function Page() {
 
                     {/* BREAKDOWN */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title">Card Breakdown</h2>
+                        <h2 className="text-2xl font-title flex items-center">
+                            Card Breakdown
+                            <HelpTip text="Every card your decks need, after subtracting what you already own. In Paper Mode you'll also see an estimated price per card." />
+                        </h2>
 
                         {breakdown.length === 0 ? (
                             <p className="text-ink">No breakdown yet. Process your decks.</p>
@@ -505,8 +518,9 @@ export default function Page() {
 
                     {/* SHOPPING LIST */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title">
+                        <h2 className="text-2xl font-title flex items-center">
                             {disableArena ? "TCGPlayer Shopping List" : "Arena Import"}
+                            <HelpTip text="A plain-text list of exactly what's missing, formatted to paste straight into Arena's deck import (Arena Mode) or TCGPlayer's mass entry (Paper Mode)." />
                         </h2>
 
                         {shoppingList.length === 0 ? (
@@ -562,7 +576,10 @@ export default function Page() {
                     {/* SET RECOMMENDATIONS — Only show in Arena Mode data stored in both modes*/}
                     {!disableArena && (
                         <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                            <h2 className="text-2xl font-title">Set Recommendations</h2>
+                            <h2 className="text-2xl font-title flex items-center">
+                                Set Recommendations
+                                <HelpTip text="Missing cards grouped by set, so you can see which booster packs or draft picks would cover the most of what you need at once." />
+                            </h2>
 
                             {recommendations.length === 0 ? (
                                 <p className="text-ink">No recommendations yet.</p>
@@ -642,7 +659,10 @@ export default function Page() {
                     {/* WILDCARDS NEEDED — Arena Mode only */}
                     {!disableArena && (
                         <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                            <h2 className="text-2xl font-title">Wildcards Needed</h2>
+                            <h2 className="text-2xl font-title flex items-center">
+                                Wildcards Needed
+                                <HelpTip text="How many wildcards of each rarity you'd need to craft everything that's missing. Basic lands don't count — Arena gives you those for free." />
+                            </h2>
 
                             {!wildcards ? (
                                 <p className="text-ink">No wildcards needed yet. Process your decks.</p>
