@@ -100,9 +100,20 @@ async function run() {
     console.log("Streaming all-cards JSON and filtering...");
     const best = {}; // { cardName: { paper, arena, mtgo } }
 
+    // Scryfall's bulk data includes preview/spoiler cards for sets that
+    // haven't released yet (there is no boolean flag for this — released_at
+    // is the only tag available, and it's a future date for those cards).
+    // Skip them: they have no price data yet, and — since printings are
+    // otherwise picked by "newest released_at wins" below — an unreleased
+    // preview would otherwise incorrectly outrank the real, live printing.
+    const today = new Date().toISOString().slice(0, 10);
+
     await streamAllCards(allCardsEntry.jsonl_download_uri, (card) => {
         // ENGLISH ONLY
         if (card.lang !== "en") return;
+
+        // 🔥 FILTER 0: Skip cards that haven't released yet
+        if (!card.released_at || card.released_at > today) return;
 
         // 🔥 FILTER A: Promo logic
         // Allow ONLY Universes Beyond promos (OM1 paper printings)
