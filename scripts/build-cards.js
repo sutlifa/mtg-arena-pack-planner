@@ -105,6 +105,42 @@ function detectDeckLimit(card) {
 // size sane. Newest first, so this keeps the most currently-relevant ones.
 const MAX_PRINTINGS_PER_CARD = 24;
 
+// --- Standard rotation feature -------------------------------------------
+//
+// Wizards changed Standard's rotation schedule starting in 2027: instead of
+// rotating every autumn, it now rotates with the first premier set of the
+// calendar year. The next rotation lands with Nauctis: The Sunken Realm,
+// which sends Wilds of Eldraine, The Lost Caverns of Ixalan, Murders at
+// Karlov Manor, The Big Score, Outlaws of Thunder Junction, Bloomburrow, and
+// Duskmourn: House of Horror out of the format.
+//
+// STANDARD_TRACK_SETS is the full pool of sets currently — or about to be,
+// before the Feb 2027 rotation — Standard-legal. This can't be derived
+// automatically from Scryfall's per-card `legalities.standard` field: that
+// field reflects whether the CARD is legal via ANY of its printings, not
+// whether a SPECIFIC printing's set is part of the current pool. A 2006
+// Guildpact printing of a card shows "legal" too, once that same card gets
+// a Foundations reprint — so it can't be used to tell which sets actually
+// grant Standard legality. This has to be maintained by hand instead.
+//
+// None of this is derivable from card data on its own, so update these two
+// constants by hand: add newly-released/announced sets to
+// STANDARD_TRACK_SETS as Wizards reveals them (roughly every ~2 months),
+// and when the Feb 2027 rotation actually happens, drop ROTATING_OUT_SETS'
+// members from STANDARD_TRACK_SETS and move ROTATION_DATE / ROTATING_OUT_SETS
+// forward to whatever rotates in 2028.
+const ROTATION_DATE = "2027-02-05"; // Nauctis: The Sunken Realm release — the 2027 rotation trigger
+const ROTATING_OUT_SETS = new Set(["woe", "lci", "mkm", "big", "otj", "blb", "dsk"]);
+const STANDARD_TRACK_SETS = new Set([
+    // Rotating out Feb 2027
+    "woe", "lci", "mkm", "big", "otj", "blb", "dsk",
+    // Surviving rotation (includes sets previewing now but not yet released —
+    // listing them here lets already-spoiled cards count as safe ahead of
+    // their release day)
+    "fdn", "dft", "tdm", "fin", "eoe", "om1", "spm", "tla",
+    "ecl", "tmt", "sos", "msh", "hob", "fra", "trk",
+]);
+
 // A short human label for why a printing looks different from the plain
 // version, so the art picker can show e.g. "Showcase" or "Borderless"
 // instead of just a bare set name.
@@ -154,15 +190,20 @@ async function run() {
     const setsJson = await fetchJson("https://api.scryfall.com/sets");
 
     const setIconMap = {};
+    const setInfoMap = {}; // code -> { name } — used by the rotation dataset for set display names
     for (const s of setsJson.data) {
         if (s.code && s.icon_svg_uri) {
             setIconMap[s.code.toLowerCase()] = s.icon_svg_uri;
+        }
+        if (s.code) {
+            setInfoMap[s.code.toLowerCase()] = { name: s.name };
         }
     }
 
     console.log("Streaming all-cards JSON and filtering...");
     const best = {}; // { cardName: { paper, arena, mtgo } }
     const allPrintings = {}; // { cardName: [ printing, ... ] } — every eligible printing, for the art/version picker
+    const rotationIndex = {}; // { cardName: Map<setCode, {set, set_name, rotating}> } — for the Standard rotation checker
 
     // Scryfall's bulk data includes preview/spoiler cards for sets that
     // haven't released yet (there is no boolean flag for this — released_at
@@ -175,6 +216,29 @@ async function run() {
     await streamAllCards(allCardsEntry.jsonl_download_uri, (card) => {
         // ENGLISH ONLY
         if (card.lang !== "en") return;
+
+        // Standard rotation index: record, for every card with a printing
+        // in one of the fixed Standard-track sets above, which of those
+        // sets it appears in — regardless of release date, so a card
+        // already spoiled for an unreleased set (e.g. Star Trek) counts as
+        // safe ahead of its release day. Deliberately runs before FILTER 0
+        // below, which would otherwise skip unreleased preview cards
+        // entirely.
+        {
+            const setCode = card.set?.toLowerCase();
+
+            if (setCode && STANDARD_TRACK_SETS.has(setCode)) {
+                const rotName = card.card_faces?.[0]?.name ?? card.name;
+                if (!rotationIndex[rotName]) rotationIndex[rotName] = new Map();
+                if (!rotationIndex[rotName].has(setCode)) {
+                    rotationIndex[rotName].set(setCode, {
+                        set: setCode,
+                        set_name: setInfoMap[setCode]?.name ?? card.set_name,
+                        rotating: ROTATING_OUT_SETS.has(setCode),
+                    });
+                }
+            }
+        }
 
         // 🔥 FILTER 0: Skip cards that haven't released yet
         if (!card.released_at || card.released_at > today) return;
@@ -410,6 +474,30 @@ async function run() {
 
     const sizeMB = (fs.statSync(libPath).size / 1024 / 1024).toFixed(2);
     console.log(`Done. Wrote ${final.length} cards (${sizeMB} MB)`);
+
+    console.log("Building Standard rotation dataset...");
+    const rotationCards = {};
+    for (const [name, setsMap] of Object.entries(rotationIndex)) {
+        rotationCards[name] = { sets: [...setsMap.values()] };
+    }
+
+    const rotatingOutSetsInfo = [...ROTATING_OUT_SETS].map((code) => ({
+        set: code,
+        set_name: setInfoMap[code]?.name ?? code.toUpperCase(),
+    }));
+
+    const rotationOutput = {
+        generatedAt: new Date().toISOString(),
+        rotationDate: ROTATION_DATE,
+        rotatingOutSets: rotatingOutSetsInfo,
+        cards: rotationCards,
+    };
+
+    const rotationPath = path.join(libDir, "standard-rotation.json");
+    fs.writeFileSync(rotationPath, JSON.stringify(rotationOutput));
+
+    const rotationSizeMB = (fs.statSync(rotationPath).size / 1024 / 1024).toFixed(2);
+    console.log(`Wrote Standard rotation dataset: ${Object.keys(rotationCards).length} cards (${rotationSizeMB} MB)`);
 }
 
 run().catch((e) => {

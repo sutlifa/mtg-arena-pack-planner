@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import HelpTip from "./components/HelpTip";
+import RotationChecker from "./components/RotationChecker";
 
 // A deck box counts as "just a link" only if it's a single bare
 // MTGGoldfish deck URL with nothing else pasted alongside it.
@@ -47,6 +48,8 @@ export default function Page() {
     const [loading, setLoading] = useState(false);
     const [zoomCard, setZoomCard] = useState<any>(null);
     const [flip, setFlip] = useState(false);
+
+    const [activeTab, setActiveTab] = useState<"planner" | "rotation">("planner");
 
     // Per-card chosen printing (art/version), keyed by canonical card name.
     const [printingOverrides, setPrintingOverrides] = useState<
@@ -327,11 +330,44 @@ export default function Page() {
                 </div>
             </div>
 
+            {/* PAGE TABS */}
+            <div className="flex justify-center gap-3 mb-6">
+                <button
+                    type="button"
+                    onPointerUp={() => setActiveTab("planner")}
+                    className={
+                        "px-5 py-2 rounded font-title text-lg shadow-card " +
+                        (activeTab === "planner"
+                            ? "bg-parchment-dark text-ink"
+                            : "bg-parchment text-ink/70 hover:bg-parchment-dark")
+                    }
+                >
+                    Pack Planner
+                </button>
+                <button
+                    type="button"
+                    onPointerUp={() => setActiveTab("rotation")}
+                    className={
+                        "px-5 py-2 rounded font-title text-lg shadow-card " +
+                        (activeTab === "rotation"
+                            ? "bg-parchment-dark text-ink"
+                            : "bg-parchment text-ink/70 hover:bg-parchment-dark")
+                    }
+                >
+                    Standard Rotation
+                </button>
+            </div>
+
             {/* SIDEBAR + MAIN CONTENT LAYOUT */}
             <div className="px-6">
 
                 {/* MAIN CONTENT */}
                 <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+
+                {activeTab === "rotation" ? (
+                    <RotationChecker />
+                ) : (
+                <>
 
                     {/* DECK INPUTS */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
@@ -999,7 +1035,8 @@ export default function Page() {
                         </div>
                     )}
 
-
+                </>
+                )}
 
                 </main>
 
