@@ -1,8 +1,7 @@
 // lib/deckLimits.ts
 
-import fs from "fs";
-import path from "path";
 import { normalizeName } from "./nameUtils";
+import { getCardData } from "./cardDataStore";
 
 /**
  * Canonical name -> max copies allowed in a deck, for the handful of cards
@@ -16,11 +15,7 @@ import { normalizeName } from "./nameUtils";
 export const deckLimits: Record<string, number | null> = {};
 
 (function buildDeckLimits() {
-    const filePath = path.join(process.cwd(), "lib/data/cards-min.json");
-    const fileContents = fs.readFileSync(filePath, "utf8");
-    const cards = JSON.parse(fileContents);
-
-    for (const card of cards) {
+    for (const card of getCardData()) {
         if (card.deck_limit === undefined) continue;
 
         deckLimits[normalizeName(card.name)] = card.deck_limit;

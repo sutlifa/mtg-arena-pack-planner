@@ -1,8 +1,7 @@
 // lib/serverAliasMap.ts
 
-import fs from "fs";
-import path from "path";
 import { normalizeName } from "./nameUtils";
+import { getCardData } from "./cardDataStore";
 
 /**
  * Manual aliases for MDFCs, Adventures, Battles,
@@ -40,11 +39,7 @@ export const serverAliasMap: Record<string, string> = {
  * These are single-face cards where printed_name differs.
  */
 (function buildAutoAliases() {
-    const filePath = path.join(process.cwd(), "lib/data/cards-min.json");
-    const fileContents = fs.readFileSync(filePath, "utf8");
-    const cards = JSON.parse(fileContents);
-
-    for (const card of cards) {
+    for (const card of getCardData()) {
         const oracle = normalizeName(card.name);
         const printed = normalizeName(card.printed_name ?? card.name);
 
