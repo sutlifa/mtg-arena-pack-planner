@@ -8,17 +8,19 @@ import { serverAliasMap } from "./serverAliasMap";
 interface RotationSet {
     set: string;
     set_name: string;
+    set_icon_svg_uri: string | null;
     rotating: boolean;
 }
 
 interface RotationEntry {
     sets: RotationSet[];
+    image: string | null;
 }
 
 interface RotationData {
     generatedAt: string;
     rotationDate: string;
-    rotatingOutSets: { set: string; set_name: string }[];
+    rotatingOutSets: { set: string; set_name: string; set_icon_svg_uri: string | null }[];
     cards: Record<string, RotationEntry>;
 }
 
@@ -53,6 +55,7 @@ export interface RotationLookup {
     found: boolean;
     survives: boolean;
     sets: RotationSet[];
+    image: string | null;
 }
 
 // Looks up whether a card (by name, as pasted in a decklist) is currently
@@ -67,8 +70,8 @@ export function lookupRotation(name: string): RotationLookup {
     const key = alias ?? normalized;
     const entry = getIndex().get(key);
 
-    if (!entry) return { found: false, survives: false, sets: [] };
+    if (!entry) return { found: false, survives: false, sets: [], image: null };
 
     const survives = entry.sets.some((s) => !s.rotating);
-    return { found: true, survives, sets: entry.sets };
+    return { found: true, survives, sets: entry.sets, image: entry.image ?? null };
 }

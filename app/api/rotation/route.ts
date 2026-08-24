@@ -41,9 +41,9 @@ export async function POST(req: Request) {
             if (!result.found) {
                 notStandard.push({ card: rawName, qty });
             } else if (result.survives) {
-                safe.push({ card: rawName, qty, sets: result.sets });
+                safe.push({ card: rawName, qty, sets: result.sets, image: result.image });
             } else {
-                rotating.push({ card: rawName, qty, sets: result.sets });
+                rotating.push({ card: rawName, qty, sets: result.sets, image: result.image });
             }
         }
 

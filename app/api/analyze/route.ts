@@ -44,18 +44,26 @@ export async function POST(req: Request) {
 
         const neededCards = lookupResults.filter((c) => c.needed > 0);
 
+        // Cards with no Arena printing at all can't actually be acquired on
+        // Arena — they still show up in the breakdown (flagged), but are
+        // excluded from anything that represents "cost to get this via
+        // Arena": wildcards, set recommendations, and the Arena Import list.
+        const arenaAcquirableCards = arenaMode
+            ? neededCards.filter((c) => c.lookup?.availableOnArena !== false)
+            : neededCards;
+
         // Arena Mode only: compute recommendations
-        const ranked = arenaMode ? rankSets(neededCards) : null;
+        const ranked = arenaMode ? rankSets(arenaAcquirableCards) : null;
 
         const response: any = {
             breakdown: neededCards,
-            shoppingList: neededCards,
+            shoppingList: arenaAcquirableCards,
             missingCards: missingDeckCards,
         };
 
         if (arenaMode) {
             response.recommendations = ranked;
-            response.wildcards = estimateWildcards(neededCards);
+            response.wildcards = estimateWildcards(arenaAcquirableCards);
         }
 
         return NextResponse.json(response);

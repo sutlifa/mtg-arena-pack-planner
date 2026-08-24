@@ -105,6 +105,16 @@ function detectDeckLimit(card) {
 // size sane. Newest first, so this keeps the most currently-relevant ones.
 const MAX_PRINTINGS_PER_CARD = 24;
 
+// Real numbered sets that were never sold at normal retail — recalled
+// misprint runs, store-exclusive prize support, etc. — so a card's "best"
+// printing shouldn't be able to land on one of these just because it
+// happens to have a late release date. (Summer Magic in particular was an
+// immediately-recalled Revised misprint with as few as ~90 copies of some
+// cards; picking it over Revised as "the current paper printing" would be
+// actively misleading.) Set_type alone can't distinguish these from a
+// normal core set, so they're called out by code.
+const NON_RETAIL_SETS = new Set(["sum", "ced", "cei"]); // Summer Magic/Edgar, Collectors' Edition, Intl. Collectors' Edition
+
 // --- Standard rotation feature -------------------------------------------
 //
 // Wizards changed Standard's rotation schedule starting in 2027: instead of
@@ -229,13 +239,27 @@ async function run() {
 
             if (setCode && STANDARD_TRACK_SETS.has(setCode)) {
                 const rotName = card.card_faces?.[0]?.name ?? card.name;
-                if (!rotationIndex[rotName]) rotationIndex[rotName] = new Map();
-                if (!rotationIndex[rotName].has(setCode)) {
-                    rotationIndex[rotName].set(setCode, {
+                if (!rotationIndex[rotName]) {
+                    rotationIndex[rotName] = { sets: new Map(), image: null, imageDate: null };
+                }
+                const entry = rotationIndex[rotName];
+
+                if (!entry.sets.has(setCode)) {
+                    entry.sets.set(setCode, {
                         set: setCode,
                         set_name: setInfoMap[setCode]?.name ?? card.set_name,
+                        set_icon_svg_uri: setIconMap[setCode] ?? null,
                         rotating: ROTATING_OUT_SETS.has(setCode),
                     });
+                }
+
+                // Keep a representative thumbnail — the newest printing seen
+                // among the Standard-track sets — for the rotation checker's
+                // card rows.
+                const thumb = card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal;
+                if (thumb && (!entry.imageDate || (card.released_at && card.released_at > entry.imageDate))) {
+                    entry.image = thumb;
+                    entry.imageDate = card.released_at ?? entry.imageDate;
                 }
             }
         }
@@ -261,7 +285,18 @@ async function run() {
             card.set_type === "starter" ||
             card.set_type === "box" ||
             card.set_type === "masterpiece" ||
+            card.set_type === "duel_deck" ||
+            card.set_type === "premium_deck" ||
+            card.set_type === "draft_innovation" ||
+            card.set_type === "treasure_chest" ||
+            card.set_type === "planechase" ||
+            card.set_type === "archenemy" ||
+            card.set_type === "vanguard" ||
+            card.set_type === "from_the_vault" ||
+            card.set_type === "spellbook" ||
+            card.set_type === "minigame" ||
             card.set === "slx" ||
+            NON_RETAIL_SETS.has(card.set?.toLowerCase()) ||
             card.set_name?.toLowerCase().includes("secret lair") ||
             card.set_name === "The List"
         ) {
@@ -477,13 +512,14 @@ async function run() {
 
     console.log("Building Standard rotation dataset...");
     const rotationCards = {};
-    for (const [name, setsMap] of Object.entries(rotationIndex)) {
-        rotationCards[name] = { sets: [...setsMap.values()] };
+    for (const [name, entry] of Object.entries(rotationIndex)) {
+        rotationCards[name] = { sets: [...entry.sets.values()], image: entry.image };
     }
 
     const rotatingOutSetsInfo = [...ROTATING_OUT_SETS].map((code) => ({
         set: code,
         set_name: setInfoMap[code]?.name ?? code.toUpperCase(),
+        set_icon_svg_uri: setIconMap[code] ?? null,
     }));
 
     const rotationOutput = {
