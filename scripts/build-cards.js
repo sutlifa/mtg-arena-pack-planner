@@ -100,6 +100,28 @@ function detectDeckLimit(card) {
     return undefined;
 }
 
+// Maximum alternate printings retained per card name, for the art/version
+// picker. Popular staples can have 50+ reprints; capping keeps the dataset
+// size sane. Newest first, so this keeps the most currently-relevant ones.
+const MAX_PRINTINGS_PER_CARD = 24;
+
+// A short human label for why a printing looks different from the plain
+// version, so the art picker can show e.g. "Showcase" or "Borderless"
+// instead of just a bare set name.
+function detectVariant(card) {
+    const labels = [];
+    if (card.frame_effects?.includes("extendedart")) labels.push("Extended Art");
+    if (card.frame_effects?.includes("showcase")) labels.push("Showcase");
+    if (card.frame_effects?.includes("etched")) labels.push("Etched Foil");
+    if (card.frame_effects?.includes("inverted")) labels.push("Inverted");
+    if (card.full_art === true) labels.push("Full Art");
+    if (card.border_color === "borderless") labels.push("Borderless");
+    if (card.promo === true && card.promo_types?.includes("universesbeyond")) {
+        labels.push("Universes Beyond");
+    }
+    return labels.length ? labels.join(" · ") : null;
+}
+
 // Normalize dual-face cards (Adventure, OMEN, MDFC)
 function normalizeFaces(card, setIconMap) {
     if (!card.card_faces) return card;
@@ -140,6 +162,7 @@ async function run() {
 
     console.log("Streaming all-cards JSON and filtering...");
     const best = {}; // { cardName: { paper, arena, mtgo } }
+    const allPrintings = {}; // { cardName: [ printing, ... ] } — every eligible printing, for the art/version picker
 
     // Scryfall's bulk data includes preview/spoiler cards for sets that
     // haven't released yet (there is no boolean flag for this — released_at
@@ -181,17 +204,6 @@ async function run() {
             return;
         }
 
-        // 🔥 FILTER B: Skip alternate-frame variants AND all promo variants
-        if (
-            card.frame_effects?.includes("extendedart") ||
-            card.frame_effects?.includes("showcase") ||
-            card.frame_effects?.includes("etched") ||
-            card.frame_effects?.includes("inverted") ||
-            card.full_art === true
-        ) {
-            return;
-        }
-
         // 🔥 FILTER C: Skip TSR Timeshifted retro-frame cards
         if (
             card.set === "tsr" &&
@@ -212,39 +224,113 @@ async function run() {
 
         const name = card.name;
 
-        if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
+        // 🔥 FILTER B: alternate-frame variants (extended art, showcase,
+        // etc.) are excluded from the *default* pick below, but still
+        // recorded in allPrintings — that's exactly the alt-art content the
+        // version picker exists to offer.
+        const isAltFrame =
+            card.frame_effects?.includes("extendedart") ||
+            card.frame_effects?.includes("showcase") ||
+            card.frame_effects?.includes("etched") ||
+            card.frame_effects?.includes("inverted") ||
+            card.full_art === true;
 
-        // Skip Commander printings if a non-Commander printing exists
-        const isCommander = card.set_type === "commander";
+        if (!isAltFrame) {
+            if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
 
-        const update = (slot) => {
-            const existing = best[name][slot];
+            // Skip Commander printings if a non-Commander printing exists
+            const isCommander = card.set_type === "commander";
 
-            // If existing is non-commander and new is commander → skip
-            if (existing && existing.set_type !== "commander" && isCommander) {
-                return;
-            }
+            const update = (slot) => {
+                const existing = best[name][slot];
 
-            // If existing is commander and new is non-commander → replace
-            if (existing && existing.set_type === "commander" && !isCommander) {
-                best[name][slot] = card;
-                return;
-            }
+                // If existing is non-commander and new is commander → skip
+                if (existing && existing.set_type !== "commander" && isCommander) {
+                    return;
+                }
 
-            // Otherwise: pick newest
-            if (!existing || (card.released_at && card.released_at > existing.released_at)) {
-                best[name][slot] = card;
-            }
-        };
+                // If existing is commander and new is non-commander → replace
+                if (existing && existing.set_type === "commander" && !isCommander) {
+                    best[name][slot] = card;
+                    return;
+                }
 
-        // Apply to all game modes
-        if (card.games?.includes("paper")) update("paper");
-        if (card.games?.includes("arena")) update("arena");
-        if (card.games?.includes("mtgo")) update("mtgo");
+                // Otherwise: pick newest
+                if (!existing || (card.released_at && card.released_at > existing.released_at)) {
+                    best[name][slot] = card;
+                }
+            };
+
+            // Apply to all game modes
+            if (card.games?.includes("paper")) update("paper");
+            if (card.games?.includes("arena")) update("arena");
+            if (card.games?.includes("mtgo")) update("mtgo");
+        }
+
+        // Record every eligible printing (including alt-frame ones) for the
+        // art/version picker.
+        if (!allPrintings[name]) allPrintings[name] = [];
+        allPrintings[name].push({
+            name: card.name,
+            set: card.set,
+            set_name: card.set_name,
+            set_type: card.set_type,
+            collector_number: card.collector_number,
+            rarity: card.rarity,
+            released_at: card.released_at,
+            games: card.games,
+            set_icon_svg_uri: setIconMap[card.set?.toLowerCase()] ?? null,
+            prices_usd: card.prices?.usd ?? card.prices?.usd_foil ?? null,
+            printed_name: card.printed_name,
+            variant: detectVariant(card),
+            image_uris: card.image_uris?.normal ? { normal: card.image_uris.normal } : undefined,
+            card_faces: card.card_faces
+                ? card.card_faces.map((face) => ({
+                    name: face.name,
+                    printed_name: face.printed_name,
+                    image_uris: face.image_uris?.normal
+                        ? { normal: face.image_uris.normal }
+                        : card.image_uris?.normal
+                            ? { normal: card.image_uris.normal }
+                            : undefined,
+                }))
+                : undefined,
+        });
     });
 
     console.log("Building final filtered dataset...");
+
+    // Newest first, capped, per card name — used to populate each card's
+    // `printings` (the art/version picker options).
+    for (const name of Object.keys(allPrintings)) {
+        const list = allPrintings[name];
+        list.sort((a, b) => (b.released_at || "").localeCompare(a.released_at || ""));
+
+        // Always keep the auto-selected default printing(s) for this card
+        // (best[name].paper/arena/mtgo), even if newer alt-art variants
+        // would otherwise push them out of the cap — the "no override
+        // chosen" case relies on the picker's default landing on exactly
+        // the same printing pricing/wildcards were computed from.
+        const isSame = (a, b) => a.set === b.set && a.collector_number === b.collector_number;
+        const pinned = [];
+        const slots = best[name];
+        if (slots) {
+            for (const slot of ["paper", "arena", "mtgo"]) {
+                const card = slots[slot];
+                if (!card) continue;
+                if (pinned.some((p) => isSame(p, card))) continue;
+
+                const match = list.find((p) => isSame(p, card));
+                if (match) pinned.push(match);
+            }
+        }
+
+        const rest = list.filter((p) => !pinned.some((pin) => isSame(pin, p)));
+        allPrintings[name] = [...pinned, ...rest].slice(0, MAX_PRINTINGS_PER_CARD);
+    }
+
     const final = [];
+    const printingsAttached = new Set();
 
     for (const name of Object.keys(best)) {
         const slots = best[name];
@@ -271,6 +357,20 @@ async function run() {
             const deckLimit = detectDeckLimit(card);
             if (deckLimit !== undefined) {
                 base.deck_limit = deckLimit;
+            }
+
+            // Alternate arts/printings the user can pick between. Attached
+            // to only one of this name's paper/arena/mtgo entries — they'd
+            // otherwise all carry an identical copy of the same array,
+            // multiplying the dataset size for no reason. Omitted entirely
+            // when there's only the one printing — nothing to pick from.
+            if (
+                allPrintings[name] &&
+                allPrintings[name].length > 1 &&
+                !printingsAttached.has(name)
+            ) {
+                base.printings = allPrintings[name];
+                printingsAttached.add(name);
             }
 
             if (card.image_uris?.normal) {
@@ -300,16 +400,13 @@ async function run() {
 
     console.log(`Final dataset size: ${final.length} cards. Writing output...`);
 
+    // Only lib/data is read (server-side only, via fs.readFileSync in
+    // lib/cardDataStore.ts) — nothing fetches a public copy client-side.
     const libDir = path.join(process.cwd(), "lib/data");
-    const publicDir = path.join(process.cwd(), "public/data");
     if (!fs.existsSync(libDir)) fs.mkdirSync(libDir, { recursive: true });
-    if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
     const libPath = path.join(libDir, "cards-min.json");
-    const publicPath = path.join(publicDir, "cards-min.json");
-
     fs.writeFileSync(libPath, JSON.stringify(final));
-    fs.writeFileSync(publicPath, JSON.stringify(final));
 
     const sizeMB = (fs.statSync(libPath).size / 1024 / 1024).toFixed(2);
     console.log(`Done. Wrote ${final.length} cards (${sizeMB} MB)`);

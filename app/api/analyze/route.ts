@@ -9,7 +9,7 @@ import { estimateWildcards } from "@/lib/wildcardEstimator";
 
 export async function POST(req: Request) {
     try {
-        const { decklist, collection, arenaMode, mergePaperCounts } = await req.json();
+        const { decklist, collection, arenaMode, mergePaperCounts, printingOverrides } = await req.json();
 
         // Deck parsed in current mode (Paper: max/sum; Arena: capped by parser)
         const { map: deckMap, missing: missingDeckCards } =
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
             // 🔥 Single, simple rule for all modes
             const needed = Math.max(0, deckQty - owned);
 
-            const card = await lookupCard(canonical, arenaMode);
+            const card = await lookupCard(canonical, arenaMode, printingOverrides?.[canonical]);
 
             const arenaPrinting = card?.arenaPrinting ?? null;
             const paperPrinting = card?.paperPrinting ?? null;

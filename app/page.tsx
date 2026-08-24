@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import HelpTip from "./components/HelpTip";
 
@@ -47,7 +47,12 @@ export default function Page() {
     const [loading, setLoading] = useState(false);
     const [zoomCard, setZoomCard] = useState<any>(null);
     const [flip, setFlip] = useState(false);
-   
+
+    // Per-card chosen printing (art/version), keyed by canonical card name.
+    const [printingOverrides, setPrintingOverrides] = useState<
+        Record<string, { set: string; collector_number: string }>
+    >({});
+    const reanalyzeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const toggleSet = (code: string) => {
         setOpenSets((prev) => ({
@@ -98,9 +103,9 @@ export default function Page() {
 
     const clearCollection = () => setCollection("");
 
-    const processAll = async () => {
-        setBreakdown([]);
-        setShoppingList([]);
+    const processAll = async (
+        printingOverridesArg?: Record<string, { set: string; collector_number: string }>
+    ) => {
         setLoading(true);
 
         try {
@@ -155,6 +160,7 @@ export default function Page() {
                     collection,
                     arenaMode: !disableArena,
                     mergePaperCounts,
+                    printingOverrides: printingOverridesArg ?? printingOverrides,
                 }),
 
             });
@@ -186,6 +192,33 @@ export default function Page() {
         }
 
         setLoading(false);
+    };
+
+    // Called when a card's art/version slider moves. Updates which printing
+    // is chosen immediately (image/price/set redraw from data already on
+    // hand — no server round-trip needed for that), then debounces a
+    // re-analyze so Wildcards Needed / Set Recommendations catch up with
+    // the newly-chosen set + rarity without spamming the server while the
+    // user is still dragging.
+    const handleVersionChange = (
+        canonical: string,
+        set: string,
+        collectorNumber: string
+    ) => {
+        // Computed directly (not read back from state) so the debounced
+        // call below always sees this exact update, not whatever
+        // printingOverrides happened to be when this render's processAll
+        // closure was created.
+        const updated = {
+            ...printingOverrides,
+            [canonical]: { set, collector_number: collectorNumber },
+        };
+        setPrintingOverrides(updated);
+
+        if (reanalyzeTimer.current) clearTimeout(reanalyzeTimer.current);
+        reanalyzeTimer.current = setTimeout(() => {
+            processAll(updated);
+        }, 500);
     };
 
     // Re-run analysis when switching Arena/Paper mode, or when Paper Mode's
@@ -293,7 +326,7 @@ export default function Page() {
                     </div>
                 </div>
             </div>
-             
+
             {/* SIDEBAR + MAIN CONTENT LAYOUT */}
             <div className="px-6">
 
@@ -430,11 +463,11 @@ export default function Page() {
                             </label>
                         )}
 
-                        
+
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             <button
                                 type="button"
-                                onPointerUp={!loading ? processAll : undefined}
+                                onPointerUp={!loading ? () => processAll() : undefined}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter" && !loading) {
                                         processAll();
@@ -462,7 +495,7 @@ export default function Page() {
                     {/* MOBILE ANALYZE BUTTON */}
                     <div className="md:hidden w-full flex flex-col items-center mt-10 mb-16 relative z-20">
                         <button
-                            onPointerUp={!loading ? processAll : undefined}
+                            onPointerUp={!loading ? () => processAll() : undefined}
                             disabled={loading}
                             className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
                                 ? "bg-gray-400 cursor-not-allowed"
@@ -494,10 +527,48 @@ export default function Page() {
                             <p className="text-ink">No breakdown yet. Process your decks.</p>
                         ) : (
                             breakdown.map((item, i) => {
-                                // Dynamic printing selection
-                                const printing = disableArena
+                                // Auto-selected printing (server default)
+                                const autoPrinting = disableArena
                                     ? item.lookup?.paperPrinting
                                     : item.lookup?.arenaPrinting ?? item.lookup?.paperPrinting;
+
+                                // Every version selectable in the CURRENT mode — Arena
+                                // Mode only offers Arena-legal printings (so the set +
+                                // rarity shown are always something you can actually
+                                // get on Arena); Paper Mode offers paper printings.
+                                const modeVersions: any[] = (item.lookup?.versions ?? []).filter(
+                                    (v: any) =>
+                                        disableArena
+                                            ? v.games?.includes("paper")
+                                            : v.games?.includes("arena")
+                                );
+
+                                const override = printingOverrides[item.card];
+                                const overrideIndex = override
+                                    ? modeVersions.findIndex(
+                                        (v: any) =>
+                                            v.set === override.set &&
+                                            v.collector_number === override.collector_number
+                                    )
+                                    : -1;
+
+                                const defaultIndex = Math.max(
+                                    0,
+                                    modeVersions.findIndex(
+                                        (v: any) =>
+                                            v.set === autoPrinting?.set &&
+                                            v.collector_number === autoPrinting?.collector_number
+                                    )
+                                );
+
+                                const selectedIndex = overrideIndex >= 0 ? overrideIndex : defaultIndex;
+
+                                // Dynamic printing selection — the chosen version if
+                                // there is one, else whatever the server auto-picked.
+                                const printing =
+                                    modeVersions.length > 0
+                                        ? modeVersions[selectedIndex] ?? autoPrinting
+                                        : autoPrinting;
 
                                 // UNIVERSAL IMAGE RESOLVER
                                 const img =
@@ -556,6 +627,29 @@ export default function Page() {
                                                     height={24}
                                                     className="w-6 h-6 mt-1 opacity-90"
                                                 />
+                                            )}
+
+                                            {modeVersions.length > 1 && (
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={modeVersions.length - 1}
+                                                        value={selectedIndex}
+                                                        onChange={(e) => {
+                                                            const v = modeVersions[Number(e.target.value)];
+                                                            if (v) {
+                                                                handleVersionChange(item.card, v.set, v.collector_number);
+                                                            }
+                                                        }}
+                                                        className="w-32 accent-[#8b3a12]"
+                                                    />
+                                                    <span className="text-xs text-ink/70">
+                                                        {printing?.set_name}
+                                                        {printing?.variant ? ` · ${printing.variant}` : ""}
+                                                        {" "}({selectedIndex + 1}/{modeVersions.length})
+                                                    </span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -783,9 +877,30 @@ export default function Page() {
                                 </button>
 
                                 {(() => {
-                                    const printing = disableArena
+                                    // Same version resolution as the breakdown thumbnail,
+                                    // so zooming in shows whatever art is currently chosen.
+                                    const autoPrinting = disableArena
                                         ? zoomCard.lookup?.paperPrinting
                                         : zoomCard.lookup?.arenaPrinting ?? zoomCard.lookup?.paperPrinting;
+
+                                    const modeVersions: any[] = (zoomCard.lookup?.versions ?? []).filter(
+                                        (v: any) =>
+                                            disableArena
+                                                ? v.games?.includes("paper")
+                                                : v.games?.includes("arena")
+                                    );
+
+                                    const override = printingOverrides[zoomCard.card];
+                                    const overrideIndex = override
+                                        ? modeVersions.findIndex(
+                                            (v: any) =>
+                                                v.set === override.set &&
+                                                v.collector_number === override.collector_number
+                                        )
+                                        : -1;
+
+                                    const printing =
+                                        overrideIndex >= 0 ? modeVersions[overrideIndex] : autoPrinting;
 
                                     const front =
                                         printing?.image_uris?.normal ||
@@ -885,12 +1000,12 @@ export default function Page() {
                     )}
 
 
-                                        
+
                 </main>
 
             </div>
         </div>
     );
 
-    
+
 }
