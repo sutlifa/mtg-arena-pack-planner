@@ -275,32 +275,54 @@ async function run() {
             }
         }
 
-        // Skip unwanted set types
-        if (
+        // Skip unwanted set types.
+        //
+        // Wizards increasingly reuses old-timey/promotional set treatments
+        // to deliver genuinely current, Arena/MTGO-legal cards — "Special
+        // Guests" bonus sheets are set_type "masterpiece", some Explorer/
+        // historic reprint waves show up under "duel_deck", Modern Horizons
+        // is "draft_innovation". Guessing which set NAMES are "really"
+        // retail by set_type alone keeps getting proven wrong (Magus of the
+        // Moon's only Arena printing is a "masterpiece"-type Special Guests
+        // card; Snuff Out's is a "duel_deck"-type Duel Decks Anthology
+        // card). So for this batch of "supplemental product" types, trust
+        // the card's own `games` tag instead: only exclude a printing here
+        // if it ISN'T actually available on Arena or MTGO. A printing
+        // Scryfall says is digitally available is real and obtainable,
+        // regardless of what the set looks like.
+        //
+        // Alchemy is the one deliberate exception, kept excluded outright —
+        // its digital-only rebalances share a name with the original card
+        // but have different rules text, and letting them in would corrupt
+        // "same name, pick the newest" logic elsewhere in this file.
+        // Memorabilia/token/funny aren't real constructed cards regardless
+        // of any games tag.
+        const isDigitallyAvailable = card.games?.includes("arena") || card.games?.includes("mtgo");
+
+        const alwaysExcludedType =
             card.set_type === "memorabilia" ||
             card.set_type === "token" ||
             card.set_type === "funny" ||
-            card.set_type === "alchemy" ||
+            card.set_type === "alchemy";
+
+        const supplementalProductType =
             card.set_type === "arsenal" ||
             card.set_type === "starter" ||
             card.set_type === "box" ||
             card.set_type === "masterpiece" ||
             card.set_type === "duel_deck" ||
             card.set_type === "premium_deck" ||
-            // NOT "draft_innovation" — despite the name, Scryfall files major
-            // real, widely-available sets under it too (Modern Horizons 1/2/3,
-            // Commander Legends, Battlebond, Jumpstart, Assassin's Creed, LOTR:
-            // Tales of Middle-earth...). Excluding it dropped those sets'
-            // printings entirely, which silently broke Arena availability for
-            // cards whose only Arena printing was e.g. Modern Horizons 2
-            // (Verdant Catacombs and the other fetch lands, notably).
             card.set_type === "treasure_chest" ||
             card.set_type === "planechase" ||
             card.set_type === "archenemy" ||
             card.set_type === "vanguard" ||
             card.set_type === "from_the_vault" ||
             card.set_type === "spellbook" ||
-            card.set_type === "minigame" ||
+            card.set_type === "minigame";
+
+        if (
+            alwaysExcludedType ||
+            (supplementalProductType && !isDigitallyAvailable) ||
             card.set === "slx" ||
             NON_RETAIL_SETS.has(card.set?.toLowerCase()) ||
             card.set_name?.toLowerCase().includes("secret lair") ||
@@ -330,38 +352,61 @@ async function run() {
         const name = card.name;
 
         // 🔥 FILTER B: alternate-frame variants (extended art, showcase,
-        // etc.) are excluded from the *default* pick below, but still
-        // recorded in allPrintings — that's exactly the alt-art content the
-        // version picker exists to offer.
-        const isAltFrame =
-            card.frame_effects?.includes("extendedart") ||
-            card.frame_effects?.includes("showcase") ||
-            card.frame_effects?.includes("etched") ||
-            card.frame_effects?.includes("inverted") ||
-            card.full_art === true;
+        // full art, etc.) are deprioritized for the *default* pick below —
+        // a normal-frame printing always wins over one regardless of
+        // release date — but can still become the default if that's the
+        // ONLY printing this card has for a given game mode. Without that
+        // fallback, a card whose only Arena printing happens to be alt-frame
+        // (Special Guests bonus-sheet reprints, notably — full_art: true)
+        // would end up with no Arena slot at all, incorrectly reporting as
+        // not available on Arena. Every alt-frame printing is also recorded
+        // in allPrintings regardless — that's exactly the alt-art content
+        // the version picker exists to offer.
+        const isAltFrame = (c) =>
+            c.frame_effects?.includes("extendedart") ||
+            c.frame_effects?.includes("showcase") ||
+            c.frame_effects?.includes("etched") ||
+            c.frame_effects?.includes("inverted") ||
+            c.full_art === true;
 
-        if (!isAltFrame) {
+        {
             if (!best[name]) best[name] = { paper: null, arena: null, mtgo: null };
 
-            // Skip Commander printings if a non-Commander printing exists
+            const cardIsAltFrame = isAltFrame(card);
             const isCommander = card.set_type === "commander";
 
             const update = (slot) => {
                 const existing = best[name][slot];
 
-                // If existing is non-commander and new is commander → skip
-                if (existing && existing.set_type !== "commander" && isCommander) {
+                if (!existing) {
+                    best[name][slot] = card;
+                    return;
+                }
+
+                const existingIsAltFrame = isAltFrame(existing);
+
+                // A normal-frame printing always wins over an alt-frame one.
+                if (existingIsAltFrame && !cardIsAltFrame) {
+                    best[name][slot] = card;
+                    return;
+                }
+                if (!existingIsAltFrame && cardIsAltFrame) {
+                    return;
+                }
+
+                // Skip Commander printings if a non-Commander printing exists
+                if (existing.set_type !== "commander" && isCommander) {
                     return;
                 }
 
                 // If existing is commander and new is non-commander → replace
-                if (existing && existing.set_type === "commander" && !isCommander) {
+                if (existing.set_type === "commander" && !isCommander) {
                     best[name][slot] = card;
                     return;
                 }
 
                 // Otherwise: pick newest
-                if (!existing || (card.released_at && card.released_at > existing.released_at)) {
+                if (card.released_at && card.released_at > existing.released_at) {
                     best[name][slot] = card;
                 }
             };
