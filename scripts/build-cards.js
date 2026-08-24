@@ -287,7 +287,13 @@ async function run() {
             card.set_type === "masterpiece" ||
             card.set_type === "duel_deck" ||
             card.set_type === "premium_deck" ||
-            card.set_type === "draft_innovation" ||
+            // NOT "draft_innovation" — despite the name, Scryfall files major
+            // real, widely-available sets under it too (Modern Horizons 1/2/3,
+            // Commander Legends, Battlebond, Jumpstart, Assassin's Creed, LOTR:
+            // Tales of Middle-earth...). Excluding it dropped those sets'
+            // printings entirely, which silently broke Arena availability for
+            // cards whose only Arena printing was e.g. Modern Horizons 2
+            // (Verdant Catacombs and the other fetch lands, notably).
             card.set_type === "treasure_chest" ||
             card.set_type === "planechase" ||
             card.set_type === "archenemy" ||

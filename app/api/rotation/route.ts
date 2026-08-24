@@ -5,6 +5,7 @@ import { extractQtyAndName } from "@/lib/deckParser";
 import { normalizeName } from "@/lib/nameUtils";
 import { lookupRotation, getRotationMeta } from "@/lib/standardRotation";
 import { BASIC_LAND_NAMES } from "@/lib/basicLands";
+import { lookupCard } from "@/lib/scryfall";
 
 export async function POST(req: Request) {
     try {
@@ -46,7 +47,19 @@ export async function POST(req: Request) {
             const result = lookupRotation(rawName);
 
             if (!result.found) {
-                notStandard.push({ card: rawName, qty });
+                // Not in the Standard-track dataset — still look the card up
+                // against the full card database so the UI can show its art
+                // and most recent printing's set, purely for visual context
+                // (not implying Standard legality; this can be any format's
+                // printing, e.g. a Commander-only or long-rotated card).
+                const card = await lookupCard(rawName, false);
+                notStandard.push({
+                    card: rawName,
+                    qty,
+                    image: card?.failed ? null : (card?.image_uris?.normal ?? null),
+                    lastPrintedSet: card?.failed ? null : (card?.set_name ?? null),
+                    lastPrintedSetIcon: card?.failed ? null : (card?.set_icon_svg_uri ?? null),
+                });
             } else if (result.survives) {
                 safe.push({ card: rawName, qty, sets: result.sets, image: result.image });
             } else {
