@@ -4,25 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import HelpTip from "./components/HelpTip";
 import RotationChecker from "./components/RotationChecker";
-
-// A deck box counts as "just a link" only if it's a single bare
-// MTGGoldfish deck URL with nothing else pasted alongside it.
-function isGoldfishDeckUrl(text: string): boolean {
-    if (!text || text.includes("\n")) return false;
-
-    let url: URL;
-    try {
-        url = new URL(text);
-    } catch {
-        return false;
-    }
-
-    const host = url.hostname.toLowerCase();
-    return (
-        (host === "mtggoldfish.com" || host === "www.mtggoldfish.com") &&
-        (/\/deck\//.test(url.pathname) || /\/archetype\//.test(url.pathname))
-    );
-}
+import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 const COLLECTION_STORAGE_KEY = "mtgpp:collection";
 
