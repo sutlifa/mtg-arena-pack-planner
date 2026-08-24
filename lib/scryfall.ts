@@ -42,13 +42,21 @@ export async function lookupCard(
         return { failed: true };
     }
 
-    // Detect if this card has ANY true paper printing
-    const hasPaperPrinting = printings.some(c => !c.games?.includes("arena"));
+    // Detect if this card has a genuine paper printing — must actually
+    // include "paper" in games, not just "isn't Arena". An MTGO-exclusive
+    // printing (games: ["mtgo"]) is neither Arena nor paper, but would
+    // wrongly pass a `!games.includes("arena")` check and get treated as
+    // the paper printing.
+    const hasPaperPrinting = printings.some(c => c.games?.includes("paper"));
 
     let selected;
 
     if (arenaMode) {
-        // Arena mode → prefer Arena printings
+        // Arena mode → prefer Arena printings. Falls back to printings[0]
+        // only so there's still a name/id to work with when nothing is
+        // Arena-legal — callers must check `availableOnArena` before
+        // trusting this printing's set/rarity/price, since none of that is
+        // meaningful for a card that doesn't actually exist on Arena.
         selected =
             printings.find(c => c.games?.includes("arena")) ??
             printings[0];
@@ -56,10 +64,11 @@ export async function lookupCard(
         if (hasPaperPrinting) {
             // Paper mode → use real paper printing if it exists
             selected =
-                printings.find(c => !c.games?.includes("arena")) ??
+                printings.find(c => c.games?.includes("paper")) ??
                 printings[0];
         } else {
-            // Paper mode but NO paper printing exists
+            // Paper mode but NO true paper printing exists — same caveat as
+            // the Arena fallback above; check `availableInPaper`.
             selected = printings[0];
         }
     }
@@ -68,9 +77,10 @@ export async function lookupCard(
     let arenaPrinting =
         printings.find(c => c.games?.includes("arena")) ?? null;
 
+    // Strictly "games includes paper" — never falls back to an
+    // MTGO/Arena-only printing just because it isn't tagged Arena.
     let paperPrinting =
-        printings.find(c => !c.games?.includes("arena")) ??
-        arenaPrinting;
+        printings.find(c => c.games?.includes("paper")) ?? null;
 
     // Every alt-art/version option for this card (see scripts/build-cards.js
     // — attached to just one of the paper/arena/mtgo entries, so check them
@@ -89,11 +99,13 @@ export async function lookupCard(
         if (match) {
             // A printing can legitimately belong to more than one mode
             // (e.g. released simultaneously in paper and Arena) — update
-            // whichever of these it actually covers, not just one.
+            // whichever of these it actually covers, not just one. Strictly
+            // "games includes paper" here too, so an MTGO-only override
+            // match can't masquerade as the paper printing.
             if (match.games?.includes("arena")) {
                 arenaPrinting = { ...match };
             }
-            if (match.games?.includes("paper") || match.games?.includes("mtgo")) {
+            if (match.games?.includes("paper")) {
                 paperPrinting = { ...match };
             }
 
@@ -106,13 +118,18 @@ export async function lookupCard(
             // remembered.
             const validForMode = arenaMode
                 ? match.games?.includes("arena")
-                : match.games?.includes("paper") || match.games?.includes("mtgo");
+                : match.games?.includes("paper");
 
             if (validForMode) {
                 selected = { ...selected, ...match };
             }
         }
     }
+
+    // Computed after the override above so a picked printing that fills in
+    // a previously-missing side is reflected correctly.
+    const availableOnArena = arenaPrinting !== null;
+    const availableInPaper = paperPrinting !== null;
 
     // Display name depends on mode
     const displayName = arenaMode
@@ -157,6 +174,13 @@ export async function lookupCard(
         // ⭐ BOTH PRINTINGS — with normalized paper printing
         arenaPrinting,
         paperPrinting,
+
+        // Whether this card actually has an Arena/paper printing at all —
+        // callers must check these before trusting set/rarity/price above,
+        // since `selected` falls back to *some* printing (paper or MTGO)
+        // even when the mode being queried has nothing real to show.
+        availableOnArena,
+        availableInPaper,
 
         // Every selectable alt-art/version option, for the art picker.
         versions,

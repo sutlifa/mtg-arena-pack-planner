@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import HelpTip from "./HelpTip";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 interface RotationSet {
     set: string;
     set_name: string;
+    set_icon_svg_uri: string | null;
     rotating: boolean;
 }
 
@@ -14,11 +16,12 @@ interface RotationCard {
     card: string;
     qty: number;
     sets?: RotationSet[];
+    image?: string | null;
 }
 
 interface RotationMeta {
     rotationDate: string;
-    rotatingOutSets: { set: string; set_name: string }[];
+    rotatingOutSets: { set: string; set_name: string; set_icon_svg_uri: string | null }[];
 }
 
 interface RotationResult {
@@ -31,6 +34,60 @@ interface RotationResult {
 function formatRotationDate(iso: string): string {
     const d = new Date(`${iso}T00:00:00Z`);
     return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+}
+
+function SetBadge({ set }: { set: RotationSet }) {
+    return (
+        <span
+            className={
+                "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs " +
+                (set.rotating
+                    ? "bg-red-700/10 text-red-700 line-through decoration-red-700/60"
+                    : "bg-green-700/10 text-green-800")
+            }
+            title={set.rotating ? `${set.set_name} — rotating out` : `${set.set_name} — staying legal`}
+        >
+            {set.set_icon_svg_uri && (
+                <Image src={set.set_icon_svg_uri} alt={set.set_name} width={14} height={14} className="opacity-90" />
+            )}
+            {set.set_name}
+        </span>
+    );
+}
+
+function RotationCardRow({ item, accent }: { item: RotationCard; accent: "rotating" | "safe" }) {
+    return (
+        <div className="flex items-center gap-4 p-3 bg-parchment rounded shadow-inner-parchment">
+            {item.image && (
+                <Image
+                    unoptimized
+                    src={item.image}
+                    alt={item.card}
+                    width={64}
+                    height={89}
+                    className="w-16 h-auto rounded shadow-card shrink-0"
+                />
+            )}
+
+            <div className="flex flex-col gap-1.5 min-w-0">
+                <p className="text-ink font-title text-lg">
+                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                    {(item.sets ?? []).map((s, si) => (
+                        <SetBadge key={si} set={s} />
+                    ))}
+                </div>
+
+                {accent === "safe" && (
+                    <p className="text-xs text-green-800/80">
+                        Stays legal via {(item.sets ?? []).filter((s) => !s.rotating).map((s) => s.set_name).join(", ")}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export default function RotationChecker() {
@@ -99,17 +156,26 @@ export default function RotationChecker() {
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                 <h2 className="text-2xl font-title flex items-center">
                     Standard Rotation Checker
-                    <HelpTip text="Paste a Standard decklist — or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you — to see which cards rotate out of the format and which stay legal. A card only counts as rotating if EVERY Standard-legal printing it has is in a set that's leaving — if it also has a printing in a set that's sticking around (including an upcoming, unreleased one), it's safe." />
+                    <HelpTip text="Paste a Standard decklist — or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you — to see which cards rotate out of the format and which stay legal. A card only rotates out if EVERY Standard-legal printing it has is in a set that's leaving. If it also has a printing in a set that's sticking around — including one that hasn't released yet — it's safe." />
                 </h2>
 
                 {result?.meta && (
-                    <div className="bg-parchment rounded shadow-inner-parchment p-4 text-ink">
+                    <div className="bg-parchment rounded shadow-inner-parchment p-4 text-ink space-y-2">
                         <p className="font-title text-lg">
                             Next rotation: {formatRotationDate(result.meta.rotationDate)}
                         </p>
-                        <p className="text-sm mt-1">
-                            Leaving Standard: {result.meta.rotatingOutSets.map((s) => s.set_name).join(", ")}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm text-ink/70">Leaving Standard:</span>
+                            {result.meta.rotatingOutSets.map((s, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 text-sm">
+                                    {s.set_icon_svg_uri && (
+                                        <Image src={s.set_icon_svg_uri} alt={s.set_name} width={14} height={14} className="opacity-90" />
+                                    )}
+                                    {s.set_name}
+                                    {i < result.meta.rotatingOutSets.length - 1 ? "," : ""}
+                                </span>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -158,17 +224,11 @@ export default function RotationChecker() {
                         {result.rotating.length === 0 ? (
                             <p className="text-ink">Nothing in this list is rotating out.</p>
                         ) : (
-                            <ul className="space-y-1">
+                            <div className="space-y-2">
                                 {result.rotating.map((c, i) => (
-                                    <li key={i} className="text-ink">
-                                        <span className="font-title">{c.qty}x {c.card}</span>
-                                        <span className="text-sm text-ink/70">
-                                            {" "}
-                                            — currently in: {(c.sets ?? []).map((s) => s.set_name).join(", ")}
-                                        </span>
-                                    </li>
+                                    <RotationCardRow key={i} item={c} accent="rotating" />
                                 ))}
-                            </ul>
+                            </div>
                         )}
                     </section>
 
@@ -181,20 +241,11 @@ export default function RotationChecker() {
                         {result.safe.length === 0 ? (
                             <p className="text-ink">No cards in this list are safe after rotation.</p>
                         ) : (
-                            <ul className="space-y-1">
-                                {result.safe.map((c, i) => {
-                                    const keepers = (c.sets ?? []).filter((s) => !s.rotating);
-                                    return (
-                                        <li key={i} className="text-ink">
-                                            <span className="font-title">{c.qty}x {c.card}</span>
-                                            <span className="text-sm text-ink/70">
-                                                {" "}
-                                                — also in: {keepers.map((s) => s.set_name).join(", ")}
-                                            </span>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
+                            <div className="space-y-2">
+                                {result.safe.map((c, i) => (
+                                    <RotationCardRow key={i} item={c} accent="safe" />
+                                ))}
+                            </div>
                         )}
                     </section>
 

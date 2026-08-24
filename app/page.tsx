@@ -250,7 +250,7 @@ export default function Page() {
             .map((item) => {
                 const printing = disableArena
                     ? item.lookup?.paperPrinting
-                    : item.lookup?.arenaPrinting ?? item.lookup?.paperPrinting;
+                    : item.lookup?.arenaPrinting;
 
                 const displayName =
                     printing?.printed_name ??
@@ -545,10 +545,47 @@ export default function Page() {
                             <p className="text-ink">No breakdown yet. Process your decks.</p>
                         ) : (
                             breakdown.map((item, i) => {
+                                // A card with no printing at all in the current mode
+                                // can't be priced/wildcarded/imported — show a clear
+                                // notice instead of the normal row, and (server-side)
+                                // it's already excluded from wildcards, set
+                                // recommendations, and the shopping list.
+                                const unavailable = disableArena
+                                    ? item.lookup?.availableInPaper === false
+                                    : item.lookup?.availableOnArena === false;
+
+                                if (unavailable) {
+                                    // The mode we're missing a printing for has nothing
+                                    // to supply a properly-cased name — fall back to
+                                    // whichever printing DOES exist (item.card itself
+                                    // is the lowercased canonical lookup key).
+                                    const fallbackName = disableArena
+                                        ? item.lookup?.arenaPrinting?.printed_name ?? item.lookup?.arenaPrinting?.name
+                                        : item.lookup?.paperPrinting?.printed_name ?? item.lookup?.paperPrinting?.name;
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment border border-red-700/40"
+                                        >
+                                            <div className="flex flex-col">
+                                                <p className="text-ink font-title text-lg">
+                                                    {fallbackName ?? item.card} — Need {item.needed}
+                                                </p>
+                                                <p className="text-red-700 text-sm mt-1">
+                                                    {disableArena
+                                                        ? "Not available in Paper — no real paper printing exists for this card."
+                                                        : "Card Does Not Exist on Arena — not counted toward wildcards or set recommendations."}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
                                 // Auto-selected printing (server default)
                                 const autoPrinting = disableArena
                                     ? item.lookup?.paperPrinting
-                                    : item.lookup?.arenaPrinting ?? item.lookup?.paperPrinting;
+                                    : item.lookup?.arenaPrinting;
 
                                 // Every version selectable in the CURRENT mode — Arena
                                 // Mode only offers Arena-legal printings (so the set +
@@ -609,6 +646,8 @@ export default function Page() {
                                     ? parseFloat(printing?.prices_usd)
                                     : NaN;
 
+                                const tickListId = `printing-ticks-${i}`;
+
                                 return (
                                     <div
                                         key={i}
@@ -651,6 +690,7 @@ export default function Page() {
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <input
                                                         type="range"
+                                                        list={tickListId}
                                                         min={0}
                                                         max={modeVersions.length - 1}
                                                         value={selectedIndex}
@@ -662,6 +702,11 @@ export default function Page() {
                                                         }}
                                                         className="w-32 accent-[#8b3a12]"
                                                     />
+                                                    <datalist id={tickListId}>
+                                                        {modeVersions.map((_, vi) => (
+                                                            <option key={vi} value={vi} />
+                                                        ))}
+                                                    </datalist>
                                                     <span className="text-xs text-ink/70">
                                                         {printing?.set_name}
                                                         {printing?.variant ? ` · ${printing.variant}` : ""}
@@ -717,7 +762,7 @@ export default function Page() {
                                                 // ⭐ Dynamic printing selection
                                                 const printing = disableArena
                                                     ? item.lookup?.paperPrinting
-                                                    : item.lookup?.arenaPrinting ?? item.lookup?.paperPrinting;
+                                                    : item.lookup?.arenaPrinting;
 
                                                 // ⭐ FINAL: Correct display name logic
                                                 const displayName =
@@ -899,7 +944,7 @@ export default function Page() {
                                     // so zooming in shows whatever art is currently chosen.
                                     const autoPrinting = disableArena
                                         ? zoomCard.lookup?.paperPrinting
-                                        : zoomCard.lookup?.arenaPrinting ?? zoomCard.lookup?.paperPrinting;
+                                        : zoomCard.lookup?.arenaPrinting;
 
                                     const modeVersions: any[] = (zoomCard.lookup?.versions ?? []).filter(
                                         (v: any) =>
@@ -917,8 +962,21 @@ export default function Page() {
                                         )
                                         : -1;
 
+                                    const defaultIndex = Math.max(
+                                        0,
+                                        modeVersions.findIndex(
+                                            (v: any) =>
+                                                v.set === autoPrinting?.set &&
+                                                v.collector_number === autoPrinting?.collector_number
+                                        )
+                                    );
+
+                                    const selectedIndex = overrideIndex >= 0 ? overrideIndex : defaultIndex;
+
                                     const printing =
-                                        overrideIndex >= 0 ? modeVersions[overrideIndex] : autoPrinting;
+                                        modeVersions.length > 0
+                                            ? modeVersions[selectedIndex] ?? autoPrinting
+                                            : autoPrinting;
 
                                     const front =
                                         printing?.image_uris?.normal ||
@@ -1009,6 +1067,41 @@ export default function Page() {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* VERSION SWITCHER — click a set icon to jump straight to that printing */}
+                                            {modeVersions.length > 1 && (
+                                                <div className="mt-3 flex flex-wrap justify-center gap-2 max-w-[90vw]">
+                                                    {modeVersions.map((v, vi) => (
+                                                        <button
+                                                            key={vi}
+                                                            type="button"
+                                                            title={`${v.set_name}${v.variant ? ` · ${v.variant}` : ""}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleVersionChange(zoomCard.card, v.set, v.collector_number);
+                                                            }}
+                                                            className={
+                                                                "w-8 h-8 flex items-center justify-center rounded-full shadow-card transition-transform " +
+                                                                (vi === selectedIndex
+                                                                    ? "bg-[#8b3a12] scale-110"
+                                                                    : "bg-parchment hover:bg-parchment-dark")
+                                                            }
+                                                        >
+                                                            {v.set_icon_svg_uri ? (
+                                                                <Image
+                                                                    src={v.set_icon_svg_uri}
+                                                                    alt={v.set_name ?? v.set}
+                                                                    width={18}
+                                                                    height={18}
+                                                                    className={vi === selectedIndex ? "invert" : "opacity-80"}
+                                                                />
+                                                            ) : (
+                                                                <span className="text-xs text-ink">{vi + 1}</span>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                         </>
                                     );
