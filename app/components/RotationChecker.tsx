@@ -17,6 +17,8 @@ interface RotationCard {
     qty: number;
     sets?: RotationSet[];
     image?: string | null;
+    lastPrintedSet?: string | null;
+    lastPrintedSetIcon?: string | null;
 }
 
 interface RotationMeta {
@@ -84,6 +86,38 @@ function RotationCardRow({ item, accent }: { item: RotationCard; accent: "rotati
                     <p className="text-xs text-green-800/80">
                         Stays legal via {(item.sets ?? []).filter((s) => !s.rotating).map((s) => s.set_name).join(", ")}
                     </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function NotStandardCardRow({ item }: { item: RotationCard }) {
+    return (
+        <div className="flex items-center gap-4 p-3 bg-parchment rounded shadow-inner-parchment">
+            {item.image && (
+                <Image
+                    unoptimized
+                    src={item.image}
+                    alt={item.card}
+                    width={64}
+                    height={89}
+                    className="w-16 h-auto rounded shadow-card shrink-0"
+                />
+            )}
+
+            <div className="flex flex-col gap-1.5 min-w-0">
+                <p className="text-ink font-title text-lg">
+                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
+                </p>
+
+                {item.lastPrintedSet && (
+                    <span className="inline-flex items-center gap-1 text-xs text-ink/60 w-fit">
+                        {item.lastPrintedSetIcon && (
+                            <Image src={item.lastPrintedSetIcon} alt={item.lastPrintedSet} width={14} height={14} className="opacity-70" />
+                        )}
+                        Most recent printing: {item.lastPrintedSet}
+                    </span>
                 )}
             </div>
         </div>
@@ -250,16 +284,16 @@ export default function RotationChecker() {
                     </section>
 
                     {result.notStandard.length > 0 && (
-                        <section className="bg-parchment-dark shadow-card rounded-lg p-4">
-                            <h2 className="text-xl font-title text-ink/80 flex items-center">
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
+                            <h2 className="text-2xl font-title text-ink/80 flex items-center">
                                 Not Currently Standard-Legal ({result.notStandard.length})
                                 <HelpTip text="These weren't found in any current Standard-legal printing — either they're not a Standard card at all, or the name didn't match. Check for typos." />
                             </h2>
-                            <ul className="mt-2 list-disc list-inside text-ink/80">
+                            <div className="space-y-2">
                                 {result.notStandard.map((c, i) => (
-                                    <li key={i}>{c.qty}x {c.card}</li>
+                                    <NotStandardCardRow key={i} item={c} />
                                 ))}
-                            </ul>
+                            </div>
                         </section>
                     )}
                 </>
