@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { extractQtyAndName } from "@/lib/deckParser";
 import { normalizeName } from "@/lib/nameUtils";
 import { lookupRotation, getRotationMeta } from "@/lib/standardRotation";
+import { BASIC_LAND_NAMES } from "@/lib/basicLands";
 
 export async function POST(req: Request) {
     try {
@@ -27,6 +28,12 @@ export async function POST(req: Request) {
 
             const { qty, rawName } = parsed;
             const key = normalizeName(rawName);
+
+            // Basic lands are printed in nearly every set and always
+            // Standard-legal — they're never meaningfully "rotating" or
+            // "safe", just noise in the results.
+            if (BASIC_LAND_NAMES.has(key)) continue;
+
             const current = seen.get(key);
             seen.set(key, { rawName: current?.rawName ?? rawName, qty: (current?.qty ?? 0) + qty });
         }
