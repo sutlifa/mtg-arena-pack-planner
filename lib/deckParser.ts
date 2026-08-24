@@ -17,7 +17,7 @@ function capFor(canonical: string, capAt4: boolean): number {
     return capAt4 && !BASIC_LAND_NAMES.has(canonical) ? 4 : Infinity;
 }
 
-function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
+export function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
     let m = line.match(/^(\d+)\s+(.+)$/);
     if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
 
