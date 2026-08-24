@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import HelpTip from "./HelpTip";
+import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 interface RotationSet {
     set: string;
@@ -36,14 +37,48 @@ export default function RotationChecker() {
     const [decklist, setDecklist] = useState("");
     const [result, setResult] = useState<RotationResult | null>(null);
     const [loading, setLoading] = useState(false);
+    const [importError, setImportError] = useState<string | null>(null);
 
     const checkRotation = async () => {
         setLoading(true);
         try {
+            // A pasted MTGGoldfish deck (or archetype) link resolves to its
+            // real decklist text before checking rotation, same as the Pack
+            // Planner.
+            let currentDecklist = decklist;
+            const trimmed = decklist.trim();
+
+            if (isGoldfishDeckUrl(trimmed)) {
+                setImportError(null);
+                try {
+                    const importRes = await fetch("/api/import-deck", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url: trimmed }),
+                    });
+                    const importData = await importRes.json();
+
+                    if (importRes.ok && importData.decklist) {
+                        currentDecklist = importData.decklist;
+                        setDecklist(importData.decklist);
+                    } else {
+                        setImportError("Couldn't import that MTGGoldfish link — check the URL and try again.");
+                        setLoading(false);
+                        return;
+                    }
+                } catch {
+                    setImportError("Couldn't import that MTGGoldfish link — check the URL and try again.");
+                    setLoading(false);
+                    return;
+                }
+            } else {
+                setImportError(null);
+            }
+
             const res = await fetch("/api/rotation", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ decklist }),
+                body: JSON.stringify({ decklist: currentDecklist }),
             });
 
             if (!res.ok) {
@@ -64,7 +99,7 @@ export default function RotationChecker() {
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                 <h2 className="text-2xl font-title flex items-center">
                     Standard Rotation Checker
-                    <HelpTip text="Paste a Standard decklist to see which cards rotate out of the format and which stay legal. A card only counts as rotating if EVERY Standard-legal printing it has is in a set that's leaving — if it also has a printing in a set that's sticking around (including an upcoming, unreleased one), it's safe." />
+                    <HelpTip text="Paste a Standard decklist — or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you — to see which cards rotate out of the format and which stay legal. A card only counts as rotating if EVERY Standard-legal printing it has is in a set that's leaving — if it also has a printing in a set that's sticking around (including an upcoming, unreleased one), it's safe." />
                 </h2>
 
                 {result?.meta && (
@@ -80,10 +115,14 @@ export default function RotationChecker() {
 
                 <textarea
                     className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                    placeholder="Paste your Standard decklist here..."
+                    placeholder="Paste your Standard decklist here, or paste an MTGGoldfish deck link..."
                     value={decklist}
                     onChange={(e) => setDecklist(e.target.value)}
                 />
+
+                {importError && (
+                    <p className="text-red-700 text-sm">{importError}</p>
+                )}
 
                 <div className="flex justify-center">
                     <button
