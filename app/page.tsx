@@ -305,23 +305,23 @@ export default function Page() {
             <div className="relative overflow-visible py-10">
                 <div className="flex justify-center mb-10">
                     <div className="inferno-wrapper">
-                        <div className="title-banner">
+                        <h1 className="title-banner">
                             MTG Card Acquiring Tool
-                        </div>
+                        </h1>
                     </div>
                 </div>
             </div>
 
             {/* PAGE TABS */}
-            <div className="flex justify-center gap-3 mb-6">
+            <div className="flex justify-center gap-2 border-b-4 border-[#5a4632] mb-8 px-6">
                 <button
                     type="button"
                     onPointerUp={() => setActiveTab("planner")}
                     className={
-                        "px-5 py-2 rounded font-title text-lg shadow-card " +
+                        "px-8 py-3 rounded-t-lg border-2 border-b-0 -mb-1 font-title text-xl transition-colors " +
                         (activeTab === "planner"
-                            ? "bg-parchment-dark text-ink"
-                            : "bg-parchment text-ink/70 hover:bg-parchment-dark")
+                            ? "bg-parchment-dark text-ink border-[#8b3a12] shadow-card"
+                            : "bg-parchment text-ink border-[#5a4632] hover:bg-parchment-dark")
                     }
                 >
                     Pack Planner
@@ -330,10 +330,10 @@ export default function Page() {
                     type="button"
                     onPointerUp={() => setActiveTab("rotation")}
                     className={
-                        "px-5 py-2 rounded font-title text-lg shadow-card " +
+                        "px-8 py-3 rounded-t-lg border-2 border-b-0 -mb-1 font-title text-xl transition-colors " +
                         (activeTab === "rotation"
-                            ? "bg-parchment-dark text-ink"
-                            : "bg-parchment text-ink/70 hover:bg-parchment-dark")
+                            ? "bg-parchment-dark text-ink border-[#8b3a12] shadow-card"
+                            : "bg-parchment text-ink border-[#5a4632] hover:bg-parchment-dark")
                     }
                 >
                     Standard Rotation
