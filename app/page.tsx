@@ -412,7 +412,7 @@ export default function Page() {
                             </label>
                         )}
 
-
+                        
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             <button
                                 type="button"
@@ -427,7 +427,7 @@ export default function Page() {
                                     "px-6 py-3 rounded shadow-card font-title text-xl " +
                                     (loading
                                         ? "bg-gray-400 cursor-not-allowed"
-                                        : "bg-parchment-dark hover:bg-parchment")
+                                        : "bg-brand text-midnight-light hover:bg-brand-dark")
                                 }
                             >
                                 {loading ? "Analyzing..." : "Analyze Decks & Collection"}
@@ -448,7 +448,7 @@ export default function Page() {
                             disabled={loading}
                             className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
                                 ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-parchment-dark hover:bg-parchment"
+                                : "bg-brand text-midnight-light hover:bg-brand-dark"
                                 }`}
                         >
                             {loading ? "Analyzing..." : "Analyze Decks & Collection"}

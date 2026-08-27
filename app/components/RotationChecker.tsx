@@ -233,7 +233,7 @@ export default function RotationChecker() {
                             "px-6 py-3 rounded shadow-card font-title text-xl " +
                             (loading
                                 ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-parchment hover:bg-parchment-dark")
+                                : "bg-brand text-midnight-light hover:bg-brand-dark")
                         }
                     >
                         {loading ? "Checking..." : "Check Rotation"}

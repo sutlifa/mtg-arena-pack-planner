@@ -133,12 +133,12 @@ html, body {
 }
 
 /* ========================================= */
-/* Page background — calm, flat, no imagery  */
+/* Page background — warm, flat, no imagery  */
 /* ========================================= */
 .bg-fantasy-parchment {
     min-height: 100vh;
     overflow-x: hidden;
-    background: linear-gradient(180deg, #f7f4ee 0%, #ece6d9 100%);
+    background: linear-gradient(180deg, #f7f2e4 0%, #eee3ca 100%);
 }
 
 /* ========================================= */
@@ -173,7 +173,7 @@ html, body {
             width: 28px !important;
             height: 28px !important;
             border-radius: 50%;
-            background: #3f5d5b;
+            background: #2f4a3a;
             -webkit-appearance: none;
         }
 }
@@ -182,7 +182,7 @@ html, body {
 /* Accessibility and small fixes             */
 /* ========================================= */
 button:focus, .modal-close-button:focus {
-    outline: 2px solid rgba(63, 93, 91, 0.8);
+    outline: 2px solid rgba(47, 74, 58, 0.8);
     outline-offset: 2px;
 }
 

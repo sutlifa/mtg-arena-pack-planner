@@ -12,11 +12,13 @@ export default function SiteNav() {
     const pathname = usePathname();
 
     return (
-        <header className="border-b border-line bg-parchment">
-            <div className="max-w-5xl mx-auto px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <h1 className="font-title text-lg text-ink">MTG Card Acquiring Tool</h1>
+        <header className="bg-midnight border-b-2 border-brass">
+            <div className="max-w-5xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <h1 className="font-title text-2xl text-midnight-light tracking-wide">
+                    MTG Card Acquiring Tool
+                </h1>
 
-                <nav className="flex gap-1 bg-parchment-dark rounded-md p-1">
+                <nav className="flex gap-1">
                     {TABS.map((tab) => {
                         const active = pathname === tab.href;
                         return (
@@ -24,10 +26,10 @@ export default function SiteNav() {
                                 key={tab.href}
                                 href={tab.href}
                                 className={
-                                    "px-4 py-1.5 rounded text-sm font-medium transition-colors " +
+                                    "px-4 py-2 rounded text-sm font-semibold tracking-wide transition-colors " +
                                     (active
-                                        ? "bg-parchment text-ink shadow-card"
-                                        : "text-ink/60 hover:text-ink")
+                                        ? "bg-brass text-ink"
+                                        : "text-midnight-light/60 hover:text-midnight-light hover:bg-white/5")
                                 }
                             >
                                 {tab.label}
