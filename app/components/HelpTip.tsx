@@ -72,7 +72,7 @@ export default function HelpTip({ text }: { text: string }) {
                     ref={bubbleRef}
                     role="tooltip"
                     style={{ left: bubbleLeft }}
-                    className="absolute z-50 top-full mt-2 w-64 max-w-[80vw] p-3 rounded bg-parchment-dark text-ink text-sm font-[family-name:var(--font-body)] normal-case leading-snug text-left shadow-card border border-[#5a4632]/40"
+                    className="absolute z-50 top-full mt-2 w-64 max-w-[80vw] p-3 rounded bg-parchment-dark text-ink text-sm font-[family-name:var(--font-body)] normal-case leading-snug text-left shadow-card border border-line"
                 >
                     {text}
                 </span>

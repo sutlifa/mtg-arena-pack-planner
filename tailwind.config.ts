@@ -9,22 +9,54 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Parchment palette — warm aged paper tones
+        // Parchment palette — warm ivory tones for content areas
         parchment: {
-          DEFAULT: "#f5e6c8",   // light parchment for inputs/cards
-          dark: "#e8d5a3",      // slightly darker parchment for section backgrounds
+          DEFAULT: "#f7f2e4",   // page/card background
+          dark: "#e7dcc2",      // section backgrounds
         },
-        ink: "#2c1a0e",         // deep brown ink for body text
+        ink: "#2b2416",          // rich dark brown for body text
+
+        // Deep forest — the nav header and footer bars that bookend the
+        // light content area. This is what gives the site an actual
+        // identity instead of reading as an unbranded document.
+        midnight: {
+          DEFAULT: "#1c2b23",
+          light: "#f2ead6",      // cream text for content sitting on forest
+        },
+
+        // Brass — the accent stripe under the nav / above the footer, and
+        // the active tab. Mid-tone, so anything sitting ON brass uses the
+        // dark `ink` color, never the cream.
+        brass: {
+          DEFAULT: "#b8893a",
+          dark: "#966d2b",
+          light: "#d4a75c",
+        },
+
+        // Mid forest — primary action buttons, the Arena/Paper toggle's
+        // "on" state, slider accents, and the selected art-version pill.
+        // Dark enough that cream (`midnight-light`) text reads cleanly.
+        brand: {
+          DEFAULT: "#2f4a3a",
+          dark: "#24392c",
+          light: "#4a6f57",
+        },
+
+        // Hairline borders/dividers on parchment
+        line: "#d5c8a8",
       },
       fontFamily: {
-        // "font-title" → MedievalSharp (loaded via Google Fonts in layout.tsx)
-        title: ["MedievalSharp", "serif"],
+        // "font-title" → Playfair Display (loaded via Google Fonts in
+        // layout.tsx) — a real display serif with proper lowercase
+        // letterforms, legible from button-label sizes up to headings,
+        // unlike the old MedievalSharp treatment.
+        title: ["Playfair Display", "Georgia", "serif"],
       },
       boxShadow: {
-        // Outer card shadow — warm amber glow
-        card: "0 4px 16px rgba(92, 60, 20, 0.35)",
+        // Outer card shadow — tinted with the forest tone for cohesion
+        card: "0 4px 14px rgba(28, 43, 35, 0.18)",
         // Inner shadow for text areas / inset parchment boxes
-        "inner-parchment": "inset 0 2px 8px rgba(92, 60, 20, 0.25)",
+        "inner-parchment": "inset 0 2px 6px rgba(43, 36, 22, 0.15)",
       },
     },
   },

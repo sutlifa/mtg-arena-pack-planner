@@ -9,7 +9,6 @@
 :root {
     --background: #ffffff;
     --foreground: #171717;
-    --font-heading: "MedievalSharp", serif;
     --font-body: Arial, Helvetica, sans-serif;
 }
 
@@ -33,12 +32,6 @@ html, body {
     font-family: var(--font-body) !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-}
-
-/* Headings + banner use fantasy font */
-h1, h2, h3, h4, h5, h6,
-.title-banner {
-    font-family: var(--font-heading) !important;
 }
 
 /* ========================================= */
@@ -140,133 +133,13 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* ========================================= */
-/* Inferno banner and decorative elements    */
-/* ========================================= */
-.inferno-wrapper {
-    position: relative;
-    display: inline-block;
-    padding: 0;
-    z-index: 9999;
-}
-
-.title-banner {
-    position: relative;
-    font-size: 3.2rem;
-    letter-spacing: 3px;
-    text-align: center;
-    padding: 32px 80px;
-    background: linear-gradient(180deg, #3a1f0f 0%, #2a140a 40%, #1a0c06 100%);
-    border: 3px solid #8b3a12;
-    border-radius: 14px;
-    box-shadow: inset 0 0 25px rgba(255,120,20,0.35), inset 0 0 60px rgba(255,60,0,0.25), 0 0 20px rgba(0,0,0,0.7);
-    color: #ffe9b0;
-    text-shadow: 0 0 3px #000, 0 0 6px #000, 0 0 12px rgba(255,180,80,1), 0 0 28px rgba(255,120,20,0.9), 0 0 45px rgba(255,60,0,0.8);
-    margin: 20px auto;
-    width: fit-content;
-    z-index: 2;
-}
-
-.inferno-wrapper::before,
-.inferno-wrapper::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 115%;
-    height: 115%;
-    z-index: 1;
-    pointer-events: none;
-}
-
-.inferno-wrapper::before {
-    top: -15%;
-    background: radial-gradient(circle at 50% 100%, rgba(255,120,20,0.85) 0%, transparent 65%), radial-gradient(circle at 25% 90%, rgba(255,160,40,0.75) 0%, transparent 70%), radial-gradient(circle at 75% 90%, rgba(255,80,0,0.75) 0%, transparent 70%);
-    filter: blur(14px);
-    animation: inferno-flicker 2.6s infinite ease-in-out alternate;
-}
-
-.inferno-wrapper::after {
-    bottom: -15%;
-    background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.75) 0%, transparent 65%), radial-gradient(circle at 30% 10%, rgba(255,60,0,0.65) 0%, transparent 70%), radial-gradient(circle at 70% 10%, rgba(255,140,0,0.65) 0%, transparent 70%);
-    filter: blur(16px);
-    animation: inferno-flicker 3.1s infinite ease-in-out alternate-reverse;
-}
-
-@keyframes inferno-flicker {
-    0% {
-        transform: translateX(-50%) scale(1);
-    }
-
-    50% {
-        transform: translateX(-50%) scale(1.08);
-    }
-
-    100% {
-        transform: translateX(-50%) scale(0.96);
-    }
-}
-
-/* ============================
-   TIP JAR SIDEBAR STYLES
-   ============================ */
-.tipjar-container {
-    @apply bg-parchment-dark rounded-lg shadow-card p-3 w-40;
-}
-
-.tipjar-header {
-    @apply font-title text-xl text-ink mb-4 text-center;
-}
-
-.tipjar-button {
-    @apply flex items-center justify-center gap-3 bg-parchment hover:bg-parchment-dark rounded shadow-inner-parchment px-4 py-3 font-title text-ink transition-colors cursor-pointer;
-}
-
-.tipjar-icon {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: radial-gradient(circle, #f7d37a 0%, #c48a2c 60%, #8b5a3c 100%);
-    box-shadow: 0 0 8px rgba(255, 200, 80, 0.7), inset 0 0 4px rgba(0, 0, 0, 0.4);
-    animation: tipjar-pulse 2.2s infinite ease-in-out;
-}
-
-@keyframes tipjar-pulse {
-    0% {
-        box-shadow: 0 0 6px rgba(255, 200, 80, 0.6);
-    }
-
-    50% {
-        box-shadow: 0 0 14px rgba(255, 200, 80, 0.9);
-    }
-
-    100% {
-        box-shadow: 0 0 6px rgba(255, 200, 80, 0.6);
-    }
-}
-
-/* ========================================= */
-/* Fantasy parchment background              */
+/* Page background — warm, flat, no imagery  */
 /* ========================================= */
 .bg-fantasy-parchment {
-    position: relative;
     min-height: 100vh;
     overflow-x: hidden;
+    background: linear-gradient(180deg, #f7f2e4 0%, #eee3ca 100%);
 }
-
-    .bg-fantasy-parchment::before {
-        content: "";
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        background-image: url('/fantasybackground.jpg');
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-position: center;
-        z-index: -9999 !important;
-        pointer-events: none;
-    }
 
 /* ========================================= */
 /* Mobile overrides (safe)                   */
@@ -280,14 +153,6 @@ h1, h2, h3, h4, h5, h6,
         overflow: visible;
         pointer-events: auto;
     }
-
-    /* Optional: disable tap-to-flip on mobile */
-    /*
-    .flip-hitbox {
-        display: none !important;
-        pointer-events: none !important;
-    }
-    */
 
     .card-zoom-backdrop {
         position: fixed;
@@ -308,7 +173,7 @@ h1, h2, h3, h4, h5, h6,
             width: 28px !important;
             height: 28px !important;
             border-radius: 50%;
-            background: #8b3a12;
+            background: #2f4a3a;
             -webkit-appearance: none;
         }
 }
@@ -317,14 +182,11 @@ h1, h2, h3, h4, h5, h6,
 /* Accessibility and small fixes             */
 /* ========================================= */
 button:focus, .modal-close-button:focus {
-    outline: 2px solid rgba(255,180,80,0.9);
+    outline: 2px solid rgba(47, 74, 58, 0.8);
     outline-offset: 2px;
 }
 
 body.no-scroll {
     overflow: hidden !important;
     touch-action: none !important;
-}
-body.bg-fantasy-parchment {
-    background: transparent !important;
 }

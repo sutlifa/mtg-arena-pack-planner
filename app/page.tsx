@@ -382,7 +382,7 @@ export default function Page() {
                                 onPointerUp={() => setDisableArena(!disableArena)}
                                 className={
                                     "relative w-20 h-10 rounded-full transition-colors duration-300 shadow-inner-parchment " +
-                                    (disableArena ? "bg-[#8b5a3c]" : "bg-[#d4b48c]")
+                                    (disableArena ? "bg-brand" : "bg-parchment-dark")
                                 }
                             >
                                 <span
@@ -412,7 +412,7 @@ export default function Page() {
                             </label>
                         )}
 
-
+                        
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             <button
                                 type="button"
@@ -427,7 +427,7 @@ export default function Page() {
                                     "px-6 py-3 rounded shadow-card font-title text-xl " +
                                     (loading
                                         ? "bg-gray-400 cursor-not-allowed"
-                                        : "bg-parchment-dark hover:bg-parchment")
+                                        : "bg-brand text-midnight-light hover:bg-brand-dark")
                                 }
                             >
                                 {loading ? "Analyzing..." : "Analyze Decks & Collection"}
@@ -448,7 +448,7 @@ export default function Page() {
                             disabled={loading}
                             className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
                                 ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-parchment-dark hover:bg-parchment"
+                                : "bg-brand text-midnight-light hover:bg-brand-dark"
                                 }`}
                         >
                             {loading ? "Analyzing..." : "Analyze Decks & Collection"}
@@ -631,7 +631,7 @@ export default function Page() {
                                                                 handleVersionChange(item.card, v.set, v.collector_number);
                                                             }
                                                         }}
-                                                        className="w-32 accent-[#8b3a12]"
+                                                        className="w-32 accent-brand"
                                                     />
                                                     <datalist id={tickListId}>
                                                         {modeVersions.map((_, vi) => (
@@ -728,7 +728,7 @@ export default function Page() {
                                     return (
                                         <div key={i} className="space-y-3">
                                             {i > 0 && (
-                                                <div className="border-t border-[#5a4632] opacity-40 my-2" />
+                                                <div className="border-t border-line my-2" />
                                             )}
 
                                             <div
@@ -1014,7 +1014,7 @@ export default function Page() {
                                                             className={
                                                                 "w-8 h-8 flex items-center justify-center rounded-full shadow-card transition-transform " +
                                                                 (vi === selectedIndex
-                                                                    ? "bg-[#8b3a12] scale-110"
+                                                                    ? "bg-brand scale-110"
                                                                     : "bg-parchment hover:bg-parchment-dark")
                                                             }
                                                         >
