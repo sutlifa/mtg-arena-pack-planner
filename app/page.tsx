@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import HelpTip from "./components/HelpTip";
-import RotationChecker from "./components/RotationChecker";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 const COLLECTION_STORAGE_KEY = "mtgpp:collection";
@@ -30,8 +29,6 @@ export default function Page() {
     const [loading, setLoading] = useState(false);
     const [zoomCard, setZoomCard] = useState<any>(null);
     const [flip, setFlip] = useState(false);
-
-    const [activeTab, setActiveTab] = useState<"planner" | "rotation">("planner");
 
     // Per-card chosen printing (art/version), keyed by canonical card name.
     const [printingOverrides, setPrintingOverrides] = useState<
@@ -282,74 +279,8 @@ export default function Page() {
     };
 
     return (
-        <div className="bg-fantasy-parchment min-h-screen">
-
-            {/* FLOATING TIP JAR - DESKTOP ONLY */}
-            <div className="hidden md:block fixed top-6 left-6 z-50 pointer-events-auto">
-                <aside className="tipjar-container">
-                    <h2 className="tipjar-header">Support the Creator</h2>
-
-                    <a
-                        href="https://www.paypal.com/donate/?business=VLDPL87EZ58L6&no_recurring=0&currency_code=USD"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="tipjar-button"
-                    >
-                        <div className="tipjar-icon"></div>
-                        <span>Tip Jar</span>
-                    </a>
-                </aside>
-            </div>
-
-            {/* FULL-WIDTH BANNER */}
-            <div className="relative overflow-visible py-10">
-                <div className="flex justify-center mb-10">
-                    <div className="inferno-wrapper">
-                        <h1 className="title-banner">
-                            MTG Card Acquiring Tool
-                        </h1>
-                    </div>
-                </div>
-            </div>
-
-            {/* PAGE TABS */}
-            <div className="flex justify-center gap-2 border-b-4 border-[#5a4632] mb-8 px-6">
-                <button
-                    type="button"
-                    onPointerUp={() => setActiveTab("planner")}
-                    className={
-                        "px-8 py-3 rounded-t-lg border-2 border-b-0 -mb-1 font-title text-xl transition-colors " +
-                        (activeTab === "planner"
-                            ? "bg-parchment-dark text-ink border-[#8b3a12] shadow-card"
-                            : "bg-parchment text-ink border-[#5a4632] hover:bg-parchment-dark")
-                    }
-                >
-                    Pack Planner
-                </button>
-                <button
-                    type="button"
-                    onPointerUp={() => setActiveTab("rotation")}
-                    className={
-                        "px-8 py-3 rounded-t-lg border-2 border-b-0 -mb-1 font-title text-xl transition-colors " +
-                        (activeTab === "rotation"
-                            ? "bg-parchment-dark text-ink border-[#8b3a12] shadow-card"
-                            : "bg-parchment text-ink border-[#5a4632] hover:bg-parchment-dark")
-                    }
-                >
-                    Standard Rotation
-                </button>
-            </div>
-
-            {/* SIDEBAR + MAIN CONTENT LAYOUT */}
-            <div className="px-6">
-
-                {/* MAIN CONTENT */}
-                <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
-
-                {activeTab === "rotation" ? (
-                    <RotationChecker />
-                ) : (
-                <>
+        <div className="px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
 
                     {/* DECK INPUTS */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
@@ -1110,14 +1041,7 @@ export default function Page() {
                         </div>
                     )}
 
-                </>
-                )}
-
-                </main>
-
-            </div>
+            </main>
         </div>
     );
-
-
 }
