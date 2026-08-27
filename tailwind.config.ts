@@ -9,22 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Parchment palette — warm aged paper tones
+        // Parchment palette — soft, muted neutral tones
         parchment: {
-          DEFAULT: "#f5e6c8",   // light parchment for inputs/cards
-          dark: "#e8d5a3",      // slightly darker parchment for section backgrounds
+          DEFAULT: "#f7f4ee",   // light neutral for inputs/cards
+          dark: "#ece6d9",      // slightly deeper neutral for section backgrounds
         },
-        ink: "#2c1a0e",         // deep brown ink for body text
+        ink: "#332b22",         // warm charcoal for body text
+        // Interactive/active accent — muted teal, used for selected states,
+        // toggles, and slider accents instead of the old fire-orange tone.
+        brand: {
+          DEFAULT: "#3f5d5b",
+          dark: "#2f4645",
+        },
+        // Hairline borders/dividers
+        line: "#d8d0bd",
       },
       fontFamily: {
-        // "font-title" → MedievalSharp (loaded via Google Fonts in layout.tsx)
-        title: ["MedievalSharp", "serif"],
+        // "font-title" → a clean serif for headings; no external font load.
+        title: ["Georgia", "Cambria", "serif"],
       },
       boxShadow: {
-        // Outer card shadow — warm amber glow
-        card: "0 4px 16px rgba(92, 60, 20, 0.35)",
+        // Outer card shadow — soft and subtle
+        card: "0 2px 10px rgba(51, 43, 34, 0.12)",
         // Inner shadow for text areas / inset parchment boxes
-        "inner-parchment": "inset 0 2px 8px rgba(92, 60, 20, 0.25)",
+        "inner-parchment": "inset 0 1px 4px rgba(51, 43, 34, 0.10)",
       },
     },
   },
