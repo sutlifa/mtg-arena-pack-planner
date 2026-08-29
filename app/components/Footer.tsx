@@ -1,20 +1,35 @@
+import Image from "next/image";
+
 export default function Footer() {
     const year = new Date().getFullYear();
 
     return (
         <footer className="mt-16 bg-midnight border-t-2 border-brass">
-            <div className="max-w-5xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-midnight-light/70">
-                <p>
-                    © {year} MTG Card Acquiring Tool. Not affiliated with or endorsed by Wizards of the Coast.
-                </p>
-                <a
-                    href="https://www.paypal.com/donate/?business=VLDPL87EZ58L6&no_recurring=0&currency_code=USD"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-midnight-light underline underline-offset-2 hover:text-brass-light transition-colors"
-                >
-                    Support this project
-                </a>
+            <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+                <div className="flex justify-center">
+                    <Image
+                        src="/art/sigils.svg"
+                        alt=""
+                        aria-hidden="true"
+                        width={280}
+                        height={48}
+                        className="opacity-70"
+                    />
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-midnight-light/80 border-t border-brass/25 pt-5">
+                    <p>
+                        © {year} MTG Card Acquiring Tool. Not affiliated with or endorsed by Wizards of the Coast.
+                    </p>
+                    <a
+                        href="https://www.paypal.com/donate/?business=VLDPL87EZ58L6&no_recurring=0&currency_code=USD"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-midnight-light underline underline-offset-2 hover:text-brass-light transition-colors"
+                    >
+                        Support this project
+                    </a>
+                </div>
             </div>
         </footer>
     );
