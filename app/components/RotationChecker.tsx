@@ -189,7 +189,7 @@ export default function RotationChecker() {
         <div className="space-y-10">
             <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                 <h2 className="text-2xl font-title flex items-center">
-                    Standard Rotation Checker
+                    Your Decklist
                     <HelpTip text="Paste a Standard decklist — or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you — to see which cards rotate out of the format and which stay legal. A card only rotates out if EVERY Standard-legal printing it has is in a set that's leaving. If it also has a printing in a set that's sticking around — including one that hasn't released yet — it's safe." />
                 </h2>
 

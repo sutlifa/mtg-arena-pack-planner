@@ -4,30 +4,33 @@
 
 
 /* ========================================= */
-/* Light mode variables + global fonts       */
+/* Global variables                          */
 /* ========================================= */
+/* This is a deliberately light, parchment-themed site — there is no
+   dark variant. The Next.js starter's prefers-color-scheme override
+   used to flip --foreground to near-white, which left any text that
+   inherits from body (rather than carrying an explicit `text-ink`
+   class) as pale-on-parchment for dark-mode users. Pinning the ink
+   tone here removes that failure mode. */
 :root {
-    --background: #ffffff;
-    --foreground: #171717;
+    --foreground: #2b2416;
     --font-body: Arial, Helvetica, sans-serif;
-}
-
-/* ========================================= */
-/* Dark mode variables                       */
-/* ========================================= */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --background: #0a0a0a;
-        --foreground: #ededed;
-    }
 }
 
 /* ========================================= */
 /* Global body styles                        */
 /* ========================================= */
-html, body {
-    height: 100%;
-    background: var(--background);
+/* `html` deliberately has NO background. A background on the root
+   element blocks the body's background from propagating to the canvas,
+   which would clip the parchment to the body box and leave bare white
+   below the fold. Leaving root bare lets the body's parchment paint the
+   full scroll height no matter how long the page gets. */
+html {
+    min-height: 100%;
+}
+
+body {
+    min-height: 100vh;
     color: var(--foreground);
     font-family: var(--font-body) !important;
     -webkit-font-smoothing: antialiased;
@@ -138,7 +141,54 @@ html, body {
 .bg-fantasy-parchment {
     min-height: 100vh;
     overflow-x: hidden;
-    background: linear-gradient(180deg, #f7f2e4 0%, #eee3ca 100%);
+
+    /* Layer 1: a faint heraldic diamond lattice, drawn as an inline SVG
+       data URI so there's no external asset to load or hotlink. Fixed
+       attachment keeps the weave steady while content scrolls past.
+       Layer 2: the warm parchment wash underneath.
+       `background-color` is the fallback that paints the canvas beyond
+       the gradient's box on very long pages. */
+    background-color: #eee3ca;
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 2 L62 32 L32 62 L2 32 Z' fill='none' stroke='%238a6a35' stroke-opacity='0.10' stroke-width='1'/%3E%3Cpath d='M32 20 L44 32 L32 44 L20 32 Z' fill='none' stroke='%238a6a35' stroke-opacity='0.07' stroke-width='1'/%3E%3C/svg%3E"),
+        linear-gradient(180deg, #f7f2e4 0%, #eee3ca 100%);
+    background-repeat: repeat, no-repeat;
+    background-size: 64px 64px, cover;
+    background-attachment: fixed, fixed;
+}
+
+/* ========================================= */
+/* Section ornamentation                     */
+/* ========================================= */
+
+/* A brass rune before every section heading, plus a hairline brass rule
+   beneath it. Applied from CSS rather than per-heading markup so every
+   section picks it up without touching its component. */
+main section h2::before {
+    content: "";
+    display: inline-block;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-right: 10px;
+    background-image: url("/art/rune.svg");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+main section h2 {
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(184, 137, 58, 0.35);
+}
+
+/* The dark nav/footer bars carry the same weave at a lower opacity so
+   the chrome reads as part of the set rather than flat blocks. */
+.bg-midnight {
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 2 L62 32 L32 62 L2 32 Z' fill='none' stroke='%23b8893a' stroke-opacity='0.10' stroke-width='1'/%3E%3C/svg%3E");
+    background-size: 64px 64px;
+    background-repeat: repeat;
 }
 
 /* ========================================= */

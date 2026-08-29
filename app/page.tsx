@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import HelpTip from "./components/HelpTip";
+import PageHeader from "./components/PageHeader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 const COLLECTION_STORAGE_KEY = "mtgpp:collection";
@@ -281,6 +282,12 @@ export default function Page() {
     return (
         <div className="px-6 pt-8">
             <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+
+                    <PageHeader
+                        title="Pack Planner"
+                        subtitle="Compare your decklists against the cards you already own, then see exactly what's missing — wildcard costs and pack recommendations for Arena, or a priced shopping list for paper."
+                        art="/art/banner-planner.svg"
+                    />
 
                     {/* DECK INPUTS */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="An orrery of turning rings above a horizon">
+  <defs>
+    <linearGradient id="rt-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111a15"/>
+      <stop offset="0.55" stop-color="#1c2b23"/>
+      <stop offset="1" stop-color="#25392d"/>
+    </linearGradient>
+    <radialGradient id="rt-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#d4a75c" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#b8893a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#rt-sky)"/>
+
+  <g fill="#f2ead6">
+    <circle cx="140" cy="60" r="1.5" opacity=".5"/>
+    <circle cx="266" cy="112" r="1.1" opacity=".35"/>
+    <circle cx="382" cy="46" r="1.7" opacity=".55"/>
+    <circle cx="906" cy="70" r="1.4" opacity=".45"/>
+    <circle cx="1042" cy="118" r="1.2" opacity=".35"/>
+    <circle cx="1140" cy="54" r="1.6" opacity=".5"/>
+  </g>
+
+  <g transform="translate(600 132)">
+    <circle r="170" fill="url(#rt-glow)"/>
+
+    <ellipse rx="150" ry="52" fill="none" stroke="#b8893a" stroke-opacity="0.45" stroke-width="1.5"/>
+    <ellipse rx="112" ry="112" fill="none" stroke="#b8893a" stroke-opacity="0.22" stroke-width="1"/>
+    <ellipse rx="76" ry="132" fill="none" stroke="#b8893a" stroke-opacity="0.30" stroke-width="1.2"/>
+
+    <circle r="26" fill="#e8d5a3" opacity="0.92"/>
+    <circle r="40" fill="none" stroke="#d4a75c" stroke-opacity="0.55" stroke-width="1.2"/>
+
+    <circle cx="150" cy="0" r="7" fill="#b8893a"/>
+    <circle cx="-106" cy="-38" r="5" fill="#d4a75c" opacity="0.85"/>
+    <circle cx="0" cy="-132" r="5.5" fill="#b8893a" opacity="0.9"/>
+    <circle cx="-150" cy="6" r="4.5" fill="#d4a75c" opacity="0.7"/>
+  </g>
+
+  <path d="M0 220 L110 178 L220 214 L330 164 L446 210 L560 176 L676 216 L790 170 L900 212 L1014 176 L1120 216 L1200 190 L1200 300 L0 300 Z" fill="#16211b"/>
+  <path d="M0 250 L140 218 L286 254 L438 220 L586 256 L740 222 L890 256 L1036 224 L1160 254 L1200 240 L1200 300 L0 300 Z" fill="#0f1712"/>
+
+  <rect y="294" width="1200" height="6" fill="#b8893a" opacity="0.85"/>
+</svg>
