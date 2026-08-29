@@ -161,19 +161,20 @@ body {
 /* Section ornamentation                     */
 /* ========================================= */
 
-/* A small brass lozenge before every section heading, plus a hairline
-   brass rule beneath it — enough heraldic character to read as themed
-   without the heavy fire-glow treatment this replaced. Applied from CSS
-   rather than per-heading markup so every section picks it up. */
+/* A brass rune before every section heading, plus a hairline brass rule
+   beneath it. Applied from CSS rather than per-heading markup so every
+   section picks it up without touching its component. */
 main section h2::before {
     content: "";
     display: inline-block;
     flex: none;
-    width: 9px;
-    height: 9px;
+    width: 16px;
+    height: 16px;
     margin-right: 10px;
-    transform: rotate(45deg);
-    background: #b8893a;
+    background-image: url("/art/rune.svg");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
 main section h2 {

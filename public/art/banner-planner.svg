@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Moonlit spires rising over a mountain ridge">
+  <defs>
+    <linearGradient id="pl-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111a15"/>
+      <stop offset="0.55" stop-color="#1c2b23"/>
+      <stop offset="1" stop-color="#25392d"/>
+    </linearGradient>
+    <radialGradient id="pl-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#d4a75c" stop-opacity="0.5"/>
+      <stop offset="0.45" stop-color="#b8893a" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#b8893a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#pl-sky)"/>
+
+  <g fill="#f2ead6">
+    <circle cx="120" cy="52" r="1.6" opacity=".55"/>
+    <circle cx="228" cy="96" r="1.1" opacity=".40"/>
+    <circle cx="332" cy="40" r="1.8" opacity=".60"/>
+    <circle cx="436" cy="104" r="1.2" opacity=".35"/>
+    <circle cx="548" cy="58" r="1.5" opacity=".50"/>
+    <circle cx="664" cy="34" r="1.1" opacity=".40"/>
+    <circle cx="742" cy="120" r="1.4" opacity=".32"/>
+    <circle cx="1020" cy="62" r="1.7" opacity=".55"/>
+    <circle cx="1108" cy="112" r="1.2" opacity=".38"/>
+    <circle cx="1168" cy="46" r="1.5" opacity=".48"/>
+  </g>
+
+  <circle cx="880" cy="104" r="150" fill="url(#pl-glow)"/>
+  <circle cx="880" cy="104" r="46" fill="#e8d5a3" opacity="0.92"/>
+  <circle cx="880" cy="104" r="72" fill="none" stroke="#b8893a" stroke-opacity="0.5" stroke-width="1.5"/>
+  <circle cx="880" cy="104" r="92" fill="none" stroke="#b8893a" stroke-opacity="0.25" stroke-width="1"/>
+
+  <g fill="#16211b" opacity="0.9">
+    <path d="M150 250 L168 120 L186 250 Z"/>
+    <path d="M212 250 L226 158 L240 250 Z"/>
+    <path d="M980 250 L996 138 L1012 250 Z"/>
+  </g>
+  <g stroke="#b8893a" stroke-opacity="0.55" stroke-width="1.5" fill="none">
+    <path d="M168 120 L168 104"/>
+    <path d="M996 138 L996 122"/>
+  </g>
+  <g fill="#b8893a" opacity="0.6">
+    <path d="M168 104 L192 111 L168 118 Z"/>
+    <path d="M996 122 L1020 129 L996 136 Z"/>
+  </g>
+
+  <path d="M0 214 L96 168 L182 206 L288 150 L392 202 L500 166 L604 212 L714 158 L820 206 L926 170 L1032 214 L1128 178 L1200 208 L1200 300 L0 300 Z" fill="#16211b"/>
+  <path d="M0 246 L128 210 L268 250 L420 214 L566 254 L716 216 L864 254 L1010 220 L1136 252 L1200 232 L1200 300 L0 300 Z" fill="#0f1712"/>
+
+  <rect y="294" width="1200" height="6" fill="#b8893a" opacity="0.85"/>
+</svg>

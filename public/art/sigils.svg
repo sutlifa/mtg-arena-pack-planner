@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 48" width="280" height="48" role="img" aria-label="Five arcane sigils: ember, tide, grove, dusk and dawn">
+  <g fill="none" stroke="#b8893a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+
+    <g transform="translate(24 24)">
+      <circle r="17" stroke-opacity="0.35"/>
+      <path d="M0 -8 C 6 -2, 6 4, 0 9 C -6 4, -6 -2, 0 -8 Z" fill="#b8893a" stroke="none"/>
+      <path d="M0 9 C -2 4, 2 4, 0 -1" stroke="#1c2b23" stroke-width="1.2"/>
+    </g>
+
+    <g transform="translate(88 24)">
+      <circle r="17" stroke-opacity="0.35"/>
+      <path d="M0 -9 C 7 -1, 8 6, 0 9 C -8 6, -7 -1, 0 -9 Z" fill="#b8893a" stroke="none"/>
+      <path d="M-3 3 C -1 6, 1 6, 3 3" stroke="#1c2b23" stroke-width="1.2"/>
+    </g>
+
+    <g transform="translate(140 24)">
+      <circle r="17" stroke-opacity="0.35"/>
+      <path d="M0 9 L0 -3"/>
+      <path d="M0 -3 C -7 -5, -8 -11, -2 -10 C -1 -13, 1 -13, 2 -10 C 8 -11, 7 -5, 0 -3 Z" fill="#b8893a" stroke="none"/>
+      <path d="M0 3 L-5 0 M0 3 L5 0"/>
+    </g>
+
+    <g transform="translate(196 24)">
+      <circle r="17" stroke-opacity="0.35"/>
+      <path d="M-8 0 A 8 8 0 1 0 4 -6 A 10 10 0 1 1 -8 0 Z" fill="#b8893a" stroke="none"/>
+    </g>
+
+    <g transform="translate(256 24)">
+      <circle r="17" stroke-opacity="0.35"/>
+      <circle r="5.5" fill="#b8893a" stroke="none"/>
+      <path d="M0 -12 L0 -8 M0 8 L0 12 M-12 0 L-8 0 M8 0 L12 0"/>
+      <path d="M-8.5 -8.5 L-6 -6 M6 6 L8.5 8.5 M8.5 -8.5 L6 -6 M-6 6 L-8.5 8.5" stroke-opacity="0.7"/>
+    </g>
+
+  </g>
+</svg>

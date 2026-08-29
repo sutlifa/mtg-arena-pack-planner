@@ -31,6 +31,10 @@ const config: Config = {
           DEFAULT: "#b8893a",
           dark: "#966d2b",
           light: "#d4a75c",
+          // Text sitting ON a brass fill. Brass is a mid-tone, so AAA is
+          // unreachable against it at any darkness; this is the darkest
+          // useful stop and lands at ~5.5:1, a comfortable AA pass.
+          ink: "#241a08",
         },
 
         // Mid forest — primary action buttons, the Arena/Paper toggle's
