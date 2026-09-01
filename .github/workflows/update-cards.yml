@@ -29,18 +29,25 @@ jobs:
       - name: Run build script
         run: node scripts/build-cards.js
 
-      - name: Commit updated cards-min.json
+      - name: Commit updated card data
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add .
+          # Stage only the generated data files. `git add .` would commit
+          # anything else that happened to be in the runner's tree, which is
+          # how unrelated files have ended up in past commits.
+          git add lib/data/cards-min.json lib/data/standard-rotation.json
           git commit -m "Daily cards update" || echo "No changes to commit"
 
       - name: Push changes
         run: git push
 
+      # Pinned to a commit SHA rather than the mutable `v3` tag. This step
+      # receives the Gmail app password, so if the tag were ever repointed at
+      # malicious code those credentials would be exfiltrated on the next
+      # scheduled run. SHA below is v3 as of 2024-01-26 ("Update to Node20").
       - name: Send Gmail Notification
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@4226df7daafa6fc901a43789c49bf7ab309066e7
         with:
           server_address: smtp.gmail.com
           server_port: 465

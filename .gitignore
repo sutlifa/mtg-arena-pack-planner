@@ -5,3 +5,15 @@ node_modules/
 dist
 build
 .env*.local
+
+# Visual Studio / VS Code local workspace state. These are per-machine editor
+# files (open tabs, indexes, a local sqlite cache) — they were previously
+# committed by the daily workflow's `git add .`, which now stages only the
+# generated data files.
+.vs/
+.vscode/
+*.suo
+*.user
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo

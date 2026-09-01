@@ -6,10 +6,18 @@ import { parseArenaCollection } from "@/lib/collectionParser";
 import { lookupCard } from "@/lib/scryfall";
 import { rankSets } from "@/lib/setRecommender";
 import { estimateWildcards } from "@/lib/wildcardEstimator";
+import { checkDecklistSize, checkCollectionSize } from "@/lib/inputLimits";
 
 export async function POST(req: Request) {
     try {
         const { decklist, collection, arenaMode, mergePaperCounts, printingOverrides } = await req.json();
+
+        // Bound the work before doing any of it — this route is public and
+        // unauthenticated, and parsing is per-line with no internal limit.
+        const sizeError = checkDecklistSize(decklist) ?? checkCollectionSize(collection);
+        if (sizeError) {
+            return NextResponse.json({ error: sizeError }, { status: 413 });
+        }
 
         // Deck parsed in current mode (Paper: max/sum; Arena: capped by parser)
         const { map: deckMap, missing: missingDeckCards } =
