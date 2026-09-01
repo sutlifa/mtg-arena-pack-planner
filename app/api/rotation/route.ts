@@ -6,10 +6,18 @@ import { normalizeName } from "@/lib/nameUtils";
 import { lookupRotation, getRotationMeta } from "@/lib/standardRotation";
 import { BASIC_LAND_NAMES } from "@/lib/basicLands";
 import { lookupCard } from "@/lib/scryfall";
+import { checkDecklistSize } from "@/lib/inputLimits";
 
 export async function POST(req: Request) {
     try {
         const { decklist } = await req.json();
+
+        // Same reasoning as /api/analyze — public, unauthenticated, per-line.
+        const sizeError = checkDecklistSize(decklist);
+        if (sizeError) {
+            return NextResponse.json({ error: sizeError }, { status: 413 });
+        }
+
         const text = Array.isArray(decklist) ? decklist.join("\n") : decklist ?? "";
 
         const lines: string[] = String(text)
