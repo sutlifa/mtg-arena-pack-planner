@@ -262,12 +262,21 @@ export default function Page() {
         navigator.clipboard.writeText(text);
     };
 
-    // Paper Mode only: sum estimated market price across the shopping list.
-    const shoppingListTotal = () => {
+    // Totals for the shopping list / Arena import block.
+    //
+    // `totalCards` counts COPIES, not distinct names — that's the number
+    // you're actually buying, and it's what the pasted list adds up to.
+    // `uniqueCards` is the number of lines in that paste, which is what
+    // TCGPlayer's mass entry shows as separate rows. The price total is
+    // Paper Mode only; Arena has no dollar cost.
+    const shoppingListSummary = () => {
         let total = 0;
         let missingPriceCount = 0;
+        let totalCards = 0;
 
         for (const item of shoppingList) {
+            totalCards += item.needed;
+
             const price = parseFloat(item.lookup?.paperPrinting?.prices_usd);
             if (Number.isNaN(price)) {
                 missingPriceCount += 1;
@@ -276,7 +285,12 @@ export default function Page() {
             }
         }
 
-        return { total, missingPriceCount };
+        return {
+            total,
+            missingPriceCount,
+            totalCards,
+            uniqueCards: shoppingList.length,
+        };
     };
 
     return (
@@ -671,15 +685,34 @@ export default function Page() {
                             <p className="text-ink">No missing cards yet.</p>
                         ) : (
                             <>
-                                {disableArena && (() => {
-                                    const { total, missingPriceCount } = shoppingListTotal();
+                                {(() => {
+                                    const {
+                                        total,
+                                        missingPriceCount,
+                                        totalCards,
+                                        uniqueCards,
+                                    } = shoppingListSummary();
+
                                     return (
                                         <p className="text-ink font-title text-lg">
-                                            Estimated Total: ${total.toFixed(2)}
-                                            {missingPriceCount > 0 && (
+                                            {disableArena && (
+                                                <>
+                                                    {total.toLocaleString("en-US", {
+                                                        style: "currency",
+                                                        currency: "USD",
+                                                    })}
+                                                    {" — "}
+                                                </>
+                                            )}
+                                            {totalCards} card{totalCards === 1 ? "" : "s"}
+                                            <span className="text-sm text-ink/70">
+                                                {" "}
+                                                ({uniqueCards} unique)
+                                            </span>
+                                            {disableArena && missingPriceCount > 0 && (
                                                 <span className="text-sm text-ink/70">
-                                                    {" "}
-                                                    ({missingPriceCount} card{missingPriceCount === 1 ? "" : "s"} missing price data)
+                                                    {" · "}
+                                                    {missingPriceCount} missing price data
                                                 </span>
                                             )}
                                         </p>
