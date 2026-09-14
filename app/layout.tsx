@@ -23,7 +23,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className="min-h-screen bg-fantasy-parchment flex flex-col">
-                <Providers>
+                <Providers authEnabled={authEnabled}>
                 {/* Global heading font import */}
                 <link
                     href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap"
