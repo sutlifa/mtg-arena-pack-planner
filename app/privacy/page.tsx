@@ -35,17 +35,20 @@ export default function PrivacyPage() {
                     <h2 className="text-2xl font-title flex items-center">What&apos;s stored on your device</h2>
                     <div className="space-y-3 leading-relaxed">
                         <p>
-                            When you paste a collection into the Pack Planner, it&apos;s saved in your
-                            browser&apos;s <code className="px-1 rounded bg-parchment">localStorage</code> under
-                            a single key, <code className="px-1 rounded bg-parchment">mtgpp:collection</code>,
-                            so you don&apos;t have to paste it again next visit.
+                            Two things are saved in your browser&apos;s{" "}
+                            <code className="px-1 rounded bg-parchment">localStorage</code> so you don&apos;t have
+                            to re-enter them next visit: the collection you paste into the Pack Planner
+                            (under <code className="px-1 rounded bg-parchment">mtgpp:collection</code>), and
+                            the decklist, format and matchup plans you build in the Sideboard Planner
+                            (under <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
                         </p>
                         <p>
                             That data stays on your device. It is not uploaded for storage, not tied to any
                             identifier, and not readable by this site on any other device. Clearing it is
                             immediate: use the <strong>Clear</strong> button next to the collection box, or
-                            clear site data in your browser. Clearing your browser storage also erases it,
-                            with no copy retained anywhere else.
+                            <strong> Clear All</strong> in the Sideboard Planner, or clear site data in your
+                            browser. Clearing your browser storage also erases it, with no copy retained
+                            anywhere else.
                         </p>
                         <p>
                             The site sets no cookies of its own.
@@ -72,6 +75,11 @@ export default function PrivacyPage() {
                             behalf so your browser doesn&apos;t have to. Only <code className="px-1 rounded bg-parchment">mtggoldfish.com</code>{" "}
                             URLs are accepted, so this can&apos;t be used to make the server fetch arbitrary
                             addresses.
+                        </p>
+                        <p>
+                            The Sideboard Planner is the exception to all of the above: it splits your
+                            decklist and builds your matchup plans entirely in your browser. Unless you
+                            paste a deck link for it to import, nothing you type there is sent anywhere.
                         </p>
                     </div>
                 </section>
@@ -102,8 +110,10 @@ export default function PrivacyPage() {
                                 Google&apos;s font CDN.
                             </li>
                             <li>
-                                <strong>MTGGoldfish</strong> — contacted only when you paste a deck link,
-                                and contacted by the server rather than your browser.
+                                <strong>MTGGoldfish</strong> — contacted when you paste a deck link, and
+                                when the Sideboard Planner loads the current metagame for a format. Both
+                                requests are made by the server rather than your browser, and neither sends
+                                anything about you.
                             </li>
                             <li>
                                 <strong>PayPal</strong> — only if you choose to follow the donation link.
