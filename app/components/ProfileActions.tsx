@@ -42,6 +42,53 @@ export function DeleteGuideButton({ id, name }: { id: number; name: string }) {
     );
 }
 
+/**
+ * Delete one saved collection or comparison.
+ *
+ * `kind` is the API segment, constrained to the two literals rather than an
+ * open string so a caller cannot aim this at an arbitrary endpoint.
+ */
+export function DeleteSavedButton({
+    kind,
+    id,
+    name,
+}: {
+    kind: "collections" | "analyses";
+    id: number;
+    name: string;
+}) {
+    const router = useRouter();
+    const [busy, setBusy] = useState(false);
+
+    const remove = async () => {
+        if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+
+        setBusy(true);
+        try {
+            const res = await fetch(`/api/${kind}/${id}`, { method: "DELETE" });
+            if (res.ok) router.refresh();
+            else {
+                alert("Could not delete that.");
+                setBusy(false);
+            }
+        } catch {
+            alert("Could not delete that.");
+            setBusy(false);
+        }
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={busy ? undefined : remove}
+            disabled={busy}
+            className="px-3 py-2 rounded text-sm text-ink/60 hover:text-red-700 hover:bg-red-700/10 transition-colors disabled:opacity-50"
+        >
+            {busy ? "Deleting..." : "Delete"}
+        </button>
+    );
+}
+
 /** Delete the account and everything attached to it. */
 export function DeleteAccountButton() {
     const [busy, setBusy] = useState(false);
