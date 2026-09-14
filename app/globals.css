@@ -240,3 +240,134 @@ body.no-scroll {
     overflow: hidden !important;
     touch-action: none !important;
 }
+
+/* ========================================= */
+/* Sideboard Planner — printed sheet         */
+/* ========================================= */
+/* The planner renders two versions of the guide: the interactive editor
+   (.sb-noprint) and a compact printed sheet (.sb-print). Only one is ever
+   visible. They are separate markup rather than one restyled tree because
+   fitting 25 matchups on a single side of paper needs inline card lists,
+   not stacked quantity/name input rows.
+
+   "Export PDF" calls window.print(); the browser's own "Save as PDF"
+   destination produces the file. That keeps the feature dependency-free —
+   no PDF library ships to the client — and gives the user native control
+   over paper size and margins. */
+
+.sb-print {
+    display: none;
+}
+
+@media print {
+    @page {
+        size: letter portrait;
+        margin: 0.35in;
+    }
+
+    /* Nothing but the sheet. */
+    header,
+    footer,
+    .sb-noprint {
+        display: none !important;
+    }
+
+    /* The parchment texture and fixed background attachment are wrong for
+       paper (and cost ink); print plain black on white. */
+    html,
+    body {
+        background: #fff !important;
+        background-image: none !important;
+        color: #000 !important;
+    }
+
+    /* Strip the page chrome's padding so the sheet gets the whole page. */
+    body,
+    main,
+    main > div,
+    main > div > div {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+    }
+
+    .sb-print {
+        display: block !important;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #000;
+    }
+
+    .sb-print-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        border-bottom: 1pt solid #000;
+        padding-bottom: 2pt;
+        margin-bottom: 6pt;
+        font-size: 9pt;
+    }
+
+    .sb-print-cols {
+        column-count: 3;
+        column-gap: 12pt;
+        /* `balance` spreads the matchups evenly across the three columns.
+           `auto` needs an explicit height to fill column-by-column; without
+           one it pours everything into the first column, which measured at
+           roughly 1.9 pages for a full 25-matchup guide instead of 0.7. */
+        column-fill: balance;
+    }
+
+    /* Keep a matchup whole — a plan split across two columns is unreadable
+       at the table. */
+    .sb-print-item {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 0 0 5pt 0;
+        padding-bottom: 4pt;
+        border-bottom: 0.5pt solid #999;
+        orphans: 2;
+        widows: 2;
+    }
+
+    .sb-print-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 4pt;
+        font-size: 7.5pt;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 1pt;
+    }
+
+    .sb-print-pct {
+        font-weight: 400;
+        color: #555;
+        white-space: nowrap;
+    }
+
+    .sb-print-line {
+        font-size: 6.6pt;
+        line-height: 1.28;
+        margin: 0;
+    }
+
+    .sb-print-line b {
+        display: inline-block;
+        min-width: 16pt;
+        font-size: 6pt;
+        letter-spacing: 0.02em;
+    }
+
+    .sb-print-line i {
+        font-size: 6pt;
+        color: #444;
+    }
+
+    .sb-print-notes {
+        font-size: 6.2pt;
+        line-height: 1.25;
+        font-style: italic;
+        color: #333;
+        margin-top: 1pt;
+    }
+}

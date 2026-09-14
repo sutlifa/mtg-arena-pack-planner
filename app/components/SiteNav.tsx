@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
     { href: "/", label: "Pack Planner" },
     { href: "/rotation", label: "Standard Rotation" },
+    { href: "/sideboard", label: "Sideboard Planner" },
 ];
 
 export default function SiteNav() {
@@ -32,7 +33,7 @@ export default function SiteNav() {
                     </span>
                 </Link>
 
-                <nav className="flex gap-1" aria-label="Primary">
+                <nav className="flex flex-wrap justify-center gap-1" aria-label="Primary">
                     {TABS.map((tab) => {
                         const active = pathname === tab.href;
                         return (

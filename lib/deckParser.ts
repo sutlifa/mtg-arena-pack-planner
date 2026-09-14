@@ -5,6 +5,10 @@ import { lookupCard } from "./scryfall";
 import { serverAliasMap } from "./serverAliasMap";
 import { deckLimits } from "./deckLimits";
 import { BASIC_LAND_NAMES } from "./basicLands";
+import { extractQtyAndName } from "./lineParse";
+
+// Re-exported so existing importers keep working after the move.
+export { extractQtyAndName };
 
 function capFor(canonical: string, capAt4: boolean): number {
     // Cards whose own rules text overrides the 4-copy limit (Relentless
@@ -17,18 +21,6 @@ function capFor(canonical: string, capAt4: boolean): number {
     return capAt4 && !BASIC_LAND_NAMES.has(canonical) ? 4 : Infinity;
 }
 
-export function extractQtyAndName(line: string): { qty: number; rawName: string } | null {
-    let m = line.match(/^(\d+)\s+(.+)$/);
-    if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
-
-    m = line.match(/^(\d+)x\s+(.+)$/i);
-    if (m) return { qty: parseInt(m[1], 10), rawName: m[2].trim() };
-
-    m = line.match(/^(.+)\s+(\d+)$/);
-    if (m) return { qty: parseInt(m[2], 10), rawName: m[1].trim() };
-
-    return null;
-}
 
 async function parseSingleDeck(
     text: string,
