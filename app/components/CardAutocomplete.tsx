@@ -100,7 +100,7 @@ export default function CardAutocomplete({
     const overMax = matched !== null && row.qty > matched.qty;
 
     return (
-        <div ref={wrapRef} className="relative flex items-center gap-2">
+        <div ref={wrapRef} className="relative flex items-center gap-1.5 sm:gap-2">
             <input
                 type="number"
                 min={1}
@@ -113,7 +113,7 @@ export default function CardAutocomplete({
                     onChange({ ...row, qty: Math.min(Math.max(1, n), maxQty) });
                 }}
                 className={
-                    "w-14 shrink-0 px-2 py-1 rounded bg-parchment text-ink text-sm shadow-inner-parchment " +
+                    "w-12 sm:w-14 shrink-0 px-2 py-1 rounded bg-parchment text-ink text-sm shadow-inner-parchment " +
                     (overMax ? "ring-2 ring-red-600" : "")
                 }
             />
@@ -166,17 +166,28 @@ export default function CardAutocomplete({
                 )}
             </div>
 
+            {/* No fixed width here. This hint used to reserve w-14 (56px) — as
+                much as the quantity field — which on a 375px screen left the
+                card name itself 39px, i.e. unreadable. It now takes only what
+                it needs, and shrinks to a marker on small screens. */}
             {matched && (
-                <span className="shrink-0 text-xs text-ink/50 w-14" title="Copies available">
-                    of {matched.qty}
+                <span
+                    className="shrink-0 text-xs text-ink/50 tabular-nums"
+                    title={`You run ${matched.qty} of these`}
+                >
+                    /{matched.qty}
                 </span>
             )}
             {!matched && row.name.trim() !== "" && (
-                <span className="shrink-0 text-xs text-amber-700 w-14" title="Not found in this section of your deck">
-                    not in list
+                <span
+                    className="shrink-0 text-xs text-amber-700"
+                    title="Not in this part of your deck"
+                >
+                    <span className="sm:hidden" aria-hidden="true">!</span>
+                    <span className="hidden sm:inline">not in list</span>
+                    <span className="sr-only">Not in this part of your deck</span>
                 </span>
             )}
-            {!matched && row.name.trim() === "" && <span className="shrink-0 w-14" />}
 
             <button
                 type="button"

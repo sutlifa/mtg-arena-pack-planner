@@ -76,8 +76,8 @@ const OPTIONS = [
 
 export default function ReportPage() {
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Report an Issue"
                     subtitle="Bug reports and corrections are genuinely welcome — especially card data that looks wrong, since that's the hardest kind to catch from the inside."

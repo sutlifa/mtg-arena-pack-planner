@@ -10,8 +10,8 @@ export const metadata = {
 
 export default function SideboardPage() {
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <div className="sb-noprint">
                     <PageHeader
                         title="Sideboard Planner"

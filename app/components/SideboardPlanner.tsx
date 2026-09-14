@@ -645,8 +645,8 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             <div className="sb-noprint space-y-10">
 
                 {/* ---- decklist ---- */}
-                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                    <h2 className="text-2xl font-title flex items-center">
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex flex-wrap items-center">
                         Your Decklist
                         <HelpTip text="Paste a decklist with its sideboard, or an MTGGoldfish deck or archetype link. Lists are split into maindeck and sideboard automatically — either by a 'Sideboard' line, or by the blank line MTGGoldfish uses to separate them." />
                     </h2>
@@ -719,7 +719,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                     {sections && (
                         <div className="grid sm:grid-cols-2 gap-4 pt-2">
-                            <div className="bg-parchment rounded shadow-inner-parchment p-4">
+                            <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4">
                                 <p className="font-title text-lg mb-2">
                                     Maindeck{" "}
                                     <span className="text-ink/60 text-base">({totalCards(maindeck)} cards)</span>
@@ -731,7 +731,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                 </ul>
                             </div>
 
-                            <div className="bg-parchment rounded shadow-inner-parchment p-4">
+                            <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4">
                                 <p className="font-title text-lg mb-2">
                                     Sideboard{" "}
                                     <span className="text-ink/60 text-base">({totalCards(sideboard)} cards)</span>
@@ -754,8 +754,8 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 </section>
 
                 {/* ---- format and archetypes ---- */}
-                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                    <h2 className="text-2xl font-title flex items-center">
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex flex-wrap items-center">
                         Format &amp; Archetypes
                         <HelpTip text="Pick a format and how many of the top metagame decks to plan against. Archetype names and metagame share come from MTGGoldfish. You can rename, add or remove any of them afterwards." />
                     </h2>
@@ -891,9 +891,9 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                 {/* ---- matchups ---- */}
                 {matchups.length > 0 && (
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="text-2xl font-title flex items-center">
+                            <h2 className="text-2xl font-title flex flex-wrap items-center">
                                 Sideboard Plans
                                 <HelpTip text="For each matchup, list what you're boarding out of the maindeck and in from the sideboard. You can't list more copies than you actually run, and the card count has to land on 60 or better. Tick Separate Play / Draw when you board differently on the play than on the draw." />
                             </h2>
@@ -908,7 +908,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                         <div className="space-y-4">
                             {matchups.map((m, idx) => (
-                                <div key={m.id} className="bg-parchment rounded shadow-inner-parchment p-4 space-y-3">
+                                <div key={m.id} className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-ink/40 text-sm w-6 shrink-0">{idx + 1}.</span>
 

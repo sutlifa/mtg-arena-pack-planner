@@ -214,8 +214,11 @@ main section h2 {
         padding-bottom: 48px !important;
     }
 
+    /* Was a flat 160px !important, which overflowed its container inside the
+       card rows (measured at 119px wide on a 375px screen) and pushed the
+       set-name label outside the card. Cap it instead of fixing it. */
     input[type="range"] {
-        width: 160px !important;
+        width: 100% !important;
         max-width: 160px !important;
     }
 

@@ -53,7 +53,7 @@ export default function HelpTip({ text }: { text: string }) {
     }, [open]);
 
     return (
-        <span ref={wrapRef} className="relative inline-flex align-middle ml-2">
+        <span ref={wrapRef} className="relative inline-flex align-middle ml-2 shrink-0">
             <button
                 type="button"
                 aria-label="Help"
