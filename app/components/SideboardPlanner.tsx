@@ -478,6 +478,26 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
     /* ---- printing ---- */
 
+    const [confirmClear, setConfirmClear] = useState(false);
+    const [confirmDeckClear, setConfirmDeckClear] = useState(false);
+
+    /**
+     * Full reset: decklist, the loaded maindeck/sideboard split, every matchup
+     * plan and the stash of unticked ones.
+     *
+     * Format, the archetype count and the pulled metagame list are kept — they
+     * are fetched data rather than your work, and re-pulling the metagame on
+     * every reset is a pointless round trip.
+     */
+    const resetEverything = () =>
+        setPlan((prev) => ({
+            ...prev,
+            decklist: "",
+            loadedText: "",
+            matchups: [],
+            stash: {},
+        }));
+
     const printRef = useRef<HTMLDivElement>(null);
     const [exporting, setExporting] = useState(false);
 
@@ -631,12 +651,53 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                         <HelpTip text="Paste a decklist with its sideboard, or an MTGGoldfish deck or archetype link. Lists are split into maindeck and sideboard automatically — either by a 'Sideboard' line, or by the blank line MTGGoldfish uses to separate them." />
                     </h2>
 
-                    <textarea
-                        className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                        placeholder="Paste your decklist (with sideboard) here, or an MTGGoldfish deck link..."
-                        value={decklist}
-                        onChange={(e) => setDecklist(e.target.value)}
-                    />
+                    <div className="relative">
+                        <textarea
+                            className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
+                            placeholder="Paste your decklist (with sideboard) here, or an MTGGoldfish deck link..."
+                            value={decklist}
+                            onChange={(e) => setDecklist(e.target.value)}
+                        />
+
+                        {(decklist.trim() || sections) &&
+                            (confirmDeckClear ? (
+                                // Confirmed in the page rather than through a
+                                // browser dialog: the native one is chrome, not
+                                // app, and reads as the browser interrupting you.
+                                <span className="absolute top-2 right-2 flex items-center gap-1 bg-parchment-dark rounded px-2 py-1 shadow-card">
+                                    <span className="text-xs text-ink/70">Clear the list?</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            // Only the list goes. The matchup plans are
+                                            // written against card names, so they survive
+                                            // a different deck being pasted in.
+                                            setPlan((prev) => ({ ...prev, decklist: "", loadedText: "" }));
+                                            setDeckError(null);
+                                            setConfirmDeckClear(false);
+                                        }}
+                                        className="px-2 py-0.5 rounded text-xs font-semibold text-red-700 hover:bg-red-700/10"
+                                    >
+                                        Yes
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmDeckClear(false)}
+                                        className="px-2 py-0.5 rounded text-xs text-ink/60 hover:bg-parchment"
+                                    >
+                                        No
+                                    </button>
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setConfirmDeckClear(true)}
+                                    className="absolute top-2 right-2 px-3 py-1 rounded text-xs font-semibold bg-parchment-dark text-ink/70 hover:text-red-700 hover:bg-red-700/10 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            ))}
+                    </div>
 
                     {deckError && <p className="text-red-700 text-sm">{deckError}</p>}
 
@@ -1045,13 +1106,16 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                                         <button
                                 type="button"
                                 onClick={() => {
-                                    if (confirm("Clear every matchup and plan? This cannot be undone.")) {
-                                        setMatchups(() => []);
+                                    // Nothing written yet — no point asking.
+                                    if (planned === 0 && !plan.loadedText.trim()) {
+                                        resetEverything();
+                                        return;
                                     }
+                                    setConfirmClear(true);
                                 }}
                                 className="px-5 py-3 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
                             >
-                                Clear All
+                                Start Over
                             </button>
                         </div>
 
@@ -1062,6 +1126,81 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     </section>
                 )}
             </div>
+
+            {/* ---- clear confirmation, with a chance to save first ---- */}
+            {confirmClear && (
+                <div
+                    className="sb-noprint fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="clear-plan-title"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setConfirmClear(false);
+                    }}
+                >
+                    <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
+                        <h3 id="clear-plan-title" className="font-title text-2xl">
+                            Start over?
+                        </h3>
+
+                        <p className="leading-relaxed">
+                            This wipes the decklist, the maindeck and sideboard it was split into, and
+                            every matchup
+                            {planned > 0
+                                ? ` — including the ${planned} you've written up`
+                                : " on the list"}
+                            . The format and the archetypes you pulled stay, so you can paste a new list
+                            straight in.
+                        </p>
+
+                        {authEnabled ? (
+                            <p className="text-sm text-ink/70">
+                                Save it to your profile first if you want it back later. Saving under a
+                                name you&apos;ve already used just updates that guide.
+                            </p>
+                        ) : (
+                            <p className="text-sm text-amber-700">
+                                There&apos;s nowhere to save this on this deployment, so clearing is
+                                final. Print it first if you want a copy.
+                            </p>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 justify-end pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmClear(false)}
+                                className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                            >
+                                Keep it
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    resetEverything();
+                                    setConfirmClear(false);
+                                }}
+                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                            >
+                                Clear without saving
+                            </button>
+
+                            {authEnabled && (
+                                <SaveToProfileButton
+                                    plan={plan}
+                                    format={format}
+                                    formatLabel={formatLabel(format)}
+                                    label="Save and clear"
+                                    onSaved={() => {
+                                        resetEverything();
+                                        setConfirmClear(false);
+                                    }}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ===================== printed sheet ===================== */}
             {/* Hidden on screen; globals.css swaps the two in @media print. The
