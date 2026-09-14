@@ -41,6 +41,48 @@ const emptyMatchup = (name: string, pct: number | null = null): Matchup => ({
 const sumQty = (rows: CardRow[]) =>
     rows.reduce((n, r) => n + (r.name.trim() ? r.qty : 0), 0);
 
+/** Constructed minimum. Every format this tool supports is 60-card. */
+const MIN_DECK = 60;
+
+interface PlanCheck {
+    out: number;
+    in: number;
+    /** Maindeck size once the swaps are made. */
+    after: number;
+    state: "empty" | "ok" | "short" | "over";
+}
+
+/**
+ * Checks one out/in pair against the deck it's being made from.
+ *
+ * The rule that matters is the resulting deck size, not whether the two
+ * columns happen to be equal. Swaps haven't had to be one-for-one since 2013
+ * — someone running 61 who cuts 7 for 6 is still at 60 and perfectly legal,
+ * and flagging that as an error would be wrong.
+ *
+ * `deckSize` of 0 (or a list shorter than 60, i.e. still half-pasted) means
+ * there's nothing to judge against, so no verdict is given.
+ */
+function checkPlan(outRows: CardRow[], inRows: CardRow[], deckSize: number): PlanCheck {
+    const out = sumQty(outRows);
+    const inN = sumQty(inRows);
+    const after = deckSize - out + inN;
+
+    if (out === 0 && inN === 0) return { out, in: inN, after, state: "empty" };
+    if (deckSize < MIN_DECK) return { out, in: inN, after, state: "ok" };
+
+    if (after < MIN_DECK) return { out, in: inN, after, state: "short" };
+    if (after > deckSize) return { out, in: inN, after, state: "over" };
+    return { out, in: inN, after, state: "ok" };
+}
+
+/** Every plan in a matchup — one, or two when play and draw differ. */
+function matchupChecks(m: Matchup, deckSize: number): PlanCheck[] {
+    const checks = [checkPlan(m.out, m.in, deckSize)];
+    if (m.splitPlayDraw) checks.push(checkPlan(m.drawOut, m.drawIn, deckSize));
+    return checks;
+}
+
 /** "2 Torpor Orb, 1 Snakeskin Veil" — the compact form used on the printed sheet. */
 const inlineList = (rows: CardRow[]) =>
     rows.filter((r) => r.name.trim()).map((r) => `${r.qty} ${r.name.trim()}`).join(", ");
@@ -103,6 +145,7 @@ function PlanPair({
     inRows,
     maindeck,
     sideboard,
+    deckSize,
     onOut,
     onIn,
 }: {
@@ -111,12 +154,11 @@ function PlanPair({
     inRows: CardRow[];
     maindeck: DeckCard[];
     sideboard: DeckCard[];
+    deckSize: number;
     onOut: (rows: CardRow[]) => void;
     onIn: (rows: CardRow[]) => void;
 }) {
-    const outN = sumQty(outRows);
-    const inN = sumQty(inRows);
-    const unbalanced = outN !== inN;
+    const check = checkPlan(outRows, inRows, deckSize);
 
     return (
         <div className="space-y-2">
@@ -141,10 +183,22 @@ function PlanPair({
                 />
             </div>
 
-            {(outN > 0 || inN > 0) && (
-                <p className={"text-xs " + (unbalanced ? "text-amber-700" : "text-green-800/80")}>
-                    {outN} out / {inN} in
-                    {unbalanced ? " — these do not match, so your deck would change size." : ""}
+            {check.state !== "empty" && (
+                <p
+                    className={
+                        "text-xs " +
+                        (check.state === "short"
+                            ? "text-red-700 font-semibold"
+                            : check.state === "over"
+                                ? "text-amber-700"
+                                : "text-green-800/80")
+                    }
+                >
+                    &minus;{check.out} / +{check.in} &middot; {check.after} cards
+                    {check.state === "short" &&
+                        ` — illegal, you can't board below ${MIN_DECK}. Bring in ${MIN_DECK - check.after} more.`}
+                    {check.state === "over" &&
+                        ` — legal, but you're ${check.after - deckSize} over what you registered.`}
                 </p>
             )}
         </div>
@@ -447,6 +501,11 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * about the iframe path fails.
      */
     const exportSheet = () => {
+        // Guarded here as well as on the button: a disabled button is a hint,
+        // not a rule, and nothing should print a guide that boards you to an
+        // illegal deck.
+        if (illegal.length > 0) return;
+
         const src = printRef.current;
         if (!src) {
             window.print();
@@ -539,10 +598,26 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     const maindeck = sections?.maindeck ?? [];
     const sideboard = sections?.sideboard ?? [];
 
-    const planned = useMemo(
-        () => matchups.filter((m) => m.out.length || m.in.length || m.notes.trim()).length,
-        [matchups]
+    const deckSize = totalCards(maindeck);
+
+    // Plain computations rather than useMemo: React Compiler memoizes these
+    // itself, and a hand-written useMemo it can't preserve makes it bail out
+    // of optimizing the whole component. Filtering a few dozen matchups is
+    // nothing next to losing auto-memoization everywhere else.
+    //
+    // `illegal` blocks printing and saving — a guide that boards you down to
+    // 59 is worse than no guide, because you'd only find out at the table.
+    const illegal = matchups.filter((m) =>
+        matchupChecks(m, deckSize).some((c) => c.state === "short")
     );
+
+    const overSized = matchups.filter((m) =>
+        matchupChecks(m, deckSize).some((c) => c.state === "over")
+    );
+
+    const planned = matchups.filter(
+        (m) => m.out.length || m.in.length || m.notes.trim()
+    ).length;
 
     return (
         <div className="space-y-10">
@@ -759,14 +834,14 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <h2 className="text-2xl font-title flex items-center">
                                 Sideboard Plans
-                                <HelpTip text="For each matchup, list what comes out of your maindeck and what comes in from your sideboard. Quantities are capped at the copies you actually run. Tick Separate Play / Draw when a matchup needs a different plan depending on who goes first." />
+                                <HelpTip text="For each matchup, list what you're boarding out of the maindeck and in from the sideboard. You can't list more copies than you actually run, and the card count has to land on 60 or better. Tick Separate Play / Draw when you board differently on the play than on the draw." />
                             </h2>
                             <p className="text-sm text-ink/60">{planned} of {matchups.length} planned</p>
                         </div>
 
                         {!sections && (
                             <p className="text-amber-700 text-sm">
-                                Load a decklist above to turn on card suggestions and quantity limits.
+                                Paste your deck above to get card suggestions and real copy counts.
                             </p>
                         )}
 
@@ -836,6 +911,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                                 inRows={m.in}
                                                 maindeck={maindeck}
                                                 sideboard={sideboard}
+                                                deckSize={deckSize}
                                                 onOut={(rows) => patch(m.id, { out: rows })}
                                                 onIn={(rows) => patch(m.id, { in: rows })}
                                             />
@@ -845,6 +921,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                                 inRows={m.drawIn}
                                                 maindeck={maindeck}
                                                 sideboard={sideboard}
+                                                deckSize={deckSize}
                                                 onOut={(rows) => patch(m.id, { drawOut: rows })}
                                                 onIn={(rows) => patch(m.id, { drawIn: rows })}
                                             />
@@ -868,6 +945,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                             inRows={m.in}
                                             maindeck={maindeck}
                                             sideboard={sideboard}
+                                            deckSize={deckSize}
                                             onOut={(rows) => patch(m.id, { out: rows })}
                                             onIn={(rows) => patch(m.id, { in: rows })}
                                         />
@@ -879,7 +957,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                             value={m.notes}
                                             onChange={(e) => patch(m.id, { notes: e.target.value })}
                                             rows={2}
-                                            placeholder="Keep removal for their threats, cut the slow cards on the draw..."
+                                            placeholder="Keep removal for their threats, cut the clunky top end on the draw..."
                                             className="mt-1 w-full px-2 py-1.5 rounded bg-parchment-dark text-ink text-sm font-normal normal-case tracking-normal shadow-inner-parchment resize-y"
                                         />
                                     </label>
@@ -887,28 +965,82 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             ))}
                         </div>
 
+                        {illegal.length > 0 && (
+                            <div
+                                role="alert"
+                                className="bg-red-700/10 border border-red-700/40 rounded p-4 space-y-1"
+                            >
+                                <p className="font-title text-lg text-red-700">
+                                    Illegal deck &mdash;{" "}
+                                    {illegal.length === 1
+                                        ? "1 matchup boards"
+                                        : `${illegal.length} matchups board`}{" "}
+                                    you below {MIN_DECK}
+                                </p>
+                                <p className="text-sm text-ink/80">
+                                    You&apos;re taking out more than you&apos;re bringing in:{" "}
+                                    {illegal.slice(0, 4).map((m) => m.name).join(", ")}
+                                    {illegal.length > 4 ? `, and ${illegal.length - 4} more` : ""}. Fix
+                                    those before you print &mdash; you&apos;d be shuffling up with an
+                                    illegal deck.
+                                </p>
+                            </div>
+                        )}
+
+                        {illegal.length === 0 && overSized.length > 0 && (
+                            <div className="bg-amber-700/10 border border-amber-700/40 rounded p-4 space-y-1">
+                                <p className="font-title text-lg text-amber-800">
+                                    {overSized.length === 1
+                                        ? "1 matchup goes"
+                                        : `${overSized.length} matchups go`}{" "}
+                                    over {deckSize}
+                                </p>
+                                <p className="text-sm text-ink/80">
+                                    Legal, but you&apos;re bringing in more than you&apos;re taking out in{" "}
+                                    {overSized.slice(0, 4).map((m) => m.name).join(", ")}
+                                    {overSized.length > 4 ? `, and ${overSized.length - 4} more` : ""}.
+                                    Worth a second look if you didn&apos;t mean to run a bigger deck.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex flex-wrap justify-center gap-3 pt-2">
                             <button
                                 type="button"
-                                onClick={exporting ? undefined : exportSheet}
-                                disabled={exporting}
+                                onClick={exporting || illegal.length > 0 ? undefined : exportSheet}
+                                disabled={exporting || illegal.length > 0}
                                 aria-busy={exporting}
+                                title={
+                                    illegal.length > 0
+                                        ? "Fix the matchups that board you below 60 first"
+                                        : undefined
+                                }
                                 className={
                                     "px-6 py-3 rounded shadow-card font-title text-xl " +
-                                    (exporting
+                                    (exporting || illegal.length > 0
                                         ? "bg-gray-400 cursor-not-allowed text-midnight-light"
                                         : "bg-brass text-brass-ink hover:bg-brass-dark")
                                 }
                             >
                                 {exporting ? "Preparing..." : "Export PDF"}
                             </button>
-                            {authEnabled && (
-                                <SaveToProfileButton
-                                    plan={plan}
-                                    format={format}
-                                    formatLabel={formatLabel(format)}
-                                />
-                            )}
+                            {authEnabled &&
+                                (illegal.length > 0 ? (
+                                    <button
+                                        type="button"
+                                        disabled
+                                        title="Fix the matchups that board you below 60 first"
+                                        className="px-6 py-3 rounded shadow-card font-title text-xl bg-gray-400 cursor-not-allowed text-midnight-light"
+                                    >
+                                        Save to Profile
+                                    </button>
+                                ) : (
+                                    <SaveToProfileButton
+                                        plan={plan}
+                                        format={format}
+                                        formatLabel={formatLabel(format)}
+                                    />
+                                ))}
 
                                                         <button
                                 type="button"
