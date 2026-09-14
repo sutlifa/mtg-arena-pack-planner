@@ -2,10 +2,11 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { listGuides } from "@/lib/guides";
+import { listCollections, listAnalyses } from "@/lib/saved";
 import { hasDatabase } from "@/lib/db";
 import { isAuthConfigured } from "@/lib/authConfig";
 import PageHeader from "../components/PageHeader";
-import { DeleteGuideButton, DeleteAccountButton } from "../components/ProfileActions";
+import { DeleteGuideButton, DeleteAccountButton, DeleteSavedButton } from "../components/ProfileActions";
 
 export const metadata = {
     title: "Your Profile — MTG Card Acquiring Tool",
@@ -29,7 +30,13 @@ export default async function ProfilePage() {
         redirect("/signin?callbackUrl=%2Fprofile");
     }
 
-    const guides = hasDatabase && session.user.id ? await listGuides(session.user.id) : [];
+    const uid = session.user.id;
+    const ready = hasDatabase && uid;
+
+    // One round trip rather than three sequential ones.
+    const [guides, collections, analyses] = ready
+        ? await Promise.all([listGuides(uid), listCollections(uid), listAnalyses(uid)])
+        : [[], [], []];
 
     return (
         <div className="px-6 pt-8">
@@ -88,13 +95,106 @@ export default async function ProfilePage() {
                     )}
                 </section>
 
-                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
-                    <h2 className="text-2xl font-title flex items-center">Collections &amp; Comparisons</h2>
-                    <p className="text-ink/75 leading-relaxed">
-                        The tables for these exist, but the Pack Planner doesn&apos;t save into them
-                        yet — that&apos;s the next piece of work. Your collection is still kept in this
-                        browser in the meantime.
-                    </p>
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex items-center">Saved Collections</h2>
+
+                    {collections.length === 0 ? (
+                        <p className="text-ink/75 leading-relaxed">
+                            Nothing saved yet. Paste a collection in the{" "}
+                            <Link
+                                href="/"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                Pack Planner
+                            </Link>{" "}
+                            and press <strong>Save Collection</strong>.
+                        </p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {collections.map((c) => (
+                                <li
+                                    key={c.id}
+                                    className="flex flex-wrap items-center justify-between gap-3 bg-parchment rounded shadow-inner-parchment p-4"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="font-title text-lg truncate">{c.name}</p>
+                                        <p className="text-sm text-ink/60">
+                                            {c.arena_mode ? "Arena" : "Paper"} · {c.cards} line
+                                            {c.cards === 1 ? "" : "s"} · updated {formatDate(c.updated_at)}
+                                        </p>
+                                    </div>
+                                    <div className="shrink-0 flex items-center gap-1">
+                                        <Link
+                                            href={`/?collection=${c.id}`}
+                                            className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
+                                        >
+                                            Open
+                                        </Link>
+                                        <DeleteSavedButton
+                                            kind="collections"
+                                            id={c.id}
+                                            name={c.name}
+                                        />
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex items-center">Saved Comparisons</h2>
+
+                    {analyses.length === 0 ? (
+                        <p className="text-ink/75 leading-relaxed">
+                            Nothing saved yet. Add decklists in the{" "}
+                            <Link
+                                href="/"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                Pack Planner
+                            </Link>{" "}
+                            and press <strong>Save Comparison</strong>.
+                        </p>
+                    ) : (
+                        <>
+                            <ul className="space-y-2">
+                                {analyses.map((a) => (
+                                    <li
+                                        key={a.id}
+                                        className="flex flex-wrap items-center justify-between gap-3 bg-parchment rounded shadow-inner-parchment p-4"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-title text-lg truncate">{a.name}</p>
+                                            <p className="text-sm text-ink/60">
+                                                {a.arena_mode ? "Arena" : "Paper"} · {a.decks} deck
+                                                {a.decks === 1 ? "" : "s"} · updated{" "}
+                                                {formatDate(a.updated_at)}
+                                            </p>
+                                        </div>
+                                        <div className="shrink-0 flex items-center gap-1">
+                                            <Link
+                                                href={`/?analysis=${a.id}`}
+                                                className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
+                                            >
+                                                Open
+                                            </Link>
+                                            <DeleteSavedButton
+                                                kind="analyses"
+                                                id={a.id}
+                                                name={a.name}
+                                            />
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-xs text-ink/55 leading-relaxed">
+                                A comparison stores the decklists, collection and mode you used — not the
+                                result. Prices and Arena availability change, so opening one re-runs the
+                                comparison against today&apos;s data rather than showing a stale answer.
+                            </p>
+                        </>
+                    )}
                 </section>
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">

@@ -1,0 +1,55 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { hasDatabase } from "./db";
+
+/**
+ * Shared guards for the saved-work endpoints.
+ *
+ * Collections, analyses and guides all need the same three checks in the same
+ * order, and getting that order wrong is how an endpoint ends up leaking. One
+ * implementation means one place to audit.
+ */
+
+export const MAX_NAME_LENGTH = 120;
+export const MAX_TEXT_BYTES = 1_000_000;
+
+export type Guarded = { userId: number } | { response: NextResponse };
+
+export async function requireUser(): Promise<Guarded> {
+    if (!hasDatabase) {
+        return {
+            response: NextResponse.json(
+                { error: "Saving isn't configured on this deployment." },
+                { status: 503 }
+            ),
+        };
+    }
+
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) {
+        return { response: NextResponse.json({ error: "Not signed in" }, { status: 401 }) };
+    }
+
+    return { userId };
+}
+
+export function isGuardFailure(g: Guarded): g is { response: NextResponse } {
+    return "response" in g;
+}
+
+/** Validates a user-supplied save name, returning an error message or null. */
+export function checkName(name: unknown): string | null {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!trimmed) return "Give it a name";
+    if (trimmed.length > MAX_NAME_LENGTH) {
+        return `Name is too long (max ${MAX_NAME_LENGTH} characters)`;
+    }
+    return null;
+}
+
+/** Parses a positive integer route id, or null if it isn't one. */
+export function parseId(raw: string): number | null {
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+}

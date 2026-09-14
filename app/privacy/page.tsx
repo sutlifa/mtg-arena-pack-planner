@@ -94,10 +94,17 @@ export default function PrivacyPage() {
                                     the rest is so the site can show who is signed in.
                                 </li>
                                 <li>
-                                    <strong>Whatever you explicitly save.</strong> Today that means sideboard
-                                    guides saved with the <strong>Save to Profile</strong> button — the decklist,
-                                    format and matchup plans in that guide. Nothing is saved automatically;
-                                    pressing the button is the only way anything reaches the server for storage.
+                                    <strong>Whatever you explicitly save.</strong> That means sideboard guides
+                                    (the decklist, format and matchup plans), collections (the text you pasted,
+                                    kept verbatim), and comparisons (the decklists, collection and mode you
+                                    ran). Nothing is saved automatically — pressing a Save button is the only
+                                    way anything reaches the server for storage.
+                                </li>
+                                <li>
+                                    <strong>Results are never stored.</strong> A saved comparison keeps only
+                                    what you entered, not the prices or wildcard counts it produced. Those
+                                    change over time, so opening one re-runs it against current data rather
+                                    than showing you a stale answer.
                                 </li>
                             </ul>
 
@@ -112,9 +119,10 @@ export default function PrivacyPage() {
                             <p className="font-semibold pt-1">Deleting it</p>
                             <p>
                                 Your profile page has a <strong>Delete my account and saved data</strong>{" "}
-                                button. It removes your saved guides and your stored account details straight
-                                away — no request, no waiting, no email to write. You can also delete
-                                individual saved guides. Signing out on its own does not delete anything.
+                                button. It removes everything you have saved and your stored account details
+                                straight away — no request, no waiting, no email to write. You can also delete
+                                any individual guide, collection or comparison. Signing out on its own does
+                                not delete anything.
                             </p>
                         </div>
                     </section>
