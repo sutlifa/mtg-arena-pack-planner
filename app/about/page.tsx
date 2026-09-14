@@ -1,9 +1,9 @@
 import PageHeader from "../components/PageHeader";
 
 export const metadata = {
-    title: "About — MTG Card Acquiring Tool",
+    title: "About — MTG Planning App",
     description:
-        "What the MTG Card Acquiring Tool does, where its card data comes from, and the limits of what it can tell you.",
+        "What the MTG Planning App does, where its card data comes from, and the limits of what it can tell you.",
 };
 
 export default function AboutPage() {
@@ -12,7 +12,7 @@ export default function AboutPage() {
             <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
                 <PageHeader
                     title="About"
-                    subtitle="A free tool for working out what a decklist will actually cost you — in wildcards on Arena, or in dollars on paper."
+                    subtitle="Three free tools for planning a Magic deck — what it costs to build, what rotates out from under it, and how to sideboard against the field."
                     art="/art/banner-planner.svg"
                 />
 
@@ -25,15 +25,19 @@ export default function AboutPage() {
                             owns two of the four copies and has a stack of wildcards sitting unspent.
                         </p>
                         <p>
-                            This tool closes that gap. You paste in one or more decklists and the
+                            The Pack Planner closes that gap. You paste in one or more decklists and the
                             collection you already own, and it subtracts one from the other. What comes
                             back is only the part you still need to acquire, priced and counted.
+                        </p>
+                        <p>
+                            Two more tools grew out of the same idea — answering a concrete question about
+                            a real deck rather than showing you a card database.
                         </p>
                     </div>
                 </section>
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                    <h2 className="text-2xl font-title flex items-center">The two tools</h2>
+                    <h2 className="text-2xl font-title flex items-center">The three tools</h2>
                     <div className="space-y-4 leading-relaxed">
                         <div>
                             <h3 className="font-title text-xl mb-1">Pack Planner</h3>
@@ -52,6 +56,16 @@ export default function AboutPage() {
                                 counts as rotating if <em>every</em> Standard-legal printing it has is in a
                                 set that&apos;s leaving — if it&apos;s also printed in a set that&apos;s sticking around,
                                 including one that hasn&apos;t released yet, it stays.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 className="font-title text-xl mb-1">Sideboard Planner</h3>
+                            <p>
+                                Builds a matchup-by-matchup sideboard guide against the decks you&apos;ll
+                                actually face. Pull the current metagame for your format, tick the
+                                archetypes you care about, and record what comes out of your maindeck and
+                                in from your sideboard — with separate plans for the play and the draw
+                                where they differ. Prints to a single page for your deck box.
                             </p>
                         </div>
                     </div>
@@ -121,11 +135,33 @@ export default function AboutPage() {
                 </section>
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex items-center">Accounts</h2>
+                    <div className="space-y-3 leading-relaxed">
+                        <p>
+                            Every tool works without an account, and always will. Signing in with Google
+                            adds one thing: somewhere to save your work — collections, comparisons and
+                            sideboard guides — so it follows you to another device.
+                        </p>
+                        <p>
+                            Nothing is saved automatically. You can delete any saved item, or your whole
+                            account, from your profile page at any time. The{" "}
+                            <a
+                                href="/privacy"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                privacy policy
+                            </a>{" "}
+                            describes exactly what is stored.
+                        </p>
+                    </div>
+                </section>
+
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                     <h2 className="text-2xl font-title flex items-center">Project and affiliation</h2>
                     <div className="space-y-3 leading-relaxed">
                         <p>
-                            This is an independent hobby project, free to use, with no account to create
-                            and no paywall. The source is public on{" "}
+                            This is an independent hobby project, free to use, with no paywall. The
+                            source is public on{" "}
                             <a
                                 href="https://github.com/sutlifa/mtg-arena-pack-planner"
                                 target="_blank"

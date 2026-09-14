@@ -249,7 +249,7 @@ export default function PackPlannerSaves({
         return (
             <p className="text-sm text-ink/60 text-center">
                 <a
-                    href="/signin?callbackUrl=%2F"
+                    href="/signin?callbackUrl=%2Fplanner"
                     className="text-brand underline underline-offset-2 hover:text-brand-dark"
                 >
                     Sign in

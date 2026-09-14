@@ -2,7 +2,7 @@ import PageHeader from "../components/PageHeader";
 import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
-    title: "Privacy — MTG Card Acquiring Tool",
+    title: "Privacy — MTG Planning App",
     description:
         "What this site stores, what it sends, and which third parties are involved. No tracking, no ads, and an optional account you can delete yourself.",
 };

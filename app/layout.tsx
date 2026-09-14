@@ -8,7 +8,7 @@ import Footer from "./components/Footer";
 import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
-    title: "MTG Card Acquiring Tool",
+    title: "MTG Planning App",
     description:
         "Analyze decks against your collection, and get pack recommendations for arena or a shopping list for TCGPlayer.",
 };

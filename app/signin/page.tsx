@@ -4,7 +4,7 @@ import { signIn } from "@/auth";
 import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
-    title: "Sign in — MTG Card Acquiring Tool",
+    title: "Sign in — MTG Planning App",
     description: "Sign in with Google to save your sideboard guides, collections and comparisons.",
 };
 
