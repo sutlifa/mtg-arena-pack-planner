@@ -30,8 +30,8 @@ export default async function SignInPage({
     const redirectTo = isSafeInternalPath ? (callbackUrl as string) : "/";
 
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-md mx-auto py-16 px-6 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-md mx-auto py-16 px-3 sm:px-6 text-ink">
                 <div className="bg-parchment-dark shadow-card rounded-lg p-8 space-y-6 text-center">
                     <Image
                         src="/art/mark.svg"

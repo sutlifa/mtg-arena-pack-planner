@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import HelpTip from "./HelpTip";
+import FitText from "./FitText";
 import PageHeader from "./PageHeader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import PackPlannerSaves from "./PackPlannerSaves";
@@ -305,15 +306,18 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                     />
 
                     {/* DECK INPUTS */}
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-title flex items-center">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-6">
+                        {/* gap-3 + wrap rather than a bare justify-between: on a
+                            phone the heading and the button were each squeezed
+                            onto two lines fighting for the same row. */}
+                        <div className="flex flex-wrap justify-between items-center gap-3">
+                            <h2 className="text-xl sm:text-2xl font-title flex flex-wrap items-center whitespace-nowrap">
                                 Deck Lists
                                 <HelpTip text="Paste one or more decklists — plain text like '4 Lightning Bolt', or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you. Add more decks with '+ Add Deck' if you're comparing needs across several." />
                             </h2>
                             <button
                                 onPointerUp={addDeck}
-                                className="px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
+                                className="shrink-0 whitespace-nowrap px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
                             >
                                 + Add Deck
                             </button>
@@ -321,7 +325,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
                         {decks.map((deck, index) => (
                             <div key={index} className="space-y-2">
-                                <div className="flex justify-between items-center">
+                                <div className="flex flex-wrap justify-between items-center gap-2">
                                     <h3 className="font-title text-xl">Deck {index + 1}</h3>
                                     {index > 0 && (
                                         <button
@@ -367,9 +371,9 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
 
                     {/* COLLECTION INPUT */}
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
                         <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-title flex items-center">
+                            <h2 className="text-2xl font-title flex flex-wrap items-center">
                                 MTG Collection (Paper OR Arena)
                                 <HelpTip text="Paste what you already own — an Arena collection export, a CSV, or any list with quantities. We'll subtract this from what your decks need so you only see what's missing. Saved automatically in this browser, so you won't need to paste it again next time." />
                             </h2>
@@ -511,8 +515,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
 
                     {/* BREAKDOWN */}
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title flex items-center">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                        <h2 className="text-2xl font-title flex flex-wrap items-center">
                             Card Breakdown
                             <HelpTip text="Every card your decks need, after subtracting what you already own. In Paper Mode you'll also see an estimated price per card." />
                         </h2>
@@ -544,10 +548,19 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                             key={i}
                                             className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment border border-red-700/40"
                                         >
-                                            <div className="flex flex-col">
-                                                <p className="text-ink font-title text-lg">
-                                                    {fallbackName ?? item.card} — Need {item.needed}
-                                                </p>
+                                            <div className="flex flex-col min-w-0">
+                                                {/* Name on its own line so it can be fitted to the
+                                                    width; the count follows underneath rather than
+                                                    competing for the same line. */}
+                                                <FitText
+                                                    max={18}
+                                                    min={12}
+                                                    className="text-ink font-title"
+                                                    title={fallbackName ?? item.card}
+                                                >
+                                                    {fallbackName ?? item.card}
+                                                </FitText>
+                                                <p className="text-sm text-ink/70">Need {item.needed}</p>
                                                 <p className="text-red-700 text-sm mt-1">
                                                     {disableArena
                                                         ? "Not available in Paper — no real paper printing exists for this card."
@@ -627,7 +640,12 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 return (
                                     <div
                                         key={i}
-                                        className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment"
+                                        // flex-wrap + basis-full on the name: beside a thumbnail the
+                                        // text column is only ~119px on a phone, so even at the
+                                        // smallest readable size a long card name gets clipped.
+                                        // Giving it its own full-width line roughly doubles the room
+                                        // and lets it fit outright. Unchanged from sm up.
+                                        className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-4 p-4 bg-parchment rounded shadow-inner-parchment"
                                     >
                                         {img && (
                                             <Image
@@ -636,19 +654,35 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                                 alt={displayName}
                                                 width={96}
                                                 height={134}
-                                                className="w-24 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
+                                                className="w-20 sm:w-24 shrink-0 h-auto rounded shadow-card cursor-pointer hover:scale-105 transition-transform"
                                                 onClick={() => setZoomCard(item)}
                                             />
                                         )}
 
-                                        <div className="flex flex-col">
-                                            <p className="text-ink font-title text-lg">
-                                                {displayName} — Need {item.needed}
+                                        <FitText
+                                            max={18}
+                                            min={12}
+                                            className="text-ink font-title order-first basis-full sm:order-none sm:basis-auto sm:hidden"
+                                            title={displayName}
+                                        >
+                                            {displayName}
+                                        </FitText>
+
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <FitText
+                                                max={18}
+                                                min={12}
+                                                className="text-ink font-title hidden sm:block"
+                                                title={displayName}
+                                            >
+                                                {displayName}
+                                            </FitText>
+                                            <p className="text-sm text-ink/70">
+                                                Need {item.needed}
                                                 {!Number.isNaN(unitPrice) && (
-                                                    <span className="text-sm text-ink/70">
-                                                        {" "}
-                                                        · ${unitPrice.toFixed(2)} ea (${(unitPrice * item.needed).toFixed(2)} total)
-                                                    </span>
+                                                    <>
+                                                        {" · "}${unitPrice.toFixed(2)} ea (${(unitPrice * item.needed).toFixed(2)} total)
+                                                    </>
                                                 )}
                                             </p>
 
@@ -663,7 +697,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                             )}
 
                                             {modeVersions.length > 1 && (
-                                                <div className="mt-2 flex items-center gap-2">
+                                                <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0">
                                                     <input
                                                         type="range"
                                                         list={tickListId}
@@ -676,14 +710,14 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                                                 handleVersionChange(item.card, v.set, v.collector_number);
                                                             }
                                                         }}
-                                                        className="w-32 accent-brand"
+                                                        className="w-full max-w-32 accent-brand"
                                                     />
                                                     <datalist id={tickListId}>
                                                         {modeVersions.map((_, vi) => (
                                                             <option key={vi} value={vi} />
                                                         ))}
                                                     </datalist>
-                                                    <span className="text-xs text-ink/70">
+                                                    <span className="text-xs text-ink/70 min-w-0 break-words">
                                                         {printing?.set_name}
                                                         {printing?.variant ? ` · ${printing.variant}` : ""}
                                                         {" "}({selectedIndex + 1}/{modeVersions.length})
@@ -699,8 +733,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
 
                     {/* SHOPPING LIST */}
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                        <h2 className="text-2xl font-title flex items-center">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                        <h2 className="text-2xl font-title flex flex-wrap items-center">
                             {disableArena ? "TCGPlayer Shopping List" : "Arena Import"}
                             <HelpTip text="A plain-text list of exactly what's missing, formatted to paste straight into Arena's deck import (Arena Mode) or TCGPlayer's mass entry (Paper Mode)." />
                         </h2>
@@ -718,7 +752,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     } = shoppingListSummary();
 
                                     return (
-                                        <p className="text-ink font-title text-lg">
+                                        <p className="text-ink font-title text-base sm:text-lg break-words">
                                             {disableArena && (
                                                 <>
                                                     {total.toLocaleString("en-US", {
@@ -750,7 +784,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     Copy to Clipboard
                                 </button>
 
-                                <div className="bg-parchment rounded shadow-inner-parchment p-4">
+                                <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4">
                                     <pre className="whitespace-pre-wrap text-ink text-lg leading-relaxed">
                                         {shoppingList
                                             .map((item) => {
@@ -776,8 +810,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
                     {/* SET RECOMMENDATIONS — Only show in Arena Mode data stored in both modes*/}
                     {!disableArena && (
-                        <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                            <h2 className="text-2xl font-title flex items-center">
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                            <h2 className="text-2xl font-title flex flex-wrap items-center">
                                 Set Recommendations
                                 <HelpTip text="Missing cards grouped by set, so you can see which booster packs or draft picks would cover the most of what you need at once." />
                             </h2>
@@ -799,8 +833,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                                 className="p-4 bg-parchment rounded shadow-inner-parchment cursor-pointer"
                                                 onClick={() => toggleSet(code)}
                                             >
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-2xl font-title select-none">
+                                                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                                    <span className="text-2xl font-title select-none shrink-0">
                                                         {isOpen ? "▼" : "▶"}
                                                     </span>
 
@@ -810,12 +844,14 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                                             alt={code ?? "Set icon"}
                                                             width={40}
                                                             height={40}
-                                                            className="w-10 h-10 opacity-90"
+                                                            className="w-10 h-10 opacity-90 shrink-0"
                                                         />
                                                     )}
 
-                                                    <div>
-                                                        <p className="text-ink font-title text-xl">
+                                                    {/* min-w-0 so a long set name wraps instead of
+                                                        forcing the row wider than the screen. */}
+                                                    <div className="min-w-0">
+                                                        <p className="text-ink font-title text-lg sm:text-xl break-words">
                                                             {set.set_name}
                                                         </p>
                                                         <p className="text-ink text-sm">
@@ -861,8 +897,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
                     {/* WILDCARDS NEEDED — Arena Mode only */}
                     {!disableArena && (
-                        <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                            <h2 className="text-2xl font-title flex items-center">
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                            <h2 className="text-2xl font-title flex flex-wrap items-center">
                                 Wildcards Needed
                                 <HelpTip text="How many wildcards of each rarity you'd need to craft everything that's missing. Basic lands don't count — Arena gives you those for free." />
                             </h2>

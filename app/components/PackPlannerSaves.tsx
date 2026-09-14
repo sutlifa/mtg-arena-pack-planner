@@ -353,7 +353,7 @@ export default function PackPlannerSaves({
             </div>
 
             {draft && (
-                <div className="bg-parchment rounded shadow-inner-parchment p-4 space-y-3 max-w-lg mx-auto">
+                <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3 max-w-lg mx-auto">
                     <p className="font-title text-lg">
                         Save {draft.kind === "collection" ? "collection" : "comparison"}
                     </p>
@@ -436,13 +436,13 @@ export default function PackPlannerSaves({
 
             {open && (
                 <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="bg-parchment rounded shadow-inner-parchment p-4 space-y-3">
+                    <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3">
                         <p className="font-title text-lg">Collections</p>
                         <CollectionGroup title="Arena" items={arenaCollections} onPick={loadCollection} />
                         <CollectionGroup title="Paper" items={paperCollections} onPick={loadCollection} />
                     </div>
 
-                    <div className="bg-parchment rounded shadow-inner-parchment p-4">
+                    <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4">
                         <p className="font-title text-lg mb-2">Comparisons</p>
                         {analyses.length === 0 ? (
                             <p className="text-sm text-ink/50">None saved.</p>

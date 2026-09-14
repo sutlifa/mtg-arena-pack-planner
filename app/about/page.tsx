@@ -8,8 +8,8 @@ export const metadata = {
 
 export default function AboutPage() {
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="About"
                     subtitle="Three free tools for planning a Magic deck — what it costs to build, what rotates out from under it, and how to sideboard against the field."

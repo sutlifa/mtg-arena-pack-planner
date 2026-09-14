@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "@/lib/deckSections";
+
+// useLayoutEffect warns during SSR; neither runs on the server, so useEffect
+// is an equivalent stand-in there.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export interface CardRow {
     qty: number;
@@ -31,6 +35,7 @@ export default function CardAutocomplete({
     onEnterCommit?: () => void;
 }) {
     const [open, setOpen] = useState(false);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     const [highlight, setHighlight] = useState(0);
     const wrapRef = useRef<HTMLDivElement>(null);
     const listId = useId();
@@ -70,6 +75,33 @@ export default function CardAutocomplete({
         return () => document.removeEventListener("pointerdown", onDocPointerDown);
     }, [open]);
 
+    // Shrink the typed card name until it sits on one line. An input clips
+    // rather than wraps, so a long name would otherwise be half-hidden with no
+    // sign of it; scaling down keeps the whole name visible. Floors at 10px,
+    // below which it clips rather than becoming unreadable.
+    useIsomorphicLayoutEffect(() => {
+        const el = nameInputRef.current;
+        if (!el) return;
+
+        const MAX = 14;
+        const MIN = 10;
+
+        const fit = () => {
+            el.style.fontSize = `${MAX}px`;
+            const available = el.clientWidth;
+            const needed = el.scrollWidth;
+            if (!available || !needed) return;
+            if (needed > available) {
+                el.style.fontSize = `${Math.max(MIN, Math.floor((MAX * available) / needed))}px`;
+            }
+        };
+
+        fit();
+        const observer = new ResizeObserver(fit);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [row.name]);
+
     const choose = (card: DeckCard) => {
         onChange({ name: card.name, qty: Math.min(Math.max(1, row.qty || 1), card.qty) });
         setOpen(false);
@@ -100,7 +132,7 @@ export default function CardAutocomplete({
     const overMax = matched !== null && row.qty > matched.qty;
 
     return (
-        <div ref={wrapRef} className="relative flex items-center gap-2">
+        <div ref={wrapRef} className="relative flex items-center gap-1.5 sm:gap-2">
             <input
                 type="number"
                 min={1}
@@ -113,13 +145,14 @@ export default function CardAutocomplete({
                     onChange({ ...row, qty: Math.min(Math.max(1, n), maxQty) });
                 }}
                 className={
-                    "w-14 shrink-0 px-2 py-1 rounded bg-parchment text-ink text-sm shadow-inner-parchment " +
+                    "w-12 sm:w-14 shrink-0 px-2 py-1 rounded bg-parchment text-ink text-sm shadow-inner-parchment " +
                     (overMax ? "ring-2 ring-red-600" : "")
                 }
             />
 
             <div className="relative flex-1 min-w-0">
                 <input
+                    ref={nameInputRef}
                     type="text"
                     role="combobox"
                     aria-expanded={open}
@@ -166,17 +199,28 @@ export default function CardAutocomplete({
                 )}
             </div>
 
+            {/* No fixed width here. This hint used to reserve w-14 (56px) — as
+                much as the quantity field — which on a 375px screen left the
+                card name itself 39px, i.e. unreadable. It now takes only what
+                it needs, and shrinks to a marker on small screens. */}
             {matched && (
-                <span className="shrink-0 text-xs text-ink/50 w-14" title="Copies available">
-                    of {matched.qty}
+                <span
+                    className="shrink-0 text-xs text-ink/50 tabular-nums"
+                    title={`You run ${matched.qty} of these`}
+                >
+                    /{matched.qty}
                 </span>
             )}
             {!matched && row.name.trim() !== "" && (
-                <span className="shrink-0 text-xs text-amber-700 w-14" title="Not found in this section of your deck">
-                    not in list
+                <span
+                    className="shrink-0 text-xs text-amber-700"
+                    title="Not in this part of your deck"
+                >
+                    <span className="sm:hidden" aria-hidden="true">!</span>
+                    <span className="hidden sm:inline">not in list</span>
+                    <span className="sr-only">Not in this part of your deck</span>
                 </span>
             )}
-            {!matched && row.name.trim() === "" && <span className="shrink-0 w-14" />}
 
             <button
                 type="button"

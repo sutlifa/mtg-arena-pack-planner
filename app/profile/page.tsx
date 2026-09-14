@@ -39,8 +39,8 @@ export default async function ProfilePage() {
         : [[], [], []];
 
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Your Profile"
                     subtitle={`Signed in as ${session.user.email ?? session.user.name ?? "you"}.`}

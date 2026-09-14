@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import HelpTip from "./HelpTip";
+import FitText from "./FitText";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 interface RotationSet {
@@ -72,9 +73,9 @@ function RotationCardRow({ item, accent }: { item: RotationCard; accent: "rotati
             )}
 
             <div className="flex flex-col gap-1.5 min-w-0">
-                <p className="text-ink font-title text-lg">
-                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
-                </p>
+                <FitText max={18} min={12} className="text-ink font-title" title={item.card}>
+                    {item.card} <span className="text-ink/70 font-normal">×{item.qty}</span>
+                </FitText>
 
                 <div className="flex flex-wrap gap-1.5">
                     {(item.sets ?? []).map((s, si) => (
@@ -107,9 +108,9 @@ function NotStandardCardRow({ item }: { item: RotationCard }) {
             )}
 
             <div className="flex flex-col gap-1.5 min-w-0">
-                <p className="text-ink font-title text-lg">
-                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
-                </p>
+                <FitText max={18} min={12} className="text-ink font-title" title={item.card}>
+                    {item.card} <span className="text-ink/70 font-normal">×{item.qty}</span>
+                </FitText>
 
                 {item.lastPrintedSet && (
                     <span className="inline-flex items-center gap-1 text-xs text-ink/60 w-fit">
@@ -187,14 +188,14 @@ export default function RotationChecker() {
 
     return (
         <div className="space-y-10">
-            <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                <h2 className="text-2xl font-title flex items-center">
+            <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                <h2 className="text-2xl font-title flex flex-wrap items-center">
                     Your Decklist
                     <HelpTip text="Paste a Standard decklist — or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you — to see which cards rotate out of the format and which stay legal. A card only rotates out if EVERY Standard-legal printing it has is in a set that's leaving. If it also has a printing in a set that's sticking around — including one that hasn't released yet — it's safe." />
                 </h2>
 
                 {result?.meta && (
-                    <div className="bg-parchment rounded shadow-inner-parchment p-4 text-ink space-y-2">
+                    <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 text-ink space-y-2">
                         <p className="font-title text-lg">
                             Next rotation: {formatRotationDate(result.meta.rotationDate)}
                         </p>
@@ -249,7 +250,7 @@ export default function RotationChecker() {
 
             {result && (
                 <>
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-3">
                         <h2 className="text-2xl font-title text-red-700 flex items-center">
                             Rotating Out ({result.rotating.length})
                             <HelpTip text="These cards' only Standard-legal printings are in sets leaving the format — after rotation, they won't be legal in Standard anymore." />
@@ -266,7 +267,7 @@ export default function RotationChecker() {
                         )}
                     </section>
 
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-3">
                         <h2 className="text-2xl font-title text-green-700 flex items-center">
                             Safe After Rotation ({result.safe.length})
                             <HelpTip text="These cards have a Standard-legal printing in a set that isn't rotating out (including sets not yet released), so they'll stay legal after rotation." />
@@ -284,7 +285,7 @@ export default function RotationChecker() {
                     </section>
 
                     {result.notStandard.length > 0 && (
-                        <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-3">
                             <h2 className="text-2xl font-title text-ink/80 flex items-center">
                                 Not Currently Standard-Legal ({result.notStandard.length})
                                 <HelpTip text="These weren't found in any current Standard-legal printing — either they're not a Standard card at all, or the name didn't match. Check for typos." />

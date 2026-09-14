@@ -20,8 +20,8 @@ export default function PrivacyPage() {
     const accounts = isAuthConfigured();
 
     return (
-        <div className="px-6 pt-8">
-            <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
+        <div className="px-3 sm:px-6 pt-8">
+            <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Privacy"
                     subtitle="No ads, no tracking, no data sold. An account is optional, and you can delete it yourself."
