@@ -1,5 +1,7 @@
 import Image from "next/image";
+import { notFound } from "next/navigation";
 import { signIn } from "@/auth";
+import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
     title: "Sign in — MTG Card Acquiring Tool",
@@ -11,6 +13,9 @@ export default async function SignInPage({
 }: {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+    // Nothing to sign in with on a deployment without Google credentials.
+    if (!isAuthConfigured()) notFound();
+
     const { callbackUrl } = await searchParams;
 
     // A single leading slash is not enough: "//evil.com" also starts with "/"

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { listGuides } from "@/lib/guides";
 import { hasDatabase } from "@/lib/db";
+import { isAuthConfigured } from "@/lib/authConfig";
 import PageHeader from "../components/PageHeader";
+import { DeleteGuideButton, DeleteAccountButton } from "../components/ProfileActions";
 
 export const metadata = {
     title: "Your Profile — MTG Card Acquiring Tool",
@@ -19,6 +21,8 @@ function formatDate(value: string | Date): string {
 }
 
 export default async function ProfilePage() {
+    if (!isAuthConfigured()) notFound();
+
     const session = await auth();
 
     if (!session?.user) {
@@ -69,12 +73,15 @@ export default async function ProfilePage() {
                                             {formatDate(g.updated_at)}
                                         </p>
                                     </div>
-                                    <Link
-                                        href={`/sideboard?guide=${g.id}`}
-                                        className="shrink-0 px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
-                                    >
-                                        Open
-                                    </Link>
+                                    <div className="shrink-0 flex items-center gap-1">
+                                        <Link
+                                            href={`/sideboard?guide=${g.id}`}
+                                            className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
+                                        >
+                                            Open
+                                        </Link>
+                                        <DeleteGuideButton id={g.id} name={g.name} />
+                                    </div>
                                 </li>
                             ))}
                         </ul>
@@ -88,6 +95,16 @@ export default async function ProfilePage() {
                         yet — that&apos;s the next piece of work. Your collection is still kept in this
                         browser in the meantime.
                     </p>
+                </section>
+
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
+                    <h2 className="text-2xl font-title flex items-center">Your Data</h2>
+                    <p className="text-ink/75 leading-relaxed">
+                        Deleting your account removes your saved guides and the name, email and
+                        avatar taken from your Google account. It happens immediately and cannot be
+                        undone. Signing out alone does not delete anything.
+                    </p>
+                    <DeleteAccountButton />
                 </section>
             </main>
         </div>

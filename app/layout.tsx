@@ -2,6 +2,7 @@ import "./globals.css";
 import AliasLoader from "./AliasLoader";
 import SiteNav from "./components/SiteNav";
 import Providers from "./components/Providers";
+import { isAuthConfigured } from "@/lib/authConfig";
 import ScrollToTop from "./components/ScrollToTop";
 import Footer from "./components/Footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -17,6 +18,8 @@ export default function RootLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const authEnabled = isAuthConfigured();
+
     return (
         <html lang="en">
             <body className="min-h-screen bg-fantasy-parchment flex flex-col">
@@ -30,7 +33,7 @@ export default function RootLayout({
                 {/* Load Arena → Printed name alias map on the client */}
                 <AliasLoader />
 
-                <SiteNav />
+                <SiteNav authEnabled={authEnabled} />
 
                 <div className="flex-1">
                     {children}

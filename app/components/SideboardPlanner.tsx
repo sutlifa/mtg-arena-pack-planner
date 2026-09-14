@@ -189,7 +189,7 @@ const EMPTY_PLAN: PlanState = {
     stash: {},
 };
 
-export default function SideboardPlanner() {
+export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean }) {
     // Everything persisted lives in one object so restoring from storage is a
     // single state update. Restoring field-by-field would fire a cascade of
     // synchronous setStates from the effect, which React flags as a source of
@@ -944,7 +944,7 @@ export default function SideboardPlanner() {
                             >
                                 {exporting ? "Preparing..." : "Export PDF"}
                             </button>
-                            {session?.user ? (
+                            {!authEnabled ? null : session?.user ? (
                                 <button
                                     type="button"
                                     onClick={saving ? undefined : saveToProfile}

@@ -1,33 +1,54 @@
 import PageHeader from "../components/PageHeader";
+import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
     title: "Privacy — MTG Card Acquiring Tool",
     description:
-        "What this site stores, what it sends, and which third parties are involved. No accounts, no tracking cookies.",
+        "What this site stores, what it sends, and which third parties are involved. No tracking, no ads, and an optional account you can delete yourself.",
 };
 
 /**
  * Written against what the code actually does rather than from a template.
- * If the data flow changes — new third-party script, anything persisted
- * server-side, a cookie — this page needs updating in the same change.
+ * If the data flow changes — new third-party script, anything else persisted
+ * server-side, a new cookie — this page needs updating in the same change.
+ *
+ * The account sections render only where sign-in is actually configured, so a
+ * deployment without Google credentials doesn't describe features it does not
+ * have.
  */
 export default function PrivacyPage() {
+    const accounts = isAuthConfigured();
+
     return (
         <div className="px-6 pt-8">
             <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Privacy"
-                    subtitle="No accounts, no tracking cookies, and your collection never leaves your own browser storage."
+                    subtitle="No ads, no tracking, no data sold. An account is optional, and you can delete it yourself."
                     art="/art/banner-rotation.svg"
                 />
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                     <h2 className="text-2xl font-title flex items-center">The short version</h2>
                     <ul className="list-disc list-outside pl-5 space-y-2 leading-relaxed">
-                        <li>There are no accounts, logins, or profiles. You are never asked who you are.</li>
-                        <li>Your saved collection is stored in your own browser and is never uploaded for storage.</li>
-                        <li>No advertising, no ad networks, no cross-site tracking, and no tracking cookies.</li>
-                        <li>Decklists you submit are processed to produce a result and are not written to any database or log.</li>
+                        <li>
+                            Every tool works without an account. Signing in is optional and only adds
+                            somewhere to save your work.
+                        </li>
+                        <li>
+                            Without an account, nothing you type is stored anywhere but your own browser.
+                        </li>
+                        <li>No advertising, no ad networks, no cross-site tracking, and no data is sold.</li>
+                        <li>
+                            Decklists you submit are used to produce a result and then discarded — they are
+                            never written to a database or a log.
+                        </li>
+                        {accounts && (
+                            <li>
+                                If you do sign in, you can delete your account and everything saved with it
+                                from your profile page, immediately and without asking anyone.
+                            </li>
+                        )}
                     </ul>
                 </section>
 
@@ -36,50 +57,95 @@ export default function PrivacyPage() {
                     <div className="space-y-3 leading-relaxed">
                         <p>
                             Two things are saved in your browser&apos;s{" "}
-                            <code className="px-1 rounded bg-parchment">localStorage</code> so you don&apos;t have
-                            to re-enter them next visit: the collection you paste into the Pack Planner
+                            <code className="px-1 rounded bg-parchment">localStorage</code> so you don&apos;t
+                            have to re-enter them next visit: the collection you paste into the Pack Planner
                             (under <code className="px-1 rounded bg-parchment">mtgpp:collection</code>), and
-                            the decklist, format and matchup plans you build in the Sideboard Planner
-                            (under <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
+                            the decklist, format and matchup plans you build in the Sideboard Planner (under{" "}
+                            <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
                         </p>
                         <p>
-                            That data stays on your device. It is not uploaded for storage, not tied to any
-                            identifier, and not readable by this site on any other device. Clearing it is
-                            immediate: use the <strong>Clear</strong> button next to the collection box, or
-                            <strong> Clear All</strong> in the Sideboard Planner, or clear site data in your
-                            browser. Clearing your browser storage also erases it, with no copy retained
-                            anywhere else.
-                        </p>
-                        <p>
-                            The site sets no cookies of its own.
+                            That data stays on your device. It is not tied to any identifier, and this site
+                            cannot read it on any other device. Clearing it is immediate: use the{" "}
+                            <strong>Clear</strong> button next to the collection box, or{" "}
+                            <strong>Clear All</strong> in the Sideboard Planner, or clear site data in your
+                            browser.
                         </p>
                     </div>
                 </section>
+
+                {accounts && (
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                        <h2 className="text-2xl font-title flex items-center">If you sign in</h2>
+                        <div className="space-y-3 leading-relaxed">
+                            <p>
+                                Signing in is entirely optional. It exists so your work can follow you to
+                                another device, and nothing about the tools changes if you never use it.
+                            </p>
+                            <p>
+                                Sign-in is handled by Google. This site never sees your Google password — Google
+                                confirms who you are and returns a small amount of profile information.
+                            </p>
+
+                            <p className="font-semibold pt-1">What is stored about you</p>
+                            <ul className="list-disc list-outside pl-5 space-y-2">
+                                <li>
+                                    <strong>Your Google account identifier, email address, display name and
+                                    avatar URL.</strong> The identifier is what links your saved work to you;
+                                    the rest is so the site can show who is signed in.
+                                </li>
+                                <li>
+                                    <strong>Whatever you explicitly save.</strong> Today that means sideboard
+                                    guides saved with the <strong>Save to Profile</strong> button — the decklist,
+                                    format and matchup plans in that guide. Nothing is saved automatically;
+                                    pressing the button is the only way anything reaches the server for storage.
+                                </li>
+                            </ul>
+
+                            <p className="font-semibold pt-1">Cookies</p>
+                            <p>
+                                Signing in sets one cookie: a session cookie holding a signed token that says
+                                you are logged in. It is not used for advertising or tracking, and it is the
+                                only cookie this site sets. Signing out clears it. If you never sign in, the
+                                site sets no cookies at all.
+                            </p>
+
+                            <p className="font-semibold pt-1">Deleting it</p>
+                            <p>
+                                Your profile page has a <strong>Delete my account and saved data</strong>{" "}
+                                button. It removes your saved guides and your stored account details straight
+                                away — no request, no waiting, no email to write. You can also delete
+                                individual saved guides. Signing out on its own does not delete anything.
+                            </p>
+                        </div>
+                    </section>
+                )}
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                     <h2 className="text-2xl font-title flex items-center">What gets sent to the server</h2>
                     <div className="space-y-3 leading-relaxed">
                         <p>
                             To compare a deck against your collection, the text you&apos;ve entered has to reach
-                            the server that does the matching. When you press Analyze or Check Rotation,
-                            your decklists — and, in the Pack Planner, your collection text — are sent to
-                            this site&apos;s own API so the comparison can be computed.
+                            the server that does the matching. When you press Analyze or Check Rotation, your
+                            decklists — and, in the Pack Planner, your collection text — are sent to this
+                            site&apos;s own API so the comparison can be computed.
                         </p>
                         <p>
-                            That text is used to build the response and then discarded. It is not saved to
-                            a database, not written to a file, and not recorded in an application log. It
-                            is not sold, shared, or used to build a profile.
+                            That text is used to build the response and then discarded. It is not saved to a
+                            database, not written to a file, and not recorded in an application log. It is not
+                            sold, shared, or used to build a profile.
                         </p>
                         <p>
-                            If you paste an MTGGoldfish deck link, the server fetches that page on your
-                            behalf so your browser doesn&apos;t have to. Only <code className="px-1 rounded bg-parchment">mtggoldfish.com</code>{" "}
-                            URLs are accepted, so this can&apos;t be used to make the server fetch arbitrary
-                            addresses.
+                            If you paste an MTGGoldfish deck link, the server fetches that page on your behalf
+                            so your browser doesn&apos;t have to. Only{" "}
+                            <code className="px-1 rounded bg-parchment">mtggoldfish.com</code> URLs are
+                            accepted, so this can&apos;t be used to make the server fetch arbitrary addresses.
                         </p>
                         <p>
-                            The Sideboard Planner is the exception to all of the above: it splits your
-                            decklist and builds your matchup plans entirely in your browser. Unless you
-                            paste a deck link for it to import, nothing you type there is sent anywhere.
+                            The Sideboard Planner does its work in your browser: splitting your decklist and
+                            building your matchup plans never involves the server.
+                            {accounts
+                                ? " It reaches the server only when you import a deck link, load the current metagame, or press Save to Profile."
+                                : " It reaches the server only when you import a deck link or load the current metagame."}
                         </p>
                     </div>
                 </section>
@@ -93,36 +159,47 @@ export default function PrivacyPage() {
                         </p>
                         <ul className="list-disc list-outside pl-5 space-y-2">
                             <li>
-                                <strong>Vercel</strong> — hosting. Serves the site and keeps standard
-                                request logs.
+                                <strong>Vercel</strong> — hosting. Serves the site and keeps standard request
+                                logs.
                             </li>
                             <li>
-                                <strong>Vercel Web Analytics</strong> — aggregate page-view counts. It is
-                                cookieless and does not track visitors across sites or build individual
-                                profiles.
+                                <strong>Vercel Web Analytics</strong> — aggregate page-view counts. Cookieless;
+                                it does not track visitors across sites or build individual profiles.
                             </li>
                             <li>
                                 <strong>Scryfall</strong> — card images and set symbols load directly from
                                 Scryfall&apos;s CDN, so your browser requests them from Scryfall.
                             </li>
                             <li>
-                                <strong>Google Fonts</strong> — the heading typeface is loaded from
-                                Google&apos;s font CDN.
+                                <strong>Google Fonts</strong> — the heading typeface is loaded from Google&apos;s
+                                font CDN.
                             </li>
                             <li>
-                                <strong>MTGGoldfish</strong> — contacted when you paste a deck link, and
-                                when the Sideboard Planner loads the current metagame for a format. Both
-                                requests are made by the server rather than your browser, and neither sends
-                                anything about you.
+                                <strong>MTGGoldfish</strong> — contacted when you paste a deck link, and when the
+                                Sideboard Planner loads the current metagame for a format. Both requests are made
+                                by the server rather than your browser, and neither sends anything about you.
                             </li>
+                            {accounts && (
+                                <>
+                                    <li>
+                                        <strong>Google (sign-in)</strong> — only if you choose to sign in. Google
+                                        handles the login and tells this site your account identifier, email, name
+                                        and avatar.
+                                    </li>
+                                    <li>
+                                        <strong>Neon</strong> — the hosted Postgres database where saved accounts
+                                        and guides live. Only used if you sign in and save something.
+                                    </li>
+                                </>
+                            )}
                             <li>
-                                <strong>PayPal</strong> — only if you choose to follow the donation link.
-                                Nothing is sent to PayPal unless you click it.
+                                <strong>PayPal</strong> — only if you choose to follow the donation link. Nothing
+                                is sent to PayPal unless you click it.
                             </li>
                         </ul>
                         <p>
-                            Each of these operates under its own privacy policy, which governs what it does
-                            with the requests it receives.
+                            Each of these operates under its own privacy policy, which governs what it does with
+                            the requests it receives.
                         </p>
                     </div>
                 </section>
@@ -131,14 +208,13 @@ export default function PrivacyPage() {
                     <h2 className="text-2xl font-title flex items-center">Children and changes</h2>
                     <div className="space-y-3 leading-relaxed">
                         <p>
-                            This site is not directed at children and deliberately collects no personal
-                            information from anyone, regardless of age.
+                            This site is not directed at children and collects no personal information from
+                            anyone beyond what is described above.
                         </p>
                         <p>
-                            If the data flow ever changes — a new third-party script, anything retained
-                            server-side — this page gets updated in the same change that introduces it. The
-                            site is open source, so the actual behaviour can be checked against these
-                            claims at any time on{" "}
+                            If the data flow changes again, this page gets updated in the same change that
+                            introduces it. The site is open source, so the actual behaviour can be checked
+                            against these claims at any time on{" "}
                             <a
                                 href="https://github.com/sutlifa/mtg-arena-pack-planner"
                                 target="_blank"

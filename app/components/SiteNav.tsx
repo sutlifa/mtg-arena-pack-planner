@@ -11,7 +11,7 @@ const TABS = [
     { href: "/sideboard", label: "Sideboard Planner" },
 ];
 
-export default function SiteNav() {
+export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
     const pathname = usePathname();
 
     return (
@@ -55,7 +55,7 @@ export default function SiteNav() {
                     })}
                 </nav>
 
-                <AuthButton />
+                {authEnabled && <AuthButton />}
             </div>
         </header>
     );
