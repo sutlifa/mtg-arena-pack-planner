@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import AuthButton from "./AuthButton";
 
 const TABS = [
-    { href: "/", label: "Pack Planner" },
+    { href: "/", label: "Home" },
+    { href: "/planner", label: "Pack Planner" },
     { href: "/rotation", label: "Standard Rotation" },
     { href: "/sideboard", label: "Sideboard Planner" },
 ];
@@ -30,7 +31,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
                         className="shrink-0"
                     />
                     <span className="font-title text-xl text-midnight-light tracking-wide group-hover:text-brass-light transition-colors">
-                        MTG Card Acquiring Tool
+                        MTG Planning App
                     </span>
                 </Link>
 

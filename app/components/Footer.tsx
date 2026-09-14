@@ -56,7 +56,7 @@ export default function Footer() {
                 </nav>
 
                 <div className="border-t border-brass/25 pt-5 text-sm text-midnight-light/80 text-center space-y-1">
-                    <p>© {year} MTG Card Acquiring Tool. All rights reserved.</p>
+                    <p>© {year} MTG Planning App. All rights reserved.</p>
                     <p className="text-midnight-light/65">
                         Not affiliated with, endorsed by, or sponsored by Wizards of the Coast. Card data
                         and images courtesy of Scryfall.

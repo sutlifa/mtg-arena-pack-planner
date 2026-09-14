@@ -3,7 +3,7 @@ import PageHeader from "../components/PageHeader";
 import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
-    title: "Sideboard Planner — MTG Card Acquiring Tool",
+    title: "Sideboard Planner — MTG Planning App",
     description:
         "Build a matchup-by-matchup sideboard guide from your decklist and the current metagame, then print it to one page.",
 };

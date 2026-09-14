@@ -1,7 +1,7 @@
 import PageHeader from "../components/PageHeader";
 
 export const metadata = {
-    title: "Report an Issue — MTG Card Acquiring Tool",
+    title: "Report an Issue — MTG Planning App",
     description:
         "Found a wrong price, a card marked unavailable that isn't, or something broken? Here's how to report it.",
 };

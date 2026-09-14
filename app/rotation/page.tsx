@@ -2,7 +2,7 @@ import RotationChecker from "../components/RotationChecker";
 import PageHeader from "../components/PageHeader";
 
 export const metadata = {
-    title: "Standard Rotation Checker — MTG Card Acquiring Tool",
+    title: "Standard Rotation Checker — MTG Planning App",
     description:
         "Paste a Standard decklist to see which cards rotate out at the next rotation and which stay legal.",
 };

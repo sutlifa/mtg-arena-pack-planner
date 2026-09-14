@@ -9,7 +9,7 @@ import PageHeader from "../components/PageHeader";
 import { DeleteGuideButton, DeleteAccountButton, DeleteSavedButton } from "../components/ProfileActions";
 
 export const metadata = {
-    title: "Your Profile — MTG Card Acquiring Tool",
+    title: "Your Profile — MTG Planning App",
     description: "Sideboard guides, collections and comparisons you've saved.",
 };
 
@@ -102,7 +102,7 @@ export default async function ProfilePage() {
                         <p className="text-ink/75 leading-relaxed">
                             Nothing saved yet. Paste a collection in the{" "}
                             <Link
-                                href="/"
+                                href="/planner"
                                 className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
                                 Pack Planner
@@ -139,7 +139,7 @@ export default async function ProfilePage() {
                                                     </div>
                                                     <div className="shrink-0 flex items-center gap-1">
                                                         <Link
-                                                            href={`/?collection=${c.id}`}
+                                                            href={`/planner?collection=${c.id}`}
                                                             className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
                                                         >
                                                             Open
@@ -171,7 +171,7 @@ export default async function ProfilePage() {
                         <p className="text-ink/75 leading-relaxed">
                             Nothing saved yet. Add decklists in the{" "}
                             <Link
-                                href="/"
+                                href="/planner"
                                 className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
                                 Pack Planner
@@ -196,7 +196,7 @@ export default async function ProfilePage() {
                                         </div>
                                         <div className="shrink-0 flex items-center gap-1">
                                             <Link
-                                                href={`/?analysis=${a.id}`}
+                                                href={`/planner?analysis=${a.id}`}
                                                 className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
                                             >
                                                 Open
