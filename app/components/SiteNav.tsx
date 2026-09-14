@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import AuthButton from "./AuthButton";
 
 const TABS = [
     { href: "/", label: "Pack Planner" },
@@ -10,7 +11,7 @@ const TABS = [
     { href: "/sideboard", label: "Sideboard Planner" },
 ];
 
-export default function SiteNav() {
+export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
     const pathname = usePathname();
 
     return (
@@ -53,6 +54,8 @@ export default function SiteNav() {
                         );
                     })}
                 </nav>
+
+                {authEnabled && <AuthButton />}
             </div>
         </header>
     );

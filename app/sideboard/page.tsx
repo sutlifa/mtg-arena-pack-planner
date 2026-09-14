@@ -1,5 +1,6 @@
 import SideboardPlanner from "../components/SideboardPlanner";
 import PageHeader from "../components/PageHeader";
+import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
     title: "Sideboard Planner — MTG Card Acquiring Tool",
@@ -18,7 +19,7 @@ export default function SideboardPage() {
                         art="/art/banner-rotation.svg"
                     />
                 </div>
-                <SideboardPlanner />
+                <SideboardPlanner authEnabled={isAuthConfigured()} />
             </main>
         </div>
     );
