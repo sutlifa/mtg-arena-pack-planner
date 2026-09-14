@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import AuthButton from "./AuthButton";
 
 const TABS = [
     { href: "/", label: "Pack Planner" },
@@ -53,6 +54,8 @@ export default function SiteNav() {
                         );
                     })}
                 </nav>
+
+                <AuthButton />
             </div>
         </header>
     );

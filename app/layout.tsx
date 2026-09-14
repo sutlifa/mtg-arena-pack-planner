@@ -1,6 +1,7 @@
 import "./globals.css";
 import AliasLoader from "./AliasLoader";
 import SiteNav from "./components/SiteNav";
+import Providers from "./components/Providers";
 import ScrollToTop from "./components/ScrollToTop";
 import Footer from "./components/Footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -19,6 +20,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className="min-h-screen bg-fantasy-parchment flex flex-col">
+                <Providers>
                 {/* Global heading font import */}
                 <link
                     href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap"
@@ -37,6 +39,7 @@ export default function RootLayout({
                 <Footer />
 
                 <ScrollToTop />
+                </Providers>
 
                 {/* Vercel Analytics */}
                 <Analytics />
