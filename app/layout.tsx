@@ -1,6 +1,7 @@
 import "./globals.css";
 import AliasLoader from "./AliasLoader";
 import SiteNav from "./components/SiteNav";
+import ScrollToTop from "./components/ScrollToTop";
 import Footer from "./components/Footer";
 import { Analytics } from "@vercel/analytics/next";
 
@@ -34,6 +35,8 @@ export default function RootLayout({
                 </div>
 
                 <Footer />
+
+                <ScrollToTop />
 
                 {/* Vercel Analytics */}
                 <Analytics />

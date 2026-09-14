@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTip from "./HelpTip";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
@@ -334,6 +334,117 @@ export default function SideboardPlanner() {
         setArchLoading(false);
     };
 
+    /* ---- printing ---- */
+
+    const printRef = useRef<HTMLDivElement>(null);
+    const [exporting, setExporting] = useState(false);
+
+    /**
+     * Prints the guide from an isolated iframe rather than calling
+     * window.print() on this page.
+     *
+     * window.print() blocks the main thread for as long as the dialog is open —
+     * that part is unavoidable — but it also makes the browser generate a print
+     * preview of the *entire* document. With 25 matchups that is ~1,800 nodes
+     * and 300-plus form controls, a fixed-attachment background image and a
+     * webfont, all re-laid-out in print media just to produce a sheet of about
+     * 250 static nodes. Printing a document that contains only the sheet cuts
+     * that work down to the part that actually ends up on paper, and makes the
+     * output deterministic: nothing from the editor can leak in because nothing
+     * from the editor is in the document.
+     *
+     * The page's own @media print rules are still the single source of truth for
+     * how the sheet looks — the iframe loads the same stylesheets rather than
+     * carrying a second copy of them. Falls back to window.print() if anything
+     * about the iframe path fails.
+     */
+    const exportSheet = () => {
+        const src = printRef.current;
+        if (!src) {
+            window.print();
+            return;
+        }
+
+        setExporting(true);
+
+        // Let the button paint its busy state before the dialog seizes the
+        // main thread; without this the click looks like a freeze.
+        setTimeout(() => {
+            let iframe: HTMLIFrameElement | null = null;
+            let settled = false;
+
+            const cleanup = () => {
+                if (iframe) {
+                    iframe.remove();
+                    iframe = null;
+                }
+                setExporting(false);
+            };
+
+            try {
+                // Same stylesheets as the page, so the printed sheet is styled by
+                // globals.css and there is no duplicated CSS to drift.
+                const head = Array.from(
+                    document.querySelectorAll('link[rel="stylesheet"], style')
+                )
+                    .map((n) => n.outerHTML)
+                    .join("");
+
+                const html =
+                    "<!doctype html><html><head><meta charset=\"utf-8\">" +
+                    head +
+                    "</head><body><div class=\"sb-print\">" +
+                    src.innerHTML +
+                    "</div></body></html>";
+
+                iframe = document.createElement("iframe");
+                iframe.setAttribute("aria-hidden", "true");
+                iframe.style.cssText =
+                    "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0;";
+
+                iframe.onload = () => {
+                    if (settled) return;
+
+                    // Appending an iframe fires load once for its initial
+                    // about:blank document, before srcdoc has parsed. Printing
+                    // on that event produces a blank page, so wait for the load
+                    // that actually carries the sheet.
+                    const doc = iframe?.contentDocument;
+                    if (!doc || !doc.querySelector(".sb-print-item")) return;
+
+                    settled = true;
+                    try {
+                        iframe?.contentWindow?.focus();
+                        iframe?.contentWindow?.print();
+                    } catch {
+                        window.print();
+                    }
+                    // Keep the frame alive briefly: removing it while the dialog
+                    // is still reading from it cancels the print in some browsers.
+                    setTimeout(cleanup, 1000);
+                };
+
+                // srcdoc before insertion, so the first load event that matters
+                // is the one for this content.
+                iframe.srcdoc = html;
+                document.body.appendChild(iframe);
+
+                // If the frame never loads, do not leave the user with a button
+                // stuck on "Preparing..." and no dialog.
+                setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    window.print();
+                }, 3000);
+            } catch {
+                settled = true;
+                cleanup();
+                window.print();
+            }
+        }, 0);
+    };
+
     const patch = (id: string, fields: Partial<Matchup>) =>
         setMatchups((prev) => prev.map((m) => (m.id === id ? { ...m, ...fields } : m)));
 
@@ -618,10 +729,17 @@ export default function SideboardPlanner() {
                         <div className="flex flex-wrap justify-center gap-3 pt-2">
                             <button
                                 type="button"
-                                onClick={() => window.print()}
-                                className="px-6 py-3 rounded shadow-card font-title text-xl bg-brass text-brass-ink hover:bg-brass-dark"
+                                onClick={exporting ? undefined : exportSheet}
+                                disabled={exporting}
+                                aria-busy={exporting}
+                                className={
+                                    "px-6 py-3 rounded shadow-card font-title text-xl " +
+                                    (exporting
+                                        ? "bg-gray-400 cursor-not-allowed text-midnight-light"
+                                        : "bg-brass text-brass-ink hover:bg-brass-dark")
+                                }
                             >
-                                Export PDF
+                                {exporting ? "Preparing..." : "Export PDF"}
                             </button>
                             <button
                                 type="button"
@@ -649,7 +767,7 @@ export default function SideboardPlanner() {
                 printed layout is deliberately separate markup rather than a
                 restyling of the editor, because fitting 25 matchups on one side
                 of one page needs inline card lists, not stacked input rows. */}
-            <div className="sb-print" aria-hidden="true">
+            <div ref={printRef} className="sb-print" aria-hidden="true">
                 <div className="sb-print-head">
                     <strong>Sideboard Guide</strong>
                     <span>
