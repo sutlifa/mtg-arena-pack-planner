@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS collections (
 CREATE INDEX IF NOT EXISTS collections_user_idx
   ON collections (user_id, updated_at DESC);
 
+-- A collection is identified by name AND mode, not name alone.
+--
+-- Arena and paper collections are different lists that people naturally give
+-- the same name ("My collection"), and under the original (user_id, name)
+-- constraint saving the second one silently overwrote the first via the
+-- upsert. Uniqueness now includes arena_mode so both can coexist, while
+-- re-saving the same name in the same mode still updates in place.
+ALTER TABLE collections DROP CONSTRAINT IF EXISTS collections_user_id_name_key;
+CREATE UNIQUE INDEX IF NOT EXISTS collections_user_name_mode_key
+  ON collections (user_id, name, arena_mode);
+
 -- A saved Pack Planner comparison: the decklists and collection that went in,
 -- plus the mode they were run under.
 --

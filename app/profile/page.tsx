@@ -110,35 +110,57 @@ export default async function ProfilePage() {
                             and press <strong>Save Collection</strong>.
                         </p>
                     ) : (
-                        <ul className="space-y-2">
-                            {collections.map((c) => (
-                                <li
-                                    key={c.id}
-                                    className="flex flex-wrap items-center justify-between gap-3 bg-parchment rounded shadow-inner-parchment p-4"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="font-title text-lg truncate">{c.name}</p>
-                                        <p className="text-sm text-ink/60">
-                                            {c.arena_mode ? "Arena" : "Paper"} · {c.cards} line
-                                            {c.cards === 1 ? "" : "s"} · updated {formatDate(c.updated_at)}
+                        <div className="space-y-5">
+                            {([
+                                { title: "Arena", items: collections.filter((c) => c.arena_mode) },
+                                { title: "Paper", items: collections.filter((c) => !c.arena_mode) },
+                            ] as const).map((group) => (
+                                <div key={group.title}>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-ink/60 mb-2">
+                                        {group.title} ({group.items.length})
+                                    </p>
+                                    {group.items.length === 0 ? (
+                                        <p className="text-sm text-ink/50">
+                                            No {group.title.toLowerCase()} collections saved.
                                         </p>
-                                    </div>
-                                    <div className="shrink-0 flex items-center gap-1">
-                                        <Link
-                                            href={`/?collection=${c.id}`}
-                                            className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
-                                        >
-                                            Open
-                                        </Link>
-                                        <DeleteSavedButton
-                                            kind="collections"
-                                            id={c.id}
-                                            name={c.name}
-                                        />
-                                    </div>
-                                </li>
+                                    ) : (
+                                        <ul className="space-y-2">
+                                            {group.items.map((c) => (
+                                                <li
+                                                    key={c.id}
+                                                    className="flex flex-wrap items-center justify-between gap-3 bg-parchment rounded shadow-inner-parchment p-4"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="font-title text-lg truncate">{c.name}</p>
+                                                        <p className="text-sm text-ink/60">
+                                                            {c.cards} line{c.cards === 1 ? "" : "s"} · updated{" "}
+                                                            {formatDate(c.updated_at)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="shrink-0 flex items-center gap-1">
+                                                        <Link
+                                                            href={`/?collection=${c.id}`}
+                                                            className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
+                                                        >
+                                                            Open
+                                                        </Link>
+                                                        <DeleteSavedButton
+                                                            kind="collections"
+                                                            id={c.id}
+                                                            name={c.name}
+                                                        />
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
                             ))}
-                        </ul>
+                            <p className="text-xs text-ink/55 leading-relaxed">
+                                Arena and paper collections are kept separately, so the same name can exist
+                                in both. Opening one switches the Pack Planner into that mode.
+                            </p>
+                        </div>
                     )}
                 </section>
 

@@ -59,9 +59,11 @@ export async function saveCollection(args: {
     const rows = await sql<{ id: number }[]>`
         INSERT INTO collections (user_id, name, raw_text, arena_mode)
         VALUES (${args.userId}, ${args.name}, ${args.rawText}, ${args.arenaMode})
-        ON CONFLICT (user_id, name) DO UPDATE SET
+        -- Matches the (user_id, name, arena_mode) unique index: re-saving the
+        -- same name in the same mode updates it, while the same name in the
+        -- other mode is a separate collection.
+        ON CONFLICT (user_id, name, arena_mode) DO UPDATE SET
           raw_text = EXCLUDED.raw_text,
-          arena_mode = EXCLUDED.arena_mode,
           updated_at = now()
         RETURNING id
     `;
