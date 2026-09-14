@@ -5,7 +5,7 @@ import HelpTip from "./HelpTip";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
-import { SUPPORTED_FORMATS, MAX_ARCHETYPES, formatLabel } from "@/lib/formats";
+import { SUPPORTED_FORMATS, MAX_ARCHETYPES, ONE_PAGE_MATCHUPS, formatLabel } from "@/lib/formats";
 
 const STORAGE_KEY = "mtgpp:sideboard";
 
@@ -154,6 +154,11 @@ function PlanPair({
 /* Main component                                                      */
 /* ------------------------------------------------------------------ */
 
+interface Archetype {
+    name: string;
+    pct: number | null;
+}
+
 interface PlanState {
     /** What is currently in the textarea. */
     decklist: string;
@@ -164,14 +169,23 @@ interface PlanState {
     format: string;
     count: number;
     matchups: Matchup[];
+    /** The archetypes pulled from the metagame, for the picker. */
+    available: Archetype[];
+    /**
+     * Plans for archetypes the user has unchecked. Unticking a box should hide
+     * a matchup, not destroy work — re-ticking it brings the plan back.
+     */
+    stash: Record<string, Matchup>;
 }
 
 const EMPTY_PLAN: PlanState = {
     decklist: "",
     loadedText: "",
     format: "modern",
-    count: 8,
+    count: 50,
     matchups: [],
+    available: [],
+    stash: {},
 };
 
 export default function SideboardPlanner() {
@@ -187,7 +201,7 @@ export default function SideboardPlanner() {
     const [archLoading, setArchLoading] = useState(false);
     const [archError, setArchError] = useState<string | null>(null);
 
-    const { decklist, format, count, matchups } = plan;
+    const { decklist, format, count, matchups, available } = plan;
 
     const setDecklist = (v: string) => setPlan((p) => ({ ...p, decklist: v }));
     const setFormat = (v: string) => setPlan((p) => ({ ...p, format: v }));
@@ -236,6 +250,9 @@ export default function SideboardPlanner() {
                             drawIn: m.drawIn ?? [],
                         }))
                         : [],
+                    available: Array.isArray(parsed.available) ? parsed.available : [],
+                    stash:
+                        parsed.stash && typeof parsed.stash === "object" ? parsed.stash : {},
                 };
                 setPlan(restored);
             }
@@ -319,19 +336,89 @@ export default function SideboardPlanner() {
                 return;
             }
 
-            // Keep any plan the user already wrote for an archetype of the same
-            // name — reloading the metagame should not wipe their work.
-            setMatchups((prev) => {
-                const byName = new Map(prev.map((m) => [m.name.toLowerCase(), m]));
-                return data.archetypes.map((a: { name: string; pct: number | null }) => {
-                    const existing = byName.get(a.name.toLowerCase());
-                    return existing ? { ...existing, pct: a.pct } : emptyMatchup(a.name, a.pct);
-                });
+            // Only fills the picker. Nothing is added to the guide until the
+            // user ticks it, and refreshing the metagame leaves existing plans
+            // alone — it just refreshes each one's metagame share.
+            setPlan((p) => {
+                const pcts = new Map<string, number | null>(
+                    data.archetypes.map((a: Archetype) => [a.name.toLowerCase(), a.pct])
+                );
+                return {
+                    ...p,
+                    available: data.archetypes,
+                    matchups: p.matchups.map((m) =>
+                        pcts.has(m.name.toLowerCase())
+                            ? { ...m, pct: pcts.get(m.name.toLowerCase()) ?? m.pct }
+                            : m
+                    ),
+                };
             });
         } catch {
             setArchError("Could not load the current metagame.");
         }
         setArchLoading(false);
+    };
+
+    /** Whether an archetype is currently in the guide. */
+    const isIncluded = (name: string) =>
+        matchups.some((m) => m.name.toLowerCase() === name.toLowerCase());
+
+    /**
+     * Tick / untick an archetype. Unticking stashes its plan rather than
+     * dropping it, so an accidental click costs nothing.
+     */
+    const toggleArchetype = (a: Archetype) => {
+        const key = a.name.toLowerCase();
+
+        setPlan((p) => {
+            const existing = p.matchups.find((m) => m.name.toLowerCase() === key);
+
+            if (existing) {
+                return {
+                    ...p,
+                    matchups: p.matchups.filter((m) => m.name.toLowerCase() !== key),
+                    stash: { ...p.stash, [key]: existing },
+                };
+            }
+
+            const revived = p.stash[key];
+            const nextStash = { ...p.stash };
+            delete nextStash[key];
+
+            return {
+                ...p,
+                matchups: [...p.matchups, revived ? { ...revived, pct: a.pct } : emptyMatchup(a.name, a.pct)],
+                stash: nextStash,
+            };
+        });
+    };
+
+    /** Clear the guide, stashing every plan so nothing is lost. */
+    const untickAll = () =>
+        setPlan((p) => {
+            const nextStash = { ...p.stash };
+            for (const m of p.matchups) nextStash[m.name.toLowerCase()] = m;
+            return { ...p, matchups: [], stash: nextStash };
+        });
+
+    /** Tick the first n archetypes by metagame share, leaving the rest alone. */
+    const selectTop = (n: number) => {
+        setPlan((p) => {
+            const wanted = p.available.slice(0, n);
+            const have = new Set(p.matchups.map((m) => m.name.toLowerCase()));
+            const nextStash = { ...p.stash };
+
+            const added = wanted
+                .filter((a) => !have.has(a.name.toLowerCase()))
+                .map((a) => {
+                    const key = a.name.toLowerCase();
+                    const revived = nextStash[key];
+                    delete nextStash[key];
+                    return revived ? { ...revived, pct: a.pct } : emptyMatchup(a.name, a.pct);
+                });
+
+            return { ...p, matchups: [...p.matchups, ...added], stash: nextStash };
+        });
     };
 
     /* ---- printing ---- */
@@ -551,7 +638,7 @@ export default function SideboardPlanner() {
                         </label>
 
                         <label className="flex flex-col gap-1">
-                            <span className="text-sm text-ink/70">Archetypes (1–{MAX_ARCHETYPES})</span>
+                            <span className="text-sm text-ink/70">Pull top (1–{MAX_ARCHETYPES})</span>
                             <input
                                 type="number"
                                 min={1}
@@ -577,7 +664,7 @@ export default function SideboardPlanner() {
                                     : "bg-brand text-midnight-light hover:bg-brand-dark")
                             }
                         >
-                            {archLoading ? "Loading..." : `Load Top ${count}`}
+                            {archLoading ? "Loading..." : "Load Metagame"}
                         </button>
 
                         <button
@@ -590,6 +677,79 @@ export default function SideboardPlanner() {
                     </div>
 
                     {archError && <p className="text-red-700 text-sm">{archError}</p>}
+
+                    {available.length > 0 && (
+                        <div className="space-y-3 pt-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm text-ink/70">
+                                    {available.length} archetypes in the current {formatLabel(format)} metagame
+                                    &mdash; tick the ones you want in your guide.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => selectTop(10)}
+                                        className="text-xs px-2 py-1 rounded bg-parchment text-ink hover:bg-parchment/70 shadow-inner-parchment"
+                                    >
+                                        Tick top 10
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => selectTop(ONE_PAGE_MATCHUPS)}
+                                        className="text-xs px-2 py-1 rounded bg-parchment text-ink hover:bg-parchment/70 shadow-inner-parchment"
+                                    >
+                                        Tick top {ONE_PAGE_MATCHUPS}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={untickAll}
+                                        className="text-xs px-2 py-1 rounded bg-parchment text-ink hover:bg-parchment/70 shadow-inner-parchment"
+                                    >
+                                        Untick all
+                                    </button>
+                                </div>
+                            </div>
+
+                            <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 max-h-96 overflow-y-auto bg-parchment rounded shadow-inner-parchment p-3">
+                                {available.map((a) => {
+                                    const on = isIncluded(a.name);
+                                    return (
+                                        <li key={a.name}>
+                                            <label
+                                                className={
+                                                    "flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-sm " +
+                                                    (on ? "bg-brass/20 text-ink" : "text-ink/85 hover:bg-brass/10")
+                                                }
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={on}
+                                                    onChange={() => toggleArchetype(a)}
+                                                    className="accent-[#2f4a3a] shrink-0"
+                                                />
+                                                <span className="truncate flex-1" title={a.name}>{a.name}</span>
+                                                {a.pct !== null && (
+                                                    <span className="shrink-0 text-xs text-ink/50">{a.pct}%</span>
+                                                )}
+                                            </label>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+
+                            <p
+                                className={
+                                    "text-sm " +
+                                    (matchups.length > ONE_PAGE_MATCHUPS ? "text-amber-700" : "text-ink/70")
+                                }
+                            >
+                                {matchups.length} selected for your guide.
+                                {matchups.length > ONE_PAGE_MATCHUPS
+                                    ? ` Around ${ONE_PAGE_MATCHUPS} fully written matchups fills a printed page, so this many may run onto a second — it depends how much you write.`
+                                    : ""}
+                            </p>
+                        </div>
+                    )}
                 </section>
 
                 {/* ---- matchups ---- */}
