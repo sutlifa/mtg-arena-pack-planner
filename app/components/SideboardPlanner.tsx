@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTip from "./HelpTip";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
-import { useSession } from "next-auth/react";
+import SaveToProfileButton from "./SaveToProfileButton";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import { SUPPORTED_FORMATS, MAX_ARCHETYPES, ONE_PAGE_MATCHUPS, formatLabel } from "@/lib/formats";
@@ -420,48 +420,6 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
             return { ...p, matchups: [...p.matchups, ...added], stash: nextStash };
         });
-    };
-
-    /* ---- saving to a profile ---- */
-
-    const { data: session } = useSession();
-    const [saving, setSaving] = useState(false);
-    const [saveMsg, setSaveMsg] = useState<string | null>(null);
-
-    const saveToProfile = async () => {
-        const suggested =
-            matchups.length > 0 ? `${formatLabel(format)} sideboard guide` : "Sideboard guide";
-        const name = window.prompt("Save this guide as:", suggested);
-        if (name === null) return; // cancelled
-        if (!name.trim()) {
-            setSaveMsg("Give the guide a name.");
-            return;
-        }
-
-        setSaving(true);
-        setSaveMsg(null);
-        try {
-            const res = await fetch("/api/guides", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                // The whole plan goes up as-is: it is the same object already
-                // kept in localStorage, so a saved guide and a local one are
-                // the same shape and load into the editor identically.
-                body: JSON.stringify({ name: name.trim(), format, plan }),
-            });
-            const data = await res.json().catch(() => ({}));
-
-            if (res.status === 401) {
-                setSaveMsg("Sign in first to save to your profile.");
-            } else if (!res.ok) {
-                setSaveMsg(data.error ?? "Could not save that guide.");
-            } else {
-                setSaveMsg(`Saved as "${data.name}".`);
-            }
-        } catch {
-            setSaveMsg("Could not save that guide.");
-        }
-        setSaving(false);
     };
 
     /* ---- printing ---- */
@@ -944,30 +902,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             >
                                 {exporting ? "Preparing..." : "Export PDF"}
                             </button>
-                            {!authEnabled ? null : session?.user ? (
-                                <button
-                                    type="button"
-                                    onClick={saving ? undefined : saveToProfile}
-                                    disabled={saving}
-                                    className={
-                                        "px-6 py-3 rounded shadow-card font-title text-xl " +
-                                        (saving
-                                            ? "bg-gray-400 cursor-not-allowed text-midnight-light"
-                                            : "bg-brand text-midnight-light hover:bg-brand-dark")
-                                    }
-                                >
-                                    {saving ? "Saving..." : "Save to Profile"}
-                                </button>
-                            ) : (
-                                <a
-                                    href="/signin?callbackUrl=%2Fsideboard"
-                                    className="px-6 py-3 rounded shadow-card font-title text-xl bg-parchment text-ink hover:bg-parchment/70"
-                                >
-                                    Sign in to Save
-                                </a>
+                            {authEnabled && (
+                                <SaveToProfileButton
+                                    plan={plan}
+                                    format={format}
+                                    formatLabel={formatLabel(format)}
+                                />
                             )}
 
-                            <button
+                                                        <button
                                 type="button"
                                 onClick={() => {
                                     if (confirm("Clear every matchup and plan? This cannot be undone.")) {
@@ -979,12 +922,6 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                 Clear All
                             </button>
                         </div>
-
-                        {saveMsg && (
-                            <p className="text-sm text-center text-ink/80" role="status">
-                                {saveMsg}
-                            </p>
-                        )}
 
                         <p className="text-xs text-ink/55 text-center">
                             Export opens your browser&apos;s print dialog — choose &quot;Save as PDF&quot; as the

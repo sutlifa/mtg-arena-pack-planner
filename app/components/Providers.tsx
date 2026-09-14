@@ -17,6 +17,20 @@ import { SessionProvider } from "next-auth/react";
  * Anything that actually gates on identity — the save endpoints — checks the
  * session on the server, where it cannot be spoofed.
  */
-export default function Providers({ children }: { children: React.ReactNode }) {
+export default function Providers({
+    children,
+    authEnabled,
+}: {
+    children: React.ReactNode;
+    authEnabled: boolean;
+}) {
+    // SessionProvider fetches /api/auth/session as soon as it mounts. On a
+    // deployment with no Google credentials that endpoint returns 500, so
+    // mounting it unconditionally meant every visitor triggered two failing
+    // requests and a console error on every page load, even though no
+    // sign-in UI was rendered. When auth is off there is no session to
+    // provide, so the provider is skipped entirely.
+    if (!authEnabled) return <>{children}</>;
+
     return <SessionProvider>{children}</SessionProvider>;
 }
