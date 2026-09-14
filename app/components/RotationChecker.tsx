@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import HelpTip from "./HelpTip";
+import FitText from "./FitText";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 
 interface RotationSet {
@@ -72,9 +73,9 @@ function RotationCardRow({ item, accent }: { item: RotationCard; accent: "rotati
             )}
 
             <div className="flex flex-col gap-1.5 min-w-0">
-                <p className="text-ink font-title text-lg">
-                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
-                </p>
+                <FitText max={18} min={12} className="text-ink font-title" title={item.card}>
+                    {item.card} <span className="text-ink/70 font-normal">×{item.qty}</span>
+                </FitText>
 
                 <div className="flex flex-wrap gap-1.5">
                     {(item.sets ?? []).map((s, si) => (
@@ -107,9 +108,9 @@ function NotStandardCardRow({ item }: { item: RotationCard }) {
             )}
 
             <div className="flex flex-col gap-1.5 min-w-0">
-                <p className="text-ink font-title text-lg">
-                    {item.card} <span className="text-ink/70 text-base font-normal">×{item.qty}</span>
-                </p>
+                <FitText max={18} min={12} className="text-ink font-title" title={item.card}>
+                    {item.card} <span className="text-ink/70 font-normal">×{item.qty}</span>
+                </FitText>
 
                 {item.lastPrintedSet && (
                     <span className="inline-flex items-center gap-1 text-xs text-ink/60 w-fit">

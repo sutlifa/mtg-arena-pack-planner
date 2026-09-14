@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "@/lib/deckSections";
+
+// useLayoutEffect warns during SSR; neither runs on the server, so useEffect
+// is an equivalent stand-in there.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export interface CardRow {
     qty: number;
@@ -31,6 +35,7 @@ export default function CardAutocomplete({
     onEnterCommit?: () => void;
 }) {
     const [open, setOpen] = useState(false);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     const [highlight, setHighlight] = useState(0);
     const wrapRef = useRef<HTMLDivElement>(null);
     const listId = useId();
@@ -69,6 +74,33 @@ export default function CardAutocomplete({
         document.addEventListener("pointerdown", onDocPointerDown);
         return () => document.removeEventListener("pointerdown", onDocPointerDown);
     }, [open]);
+
+    // Shrink the typed card name until it sits on one line. An input clips
+    // rather than wraps, so a long name would otherwise be half-hidden with no
+    // sign of it; scaling down keeps the whole name visible. Floors at 10px,
+    // below which it clips rather than becoming unreadable.
+    useIsomorphicLayoutEffect(() => {
+        const el = nameInputRef.current;
+        if (!el) return;
+
+        const MAX = 14;
+        const MIN = 10;
+
+        const fit = () => {
+            el.style.fontSize = `${MAX}px`;
+            const available = el.clientWidth;
+            const needed = el.scrollWidth;
+            if (!available || !needed) return;
+            if (needed > available) {
+                el.style.fontSize = `${Math.max(MIN, Math.floor((MAX * available) / needed))}px`;
+            }
+        };
+
+        fit();
+        const observer = new ResizeObserver(fit);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [row.name]);
 
     const choose = (card: DeckCard) => {
         onChange({ name: card.name, qty: Math.min(Math.max(1, row.qty || 1), card.qty) });
@@ -120,6 +152,7 @@ export default function CardAutocomplete({
 
             <div className="relative flex-1 min-w-0">
                 <input
+                    ref={nameInputRef}
                     type="text"
                     role="combobox"
                     aria-expanded={open}

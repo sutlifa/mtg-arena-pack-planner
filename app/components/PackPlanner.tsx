@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import HelpTip from "./HelpTip";
+import FitText from "./FitText";
 import PageHeader from "./PageHeader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import PackPlannerSaves from "./PackPlannerSaves";
@@ -548,9 +549,18 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                             className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment border border-red-700/40"
                                         >
                                             <div className="flex flex-col min-w-0">
-                                                <p className="text-ink font-title text-base sm:text-lg break-words">
-                                                    {fallbackName ?? item.card} — Need {item.needed}
-                                                </p>
+                                                {/* Name on its own line so it can be fitted to the
+                                                    width; the count follows underneath rather than
+                                                    competing for the same line. */}
+                                                <FitText
+                                                    max={18}
+                                                    min={12}
+                                                    className="text-ink font-title"
+                                                    title={fallbackName ?? item.card}
+                                                >
+                                                    {fallbackName ?? item.card}
+                                                </FitText>
+                                                <p className="text-sm text-ink/70">Need {item.needed}</p>
                                                 <p className="text-red-700 text-sm mt-1">
                                                     {disableArena
                                                         ? "Not available in Paper — no real paper printing exists for this card."
@@ -630,7 +640,12 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 return (
                                     <div
                                         key={i}
-                                        className="flex items-center gap-4 p-4 bg-parchment rounded shadow-inner-parchment"
+                                        // flex-wrap + basis-full on the name: beside a thumbnail the
+                                        // text column is only ~119px on a phone, so even at the
+                                        // smallest readable size a long card name gets clipped.
+                                        // Giving it its own full-width line roughly doubles the room
+                                        // and lets it fit outright. Unchanged from sm up.
+                                        className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-4 p-4 bg-parchment rounded shadow-inner-parchment"
                                     >
                                         {img && (
                                             <Image
@@ -644,14 +659,30 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                             />
                                         )}
 
-                                        <div className="flex flex-col min-w-0">
-                                            <p className="text-ink font-title text-base sm:text-lg break-words">
-                                                {displayName} — Need {item.needed}
+                                        <FitText
+                                            max={18}
+                                            min={12}
+                                            className="text-ink font-title order-first basis-full sm:order-none sm:basis-auto sm:hidden"
+                                            title={displayName}
+                                        >
+                                            {displayName}
+                                        </FitText>
+
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <FitText
+                                                max={18}
+                                                min={12}
+                                                className="text-ink font-title hidden sm:block"
+                                                title={displayName}
+                                            >
+                                                {displayName}
+                                            </FitText>
+                                            <p className="text-sm text-ink/70">
+                                                Need {item.needed}
                                                 {!Number.isNaN(unitPrice) && (
-                                                    <span className="text-sm text-ink/70">
-                                                        {" "}
-                                                        · ${unitPrice.toFixed(2)} ea (${(unitPrice * item.needed).toFixed(2)} total)
-                                                    </span>
+                                                    <>
+                                                        {" · "}${unitPrice.toFixed(2)} ea (${(unitPrice * item.needed).toFixed(2)} total)
+                                                    </>
                                                 )}
                                             </p>
 

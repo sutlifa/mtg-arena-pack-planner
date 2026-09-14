@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTip from "./HelpTip";
+import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import SaveToProfileButton from "./SaveToProfileButton";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
@@ -726,7 +727,11 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                 </p>
                                 <ul className="text-sm text-ink/85 space-y-0.5 max-h-64 overflow-y-auto">
                                     {maindeck.map((c) => (
-                                        <li key={c.name}>{c.qty} {c.name}</li>
+                                        <li key={c.name}>
+                                                <FitText max={14} min={10} title={`${c.qty} ${c.name}`}>
+                                                    {c.qty} {c.name}
+                                                </FitText>
+                                            </li>
                                     ))}
                                 </ul>
                             </div>
@@ -744,7 +749,11 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                 ) : (
                                     <ul className="text-sm text-ink/85 space-y-0.5 max-h-64 overflow-y-auto">
                                         {sideboard.map((c) => (
-                                            <li key={c.name}>{c.qty} {c.name}</li>
+                                            <li key={c.name}>
+                                                <FitText max={14} min={10} title={`${c.qty} ${c.name}`}>
+                                                    {c.qty} {c.name}
+                                                </FitText>
+                                            </li>
                                         ))}
                                     </ul>
                                 )}
