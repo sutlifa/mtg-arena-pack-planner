@@ -7,10 +7,21 @@ import { lookupRotation, getRotationMeta } from "@/lib/standardRotation";
 import { BASIC_LAND_NAMES } from "@/lib/basicLands";
 import { lookupCard } from "@/lib/scryfall";
 import { checkDecklistSize } from "@/lib/inputLimits";
+import { readJsonBody } from "@/lib/requestBody";
 
 export async function POST(req: Request) {
     try {
-        const { decklist } = await req.json();
+        // A body that is not JSON is bad input, not a server fault — parse it
+        // before the try block's catch can turn a SyntaxError into a 500.
+        const body = await readJsonBody(req);
+        if (!body) {
+            return NextResponse.json(
+                { error: "That request could not be read — expected a JSON body." },
+                { status: 400 }
+            );
+        }
+
+        const { decklist } = body;
 
         // Same reasoning as /api/analyze — public, unauthenticated, per-line.
         const sizeError = checkDecklistSize(decklist);

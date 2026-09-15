@@ -5,6 +5,7 @@ import Image from "next/image";
 import HelpTip from "./HelpTip";
 import FitText from "./FitText";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
+import { activate } from "./activate";
 
 interface RotationSet {
     set: string;
@@ -125,23 +126,46 @@ function NotStandardCardRow({ item }: { item: RotationCard }) {
     );
 }
 
+/**
+ * What /api/rotation can answer with: the full result, or just an `error`
+ * string (the 413 size limit, a 400 bad body). Typed as partial so a failed
+ * response can be read for its message without pretending it is a result.
+ */
+type RotationResponse = Partial<RotationResult> & { error?: string };
+
 export default function RotationChecker() {
     const [decklist, setDecklist] = useState("");
     const [result, setResult] = useState<RotationResult | null>(null);
     const [loading, setLoading] = useState(false);
-    const [importError, setImportError] = useState<string | null>(null);
+    // One error surface for the whole check. An import failure, an empty
+    // paste and a failed API call all read the same way to the user, and all
+    // three clear any previous result — see the note in checkRotation.
+    const [error, setError] = useState<string | null>(null);
 
     const checkRotation = async () => {
+        setError(null);
+
+        const trimmed = decklist.trim();
+
+        // An empty submit used to fire a request and render the whole results
+        // panel — "Rotating Out (0) — Nothing in this list is rotating out" —
+        // which a first-time visitor reads as a checked-and-clean verdict
+        // rather than "you gave me nothing". Same wording and shape as the
+        // Sideboard Planner's empty-list case.
+        if (!trimmed) {
+            setResult(null);
+            setError("No cards found in that list. Paste a decklist or an MTGGoldfish link.");
+            return;
+        }
+
         setLoading(true);
         try {
             // A pasted MTGGoldfish deck (or archetype) link resolves to its
             // real decklist text before checking rotation, same as the Pack
             // Planner.
             let currentDecklist = decklist;
-            const trimmed = decklist.trim();
 
             if (isGoldfishDeckUrl(trimmed)) {
-                setImportError(null);
                 try {
                     const importRes = await fetch("/api/import-deck", {
                         method: "POST",
@@ -154,17 +178,17 @@ export default function RotationChecker() {
                         currentDecklist = importData.decklist;
                         setDecklist(importData.decklist);
                     } else {
-                        setImportError("Couldn't import that MTGGoldfish link — check the URL and try again.");
+                        setResult(null);
+                        setError("Couldn't import that MTGGoldfish link — check the URL and try again.");
                         setLoading(false);
                         return;
                     }
                 } catch {
-                    setImportError("Couldn't import that MTGGoldfish link — check the URL and try again.");
+                    setResult(null);
+                    setError("Couldn't import that MTGGoldfish link — check the URL and try again.");
                     setLoading(false);
                     return;
                 }
-            } else {
-                setImportError(null);
             }
 
             const res = await fetch("/api/rotation", {
@@ -173,15 +197,29 @@ export default function RotationChecker() {
                 body: JSON.stringify({ decklist: currentDecklist }),
             });
 
-            if (!res.ok) {
-                console.error("Rotation API error:", await res.text());
+            // An error response is normally JSON carrying a user-facing
+            // `error`, but a proxy or a crash can return HTML — so parsing is
+            // allowed to fail without becoming the thing we report.
+            const data = (await res.json().catch(() => null)) as RotationResponse | null;
+
+            if (!res.ok || !data?.rotating || !data.safe || !data.notStandard || !data.meta) {
+                // Clearing the result is the important half. A failed check
+                // used to leave the PREVIOUS deck's panels on screen, so the
+                // last deck's verdict silently became this deck's answer —
+                // worse than showing nothing at all. Prefer the API's own
+                // message (e.g. the 413 size limit) when it sent one.
+                console.error("Rotation API error:", res.status, data?.error ?? "(no message)");
+                setResult(null);
+                setError(data?.error ?? "Couldn't check that decklist — please try again in a moment.");
                 setLoading(false);
                 return;
             }
 
-            setResult(await res.json());
+            setResult(data as RotationResult);
         } catch (err) {
             console.error("Rotation request failed:", err);
+            setResult(null);
+            setError("Couldn't check that decklist — check your connection and try again.");
         }
         setLoading(false);
     };
@@ -221,14 +259,14 @@ export default function RotationChecker() {
                     onChange={(e) => setDecklist(e.target.value)}
                 />
 
-                {importError && (
-                    <p className="text-red-700 text-sm">{importError}</p>
+                {error && (
+                    <p className="text-red-700 text-sm">{error}</p>
                 )}
 
                 <div className="flex justify-center">
                     <button
                         type="button"
-                        onPointerUp={!loading ? () => checkRotation() : undefined}
+                        {...activate(() => checkRotation(), { disabled: loading })}
                         disabled={loading}
                         className={
                             "px-6 py-3 rounded shadow-card font-title text-xl " +

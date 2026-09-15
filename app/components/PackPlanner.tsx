@@ -3,12 +3,35 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import HelpTip from "./HelpTip";
+import { activate } from "./activate";
 import FitText from "./FitText";
 import PageHeader from "./PageHeader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import PackPlannerSaves from "./PackPlannerSaves";
 
 const COLLECTION_STORAGE_KEY = "mtgpp:collection";
+
+type Wildcards = {
+    common: number;
+    uncommon: number;
+    rare: number;
+    mythic: number;
+    other: number;
+};
+
+/**
+ * What /api/analyze can answer with: a result, or just an `error` string (the
+ * 413 size limits, a 400 bad body). Every field is optional so a failed
+ * response can be read for its message without pretending it is a result.
+ */
+interface AnalyzeResponse {
+    breakdown?: any[];
+    shoppingList?: any[];
+    recommendations?: any[];
+    wildcards?: Wildcards | null;
+    missingCards?: string[];
+    error?: string;
+}
 
 export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     const [decks, setDecks] = useState<string[]>([""]);
@@ -17,15 +40,16 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     const [breakdown, setBreakdown] = useState<any[]>([]);
     const [shoppingList, setShoppingList] = useState<any[]>([]);
     const [recommendations, setRecommendations] = useState<any[]>([]);
-    const [wildcards, setWildcards] = useState<{
-        common: number;
-        uncommon: number;
-        rare: number;
-        mythic: number;
-        other: number;
-    } | null>(null);
+    const [wildcards, setWildcards] = useState<Wildcards | null>(null);
     const [missingCards, setMissingCards] = useState<string[]>([]);
+    // Two error surfaces, because they are two different things. importError
+    // is a *warning* about the deck boxes — a link that would not import —
+    // and the analysis still runs on whatever did import, so it belongs under
+    // the deck textareas next to the input it is about. analyzeError is
+    // terminal: the analysis produced nothing, so it sits at the Analyze
+    // button, the same place /rotation puts its failures.
     const [importError, setImportError] = useState<string | null>(null);
+    const [analyzeError, setAnalyzeError] = useState<string | null>(null);
     const [mergePaperCounts, setMergePaperCounts] = useState(false);
     const [disableArena, setDisableArena] = useState(false);
     const [openSets, setOpenSets] = useState<Record<string, boolean>>({});
@@ -88,9 +112,27 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
     const clearCollection = () => setCollection("");
 
+    /**
+     * Drop every piece of a previous analysis.
+     *
+     * Called whenever an analyze fails. Leaving the last run's breakdown,
+     * shopping list, wildcard counts and set recommendations on screen means
+     * the previous deck's numbers silently become the answer to the deck that
+     * was just submitted — a wrong verdict reads worse than no verdict, so a
+     * failure clears the board and says so. Same rule as the Rotation Checker.
+     */
+    const clearResults = () => {
+        setBreakdown([]);
+        setShoppingList([]);
+        setRecommendations([]);
+        setWildcards(null);
+        setMissingCards([]);
+    };
+
     const processAll = async (
         printingOverridesArg?: Record<string, { set: string; collector_number: string }>
     ) => {
+        setAnalyzeError(null);
         setLoading(true);
 
         try {
@@ -150,13 +192,20 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
             });
 
-            if (!res.ok) {
-                console.error("API error:", await res.text());
+            // An error response is normally JSON carrying a user-facing
+            // `error`, but a proxy or a crash can return HTML — so parsing is
+            // allowed to fail without becoming the thing we report.
+            const data = (await res.json().catch(() => null)) as AnalyzeResponse | null;
+
+            if (!res.ok || !Array.isArray(data?.breakdown)) {
+                console.error("Analyze API error:", res.status, data?.error ?? "(no message)");
+                clearResults();
+                setAnalyzeError(
+                    data?.error ?? "Couldn't analyze those decks — please try again in a moment."
+                );
                 setLoading(false);
                 return;
             }
-
-            const data = await res.json();
 
             setBreakdown(data.breakdown || []);
             setShoppingList(data.shoppingList || []);
@@ -174,6 +223,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
         } catch (err) {
             console.error("Request failed:", err);
+            clearResults();
+            setAnalyzeError("Couldn't analyze those decks — check your connection and try again.");
         }
 
         setLoading(false);
@@ -316,7 +367,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 <HelpTip text="Paste one or more decklists — plain text like '4 Lightning Bolt', or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you. Add more decks with '+ Add Deck' if you're comparing needs across several." />
                             </h2>
                             <button
-                                onPointerUp={addDeck}
+                                type="button"
+                                {...activate(addDeck)}
                                 className="shrink-0 whitespace-nowrap px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
                             >
                                 + Add Deck
@@ -329,7 +381,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     <h3 className="font-title text-xl">Deck {index + 1}</h3>
                                     {index > 0 && (
                                         <button
-                                            onPointerUp={() => removeDeck(index)}
+                                            type="button"
+                                            {...activate(() => removeDeck(index))}
                                             className="text-red-800 font-title hover:underline"
                                         >
                                             Remove
@@ -379,7 +432,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             </h2>
                             {collection && (
                                 <button
-                                    onPointerUp={clearCollection}
+                                    type="button"
+                                    {...activate(clearCollection)}
                                     className="text-red-800 font-title hover:underline"
                                 >
                                     Clear
@@ -397,15 +451,42 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                     {/* TOGGLE + BUTTON */}
                     <div className="text-center space-y-3">
 
-                        {/* Toggle Row */}
-                        <div className="flex items-center justify-center gap-6 font-title text-lg text-ink">
+                        {/* Toggle Row
+                            The two labels are buttons, not spans: clicking the
+                            word "Paper Mode" is the first thing people try, and
+                            as inert text it did nothing. They set a mode
+                            outright rather than toggling, so clicking the mode
+                            you are already in is a no-op instead of a surprise.
+                            Grouped so a screen reader reads the three controls
+                            as one switch with its two labels. */}
+                        <div
+                            role="group"
+                            aria-label="Card source mode"
+                            className="flex items-center justify-center gap-6 font-title text-lg text-ink"
+                        >
 
                             {/* Left label — always visible */}
-                            <span className="select-none">Arena Mode</span>
-
-                            {/* Toggle */}
                             <button
-                                onPointerUp={() => setDisableArena(!disableArena)}
+                                type="button"
+                                aria-pressed={!disableArena}
+                                {...activate(() => setDisableArena(false))}
+                                className="select-none cursor-pointer"
+                            >
+                                Arena Mode
+                            </button>
+
+                            {/* Toggle
+                                role="switch" + aria-checked is what gives this
+                                an announced state; without the aria-label it is
+                                an unlabelled button, because its only content is
+                                the knob <span>. "On" means Paper Mode, which is
+                                what disableArena tracks. */}
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={disableArena}
+                                aria-label="Paper Mode"
+                                {...activate(() => setDisableArena(!disableArena))}
                                 className={
                                     "relative w-20 h-10 rounded-full transition-colors duration-300 shadow-inner-parchment " +
                                     (disableArena ? "bg-brand" : "bg-parchment-dark")
@@ -420,7 +501,14 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             </button>
 
                             {/* Right label — always visible */}
-                            <span className="select-none">Paper Mode</span>
+                            <button
+                                type="button"
+                                aria-pressed={disableArena}
+                                {...activate(() => setDisableArena(true))}
+                                className="select-none cursor-pointer"
+                            >
+                                Paper Mode
+                            </button>
 
                             <HelpTip text="Arena Mode looks up Arena printings, caps most cards at 4 copies (basics and a few special cards are unlimited), and shows wildcard costs. Paper Mode looks up paper printings and shows real-world prices instead." />
                         </div>
@@ -440,14 +528,21 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
                         
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
+                            {/* Rendered once per breakpoint block rather than
+                                once above both: the desktop and mobile buttons
+                                sit in different places on the page, and a
+                                failure message a screen away from the button
+                                that produced it is a message nobody reads.
+                                Only one block is ever displayed, so this is
+                                never duplicated on screen or in the
+                                accessibility tree. */}
+                            {analyzeError && (
+                                <p className="text-red-700 text-sm mb-3 text-center">{analyzeError}</p>
+                            )}
+
                             <button
                                 type="button"
-                                onPointerUp={!loading ? () => processAll() : undefined}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !loading) {
-                                        processAll();
-                                    }
-                                }}
+                                {...activate(() => processAll(), { disabled: loading })}
                                 disabled={loading}
                                 className={
                                     "px-6 py-3 rounded shadow-card font-title text-xl " +
@@ -492,8 +587,13 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
                     {/* MOBILE ANALYZE BUTTON */}
                     <div className="md:hidden w-full flex flex-col items-center mt-10 mb-16 relative z-20">
+                        {analyzeError && (
+                            <p className="text-red-700 text-sm mb-3 text-center">{analyzeError}</p>
+                        )}
+
                         <button
-                            onPointerUp={!loading ? () => processAll() : undefined}
+                            type="button"
+                            {...activate(() => processAll(), { disabled: loading })}
                             disabled={loading}
                             className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
                                 ? "bg-gray-400 cursor-not-allowed"
@@ -778,7 +878,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 })()}
 
                                 <button
-                                    onPointerUp={copyShoppingList}
+                                    type="button"
+                                    {...activate(copyShoppingList)}
                                     className="px-4 py-2 bg-parchment rounded shadow-inner-parchment font-title hover:bg-parchment-dark"
                                 >
                                     Copy to Clipboard
@@ -855,8 +956,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                                             {set.set_name}
                                                         </p>
                                                         <p className="text-ink text-sm">
-                                                            {set.uniqueCards} unique cards needed —{" "}
-                                                            {set.totalNeeded} total copies
+                                                            {set.uniqueCards} unique card{set.uniqueCards === 1 ? "" : "s"} needed —{" "}
+                                                            {set.totalNeeded} total cop{set.totalNeeded === 1 ? "y" : "ies"}
                                                         </p>
                                                     </div>
                                                 </div>
