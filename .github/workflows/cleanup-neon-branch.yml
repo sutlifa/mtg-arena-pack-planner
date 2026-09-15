@@ -1,0 +1,117 @@
+# Deletes the Neon database branch that the Vercel-Neon integration creates for
+# each preview deployment, once the pull request it belonged to is closed.
+#
+# The integration makes a branch named `preview/<git branch>` on every preview
+# deployment and never removes it. Nothing in the integration's settings turns
+# that off -- its configuration schema exposes only `region` and `auth` -- so
+# cleanup has to happen here.
+#
+# Left alone they accumulate silently until the Neon plan's branch limit is hit,
+# and then EVERY deployment fails, production included, with a Vercel error that
+# names neither Neon nor branches:
+#
+#     BUILD_FAILED -- "Resource provisioning failed"
+#
+# with an empty build log and a ~1s duration, because it fails before the build
+# starts. On 2026-09-14 that took nine merged PRs to reach and a long detour to
+# diagnose. Deleting the branch when its PR closes is what stops it recurring.
+
+name: Delete Neon preview branch
+
+on:
+  pull_request:
+    types: [closed]
+  # Sweeps orphans left by PRs that closed before this workflow existed, or by
+  # a `closed` event that never arrived.
+  workflow_dispatch:
+
+# Writes nothing. The sweep lists pull requests through the CLI's own token,
+# which needs `pull-requests: read`; `contents: read` is what lets `gh` resolve
+# the repository it is being run against.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  delete-branch:
+    runs-on: ubuntu-latest
+
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      # Not a secret: the project id identifies the Neon project but grants
+      # nothing without the API key above.
+      NEON_PROJECT_ID: aged-hall-47231141
+      NEON_API: https://console.neon.tech/api/v2
+
+    steps:
+      # Fails loudly on a missing key rather than letting Neon answer with a
+      # bare 401 several steps later. Failing is deliberate: a silent skip is
+      # the exact behaviour this workflow exists to prevent, so a missing
+      # secret should be visible. A pull_request run from a fork also gets no
+      # secrets by design, and will trip this -- rare here, and such branches
+      # can be cleared with the manual sweep below.
+      - name: Check the API key is available
+        run: |
+          if [ -z "$NEON_API_KEY" ]; then
+            echo "NEON_API_KEY is not set (expected for a fork PR). Nothing to do."
+            exit 1
+          fi
+
+      - name: Delete the branch for this pull request
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          name="preview/${HEAD_REF}"
+
+          # The Neon API deletes by branch id, not by name, so look it up.
+          # --arg keeps the branch name out of the jq program itself, which
+          # matters because branch names carry slashes and quotes.
+          id=$(curl -fsS -H "Authorization: Bearer $NEON_API_KEY" \
+                 "$NEON_API/projects/$NEON_PROJECT_ID/branches" \
+               | jq -r --arg n "$name" '.branches[] | select(.name == $n) | .id' \
+               | head -1)
+
+          if [ -z "$id" ]; then
+            echo "No branch named '$name'. Nothing to do."
+            exit 0
+          fi
+
+          echo "Deleting '$name' ($id)"
+          curl -fsS -X DELETE -H "Authorization: Bearer $NEON_API_KEY" \
+            "$NEON_API/projects/$NEON_PROJECT_ID/branches/$id" > /dev/null
+          echo "Deleted."
+
+      - name: Sweep preview branches whose pull request is no longer open
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Every branch the integration has made, and every PR still open.
+          # A preview branch is only safe to delete once nothing open needs it.
+          curl -fsS -H "Authorization: Bearer $NEON_API_KEY" \
+            "$NEON_API/projects/$NEON_PROJECT_ID/branches" \
+            | jq -r '.branches[] | select(.name | startswith("preview/")) | "\(.id)\t\(.name)"' > branches.tsv
+
+          gh pr list --state open --json headRefName \
+            | jq -r '.[] | "preview/\(.headRefName)"' | sort -u > open.txt
+
+          if [ ! -s branches.tsv ]; then
+            echo "No preview branches. Nothing to do."
+            exit 0
+          fi
+
+          while IFS=$'\t' read -r id name; do
+            if grep -Fxq "$name" open.txt; then
+              echo "Keeping '$name' (pull request still open)"
+              continue
+            fi
+            echo "Deleting '$name' ($id)"
+            curl -fsS -X DELETE -H "Authorization: Bearer $NEON_API_KEY" \
+              "$NEON_API/projects/$NEON_PROJECT_ID/branches/$id" > /dev/null
+          done < branches.tsv
+
+          echo "Sweep complete."
