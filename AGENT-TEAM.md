@@ -58,7 +58,7 @@ decision that needs a reason, not a default.
 | Layer | Choice | Notes |
 |-------|--------|-------|
 | Framework | **Next.js 16, App Router** | Read `node_modules/next/dist/docs/` before writing — this Next is newer than any agent's training data |
-| UI | **React 19** + **Tailwind** | CFB/NFL on Tailwind v4 (`@tailwindcss/postcss`); MTG on v3 (`tailwind.config.ts`) |
+| UI | **React 19** + **Tailwind** | CFB/NFL/SongRank on Tailwind v4 (`@tailwindcss/postcss`); MTG on v3 (`tailwind.config.ts`) |
 | Language | **TypeScript**, strict | |
 | DB | **Neon Postgres** via `postgres` (postgres.js) | pooled endpoint, `prepare: false`, `ssl: "require"` |
 | Auth | **Auth.js v5** (`next-auth@5` beta), Google only | JWT session strategy, no DB adapter |
@@ -143,6 +143,7 @@ is the point. Read `lib/db.ts` and `auth.ts` in any project for the register.
 | MTG Planner | `~/Desktop/mtg-arena-pack-planner-master` | `sutlifa/mtg-arena-pack-planner` | `master` | `mtg-arena-pack-planner2` | mtg-card-acquiring-tool.vercel.app |
 | CFB | `~/Desktop/college-football-predictions` | `sutlifa/CollegeFootballPredictions` | `main` | `college-football-predictions` | college-football-predictions.vercel.app |
 | NFL | `~/Desktop/nfl-season-predictions` | `sutlifa/NFLSeasonPredictions` | `main` | `nfl-season-predictions` | nfl-season-predictions.vercel.app |
+| SongRank | `~/Desktop/songrank` | `sutlifa/SongRank` | `main` | `song-rank` | song-rankings.vercel.app |
 
 Vercel org (team) id for all three: `team_rfnfhOKagrawlXJdnAjUe3ZP`.
 Each project's `.vercel/project.json` holds its project id and is gitignored.
@@ -164,6 +165,7 @@ them can be started from any session:
 | `mtg-planner` | 3000 |
 | `cfb-dev` | 3001 |
 | `nfl-dev` | 3002 |
+| `songrank` | 3003 |
 
 Start servers with the Browser pane's `preview_start`, never with `Bash`.
 
