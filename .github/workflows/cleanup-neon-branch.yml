@@ -25,11 +25,9 @@ on:
   # a `closed` event that never arrived.
   workflow_dispatch:
 
-# Writes nothing. The sweep lists pull requests through the CLI's own token,
-# which needs `pull-requests: read`; `contents: read` is what lets `gh` resolve
-# the repository it is being run against.
+# Writes nothing, and never checks the repository out -- the sweep only needs
+# to read the list of open pull requests.
 permissions:
-  contents: read
   pull-requests: read
 
 jobs:
@@ -47,13 +45,21 @@ jobs:
       # Fails loudly on a missing key rather than letting Neon answer with a
       # bare 401 several steps later. Failing is deliberate: a silent skip is
       # the exact behaviour this workflow exists to prevent, so a missing
-      # secret should be visible. A pull_request run from a fork also gets no
-      # secrets by design, and will trip this -- rare here, and such branches
-      # can be cleared with the manual sweep below.
+      # secret should be visible.
+      #
+      # Two different causes land here, and the message names both because
+      # guessing wrong costs a debugging round: the secret can be genuinely
+      # absent or saved with an empty value (GitHub accepts an empty secret
+      # without complaint, and its value is never displayed, so this workflow
+      # failing is the only way you find out), or the run can be a fork
+      # pull_request, which gets no secrets by design.
       - name: Check the API key is available
         run: |
           if [ -z "$NEON_API_KEY" ]; then
-            echo "NEON_API_KEY is not set (expected for a fork PR). Nothing to do."
+            echo "NEON_API_KEY resolved to an empty value."
+            echo "Either the secret is missing or was saved empty (check"
+            echo "Settings -> Secrets and variables -> Actions, and re-enter it),"
+            echo "or this is a fork pull request, which never receives secrets."
             exit 1
           fi
 
@@ -96,7 +102,10 @@ jobs:
             "$NEON_API/projects/$NEON_PROJECT_ID/branches" \
             | jq -r '.branches[] | select(.name | startswith("preview/")) | "\(.id)\t\(.name)"' > branches.tsv
 
-          gh pr list --state open --json headRefName \
+          # --repo is required: this job never checks the repository out, so
+          # gh has no git remote to infer the target from and otherwise exits
+          # with "fatal: not a git repository".
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --json headRefName \
             | jq -r '.[] | "preview/\(.headRefName)"' | sort -u > open.txt
 
           if [ ! -s branches.tsv ]; then
