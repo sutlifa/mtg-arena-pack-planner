@@ -147,12 +147,15 @@ is the point. Read `lib/db.ts` and `auth.ts` in any project for the register.
 Vercel org (team) id for all three: `team_rfnfhOKagrawlXJdnAjUe3ZP`.
 Each project's `.vercel/project.json` holds its project id and is gitignored.
 
-**Known gap:** the MTG working tree has **no `.git` directory** — it was
-extracted from a zip (hence the `-master` suffix), so it is currently detached
-from `sutlifa/mtg-arena-pack-planner`. The Deployer must re-attach it before its
-first push there. See the Deployer's "Detached working tree" procedure; it
-requires explicit user confirmation, because it is the one step that can destroy
-remote history if done carelessly.
+The MTG folder name still ends in `-master` because it began as a zip extract,
+and its deployment URL and repo name are deliberately mismatched with the app's
+current name — renaming either invalidates the Google OAuth redirect URI and
+kills sign-in. Leave all three alone.
+
+That tree was detached from its repository until 2026-09-14 and is now
+reattached and tracking `origin/master`. The Deployer's "Detached working tree"
+procedure below is kept for the next zip-extracted tree, not because this one
+still needs it.
 
 ### Local dev ports
 
@@ -285,8 +288,29 @@ vercel env pull .env.local     # for local parity
 
 **Reports** the deployment URL, what shipped, and what was verified.
 
-**Detached working tree** (currently the MTG project): if there is no `.git`,
-the Deployer does **not** silently `git init` and force-push. It stops, tells
+**A deploy that fails instantly with an empty build log.** When Vercel reports
+`BUILD_FAILED — "Resource provisioning failed"` in about a second with no build
+output, the build never started, so nothing in the code is at fault. On a
+project using the Neon integration, the "resource" is a **database branch**: the
+integration creates one per preview deployment, never removes it, and once the
+Neon plan's branch limit is reached *every* deployment fails, production
+included. The error names neither Neon nor branches.
+
+Confirm the scope by deploying a different project — if that succeeds on the
+same account, it is this project's integration, not Vercel. Then check the
+branches:
+
+```bash
+npx neonctl branches list --project-id <neon project id>
+```
+
+MTG has `.github/workflows/cleanup-neon-branch.yml`, which deletes each preview
+branch when its PR closes and offers a manual sweep via `workflow_dispatch`. A
+project without that workflow will re-hit the cap.
+
+**Detached working tree** (kept for future zip-extracted trees; MTG no longer
+needs it): if there is no `.git`, the Deployer does **not** silently `git init`
+and force-push. It stops, tells
 the user the tree is detached from `sutlifa/mtg-arena-pack-planner`, and asks
 before running the re-attach:
 
