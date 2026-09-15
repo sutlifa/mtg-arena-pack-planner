@@ -17,3 +17,8 @@ build
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# Claude Code workspace state. launch.json here carries absolute paths to other
+# local projects, so it is a personal convenience rather than repo config --
+# AGENT-TEAM.md documents the dev-server configs a fresh clone needs.
+.claude/
