@@ -7,10 +7,21 @@ import { lookupCard } from "@/lib/scryfall";
 import { rankSets } from "@/lib/setRecommender";
 import { estimateWildcards } from "@/lib/wildcardEstimator";
 import { checkDecklistSize, checkCollectionSize } from "@/lib/inputLimits";
+import { readJsonBody } from "@/lib/requestBody";
 
 export async function POST(req: Request) {
     try {
-        const { decklist, collection, arenaMode, mergePaperCounts, printingOverrides } = await req.json();
+        // A body that is not JSON is bad input, not a server fault — parse it
+        // before the try block's catch can turn a SyntaxError into a 500.
+        const body = await readJsonBody(req);
+        if (!body) {
+            return NextResponse.json(
+                { error: "That request could not be read — expected a JSON body." },
+                { status: 400 }
+            );
+        }
+
+        const { decklist, collection, arenaMode, mergePaperCounts, printingOverrides } = body;
 
         // Bound the work before doing any of it — this route is public and
         // unauthenticated, and parsing is per-line with no internal limit.

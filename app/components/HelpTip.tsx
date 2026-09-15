@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { activate } from "./activate";
 
 const VIEWPORT_PADDING = 8;
 
@@ -58,10 +59,7 @@ export default function HelpTip({ text }: { text: string }) {
                 type="button"
                 aria-label="Help"
                 aria-expanded={open}
-                onPointerUp={(e) => {
-                    e.stopPropagation();
-                    setOpen((v) => !v);
-                }}
+                {...activate(() => setOpen((v) => !v), { stopPropagation: true })}
                 className="w-5 h-5 shrink-0 flex items-center justify-center rounded-full bg-parchment text-ink text-xs font-title shadow-inner-parchment hover:bg-parchment-dark cursor-help select-none"
             >
                 ?
