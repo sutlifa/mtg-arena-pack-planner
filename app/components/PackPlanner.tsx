@@ -8,6 +8,7 @@ import FitText from "./FitText";
 import PageHeader from "./PageHeader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import PackPlannerSaves from "./PackPlannerSaves";
+import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
 
 const COLLECTION_STORAGE_KEY = "mtgpp:collection";
 
@@ -36,6 +37,18 @@ interface AnalyzeResponse {
 export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
+
+    /**
+     * Which saved rows are open, if any.
+     *
+     * Held here rather than inside PackPlannerSaves because Start Over has to
+     * clear them alongside the decks and the collection — a reset that left
+     * an id behind would aim the next Save at the work just abandoned. They
+     * are two separate refs because a collection and a comparison are saved
+     * independently and either can be open without the other.
+     */
+    const [openCollection, setOpenCollection] = useState<SavedRef>(null);
+    const [openAnalysis, setOpenAnalysis] = useState<SavedRef>(null);
 
     const [breakdown, setBreakdown] = useState<any[]>([]);
     const [shoppingList, setShoppingList] = useState<any[]>([]);
@@ -112,6 +125,8 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
     const clearCollection = () => setCollection("");
 
+    const [confirmClear, setConfirmClear] = useState(false);
+
     /**
      * Drop every piece of a previous analysis.
      *
@@ -127,6 +142,26 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         setRecommendations([]);
         setWildcards(null);
         setMissingCards([]);
+    };
+
+    /**
+     * Full reset: every decklist, the collection, the last analysis, and the
+     * saved rows those came from.
+     *
+     * Arena/Paper mode and the merge-counts checkbox survive, the same way
+     * the Sideboard Planner keeps the format through its Start Over: they are
+     * how you work, not what you typed.
+     */
+    const resetEverything = () => {
+        setDecks([""]);
+        setCollection("");
+        setOpenCollection(null);
+        setOpenAnalysis(null);
+        setPrintingOverrides({});
+        setOpenSets({});
+        setImportError(null);
+        setAnalyzeError(null);
+        clearResults();
     };
 
     const processAll = async (
@@ -346,6 +381,41 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         };
     };
 
+    // Is there anything a reset would actually destroy? Nothing typed means
+    // the confirmation is pure friction, so Start Over just clears.
+    const hasWork = decks.some((d) => d.trim()) || Boolean(collection.trim());
+
+    // A comparison stores the decklists AND the collection, so it is the save
+    // that preserves everything on screen. With no decks there is no
+    // comparison to make, and the only thing at risk is the collection.
+    const rescueKind = decks.some((d) => d.trim()) ? "comparison" : "collection";
+
+    // One element rendered in two places: the desktop and mobile analyze
+    // blocks sit at different points in the page and only one is ever
+    // displayed, the same arrangement the analyze error already uses. Written
+    // once so the two copies cannot drift apart.
+    const startOverButton = (
+        <button
+            type="button"
+            {...activate(
+                () => {
+                    if (!hasWork) {
+                        resetEverything();
+                        return;
+                    }
+                    setConfirmClear(true);
+                },
+                // Disabled mid-analysis: the in-flight request would write its
+                // breakdown into the page you just cleared.
+                { disabled: loading }
+            )}
+            disabled={loading}
+            className="px-5 py-3 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
+        >
+            Start Over
+        </button>
+    );
+
     return (
         <div className="px-6 pt-8">
             <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
@@ -540,19 +610,22 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 <p className="text-red-700 text-sm mb-3 text-center">{analyzeError}</p>
                             )}
 
-                            <button
-                                type="button"
-                                {...activate(() => processAll(), { disabled: loading })}
-                                disabled={loading}
-                                className={
-                                    "px-6 py-3 rounded shadow-card font-title text-xl " +
-                                    (loading
-                                        ? "bg-gray-400 cursor-not-allowed"
-                                        : "bg-brand text-midnight-light hover:bg-brand-dark")
-                                }
-                            >
-                                {loading ? "Analyzing..." : "Analyze Decks & Collection"}
-                            </button>
+                            <div className="flex flex-wrap justify-center gap-3">
+                                <button
+                                    type="button"
+                                    {...activate(() => processAll(), { disabled: loading })}
+                                    disabled={loading}
+                                    className={
+                                        "px-6 py-3 rounded shadow-card font-title text-xl " +
+                                        (loading
+                                            ? "bg-gray-400 cursor-not-allowed"
+                                            : "bg-brand text-midnight-light hover:bg-brand-dark")
+                                    }
+                                >
+                                    {loading ? "Analyzing..." : "Analyze Decks & Collection"}
+                                </button>
+                                {startOverButton}
+                            </div>
 
                             {loading && (
                                 <div className="flex justify-center mt-3">
@@ -574,11 +647,20 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     decks={decks}
                                     collection={collection}
                                     arenaMode={!disableArena}
+                                    openCollection={openCollection}
+                                    openAnalysis={openAnalysis}
                                     onLoad={(next) => {
                                         if (next.decks) setDecks(next.decks);
                                         if (next.collection !== undefined) setCollection(next.collection);
                                         // disableArena is the inverse of arenaMode.
                                         if (next.arenaMode !== undefined) setDisableArena(!next.arenaMode);
+                                    }}
+                                    onOpenChange={(next) => {
+                                        // Only the keys actually present move:
+                                        // loading a collection must not silently
+                                        // close the comparison being edited.
+                                        if (next.collection !== undefined) setOpenCollection(next.collection);
+                                        if (next.analysis !== undefined) setOpenAnalysis(next.analysis);
                                     }}
                                 />
                             </Suspense>
@@ -591,17 +673,20 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             <p className="text-red-700 text-sm mb-3 text-center">{analyzeError}</p>
                         )}
 
-                        <button
-                            type="button"
-                            {...activate(() => processAll(), { disabled: loading })}
-                            disabled={loading}
-                            className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-brand text-midnight-light hover:bg-brand-dark"
-                                }`}
-                        >
-                            {loading ? "Analyzing..." : "Analyze Decks & Collection"}
-                        </button>
+                        <div className="flex flex-wrap justify-center gap-3">
+                            <button
+                                type="button"
+                                {...activate(() => processAll(), { disabled: loading })}
+                                disabled={loading}
+                                className={`px-6 py-3 rounded shadow-card font-title text-xl ${loading
+                                    ? "bg-gray-400 cursor-not-allowed"
+                                    : "bg-brand text-midnight-light hover:bg-brand-dark"
+                                    }`}
+                            >
+                                {loading ? "Analyzing..." : "Analyze Decks & Collection"}
+                            </button>
+                            {startOverButton}
+                        </div>
 
                         {loading && (
                             <div className="flex justify-center mt-3">
@@ -1238,6 +1323,92 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                         </>
                                     );
                                 })()}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ---- clear confirmation, with a chance to save first ----
+                        Deliberately the same three-way choice as the Sideboard
+                        Planner's Start Over (keep / clear / save and clear)
+                        rather than a second pattern: both pages are wiping
+                        typed work, and a user who has learned one dialog
+                        should not have to read the other. */}
+                    {confirmClear && (
+                        <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="clear-planner-title"
+                            onClick={(e) => {
+                                if (e.target === e.currentTarget) setConfirmClear(false);
+                            }}
+                        >
+                            <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
+                                <h3 id="clear-planner-title" className="font-title text-2xl">
+                                    Start over?
+                                </h3>
+
+                                <p className="leading-relaxed">
+                                    This wipes every decklist, the collection you pasted and the last
+                                    breakdown. Arena/Paper mode stays as it is, so you can paste a new
+                                    list straight in.
+                                </p>
+
+                                {authEnabled ? (
+                                    <p className="text-sm text-ink/70">
+                                        {rescueKind === "comparison"
+                                            ? "Saving keeps the decklists, the collection and the mode as a comparison you can reopen."
+                                            : "Saving keeps the collection you pasted so you don't have to find it again."}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-amber-700">
+                                        There&apos;s nowhere to save this on this deployment, so clearing
+                                        is final.
+                                    </p>
+                                )}
+
+                                <div className="flex flex-wrap gap-2 justify-end pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmClear(false)}
+                                        className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                                    >
+                                        Keep it
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetEverything();
+                                            setConfirmClear(false);
+                                        }}
+                                        className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                                    >
+                                        Clear without saving
+                                    </button>
+
+                                    {authEnabled && (
+                                        <PackPlannerSave
+                                            kind={rescueKind}
+                                            decks={decks}
+                                            collection={collection}
+                                            arenaMode={!disableArena}
+                                            open={
+                                                rescueKind === "comparison" ? openAnalysis : openCollection
+                                            }
+                                            // Branching a copy in the middle of a
+                                            // reset is a different intent from
+                                            // "keep this before I wipe it".
+                                            allowSaveAsNew={false}
+                                            variant="primary"
+                                            label="Save and clear"
+                                            onSaved={() => {
+                                                resetEverything();
+                                                setConfirmClear(false);
+                                            }}
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

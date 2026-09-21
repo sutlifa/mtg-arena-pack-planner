@@ -53,3 +53,21 @@ export function parseId(raw: string): number | null {
     const n = Number(raw);
     return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+/**
+ * Postgres' unique_violation.
+ *
+ * Renaming a save into a name the account already uses breaks the
+ * (user_id, name) index, and postgres.js throws with `code: "23505"`. That is
+ * the user colliding with their own data, so it has to come back as a 409
+ * with the offending name in it — the default catch-all would report a 500,
+ * which reads as "the site is broken" for something the user can fix by
+ * typing a different name.
+ */
+export function isUniqueViolation(err: unknown): boolean {
+    return (
+        typeof err === "object" &&
+        err !== null &&
+        (err as { code?: unknown }).code === "23505"
+    );
+}

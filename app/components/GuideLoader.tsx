@@ -21,7 +21,15 @@ import { useSearchParams } from "next/navigation";
 export default function GuideLoader({
     onLoad,
 }: {
-    onLoad: (plan: Record<string, unknown>) => void;
+    /**
+     * The plan, plus which row it came from. The planner records the id and
+     * name so a later Save can update THIS guide instead of making the user
+     * retype its name to overwrite it — and so it can say which guide is
+     * open. They are passed separately rather than read out of the plan JSON
+     * because a plan saved from an already-open guide carries the id it had
+     * when it was written, which is not necessarily the row just fetched.
+     */
+    onLoad: (plan: Record<string, unknown>, opened: { id: number; name: string }) => void;
 }) {
     const searchParams = useSearchParams();
     const guideId = searchParams.get("guide");
@@ -64,7 +72,10 @@ export default function GuideLoader({
                 const { guide } = await res.json();
                 if (cancelled || !guide?.plan) return;
 
-                onLoadRef.current(guide.plan as Record<string, unknown>);
+                onLoadRef.current(guide.plan as Record<string, unknown>, {
+                    id: guide.id,
+                    name: guide.name,
+                });
                 setStatus({ id: guideId, message: `Opened "${guide.name}".` });
             } catch {
                 if (!cancelled) setStatus({ id: guideId, message: "Could not open that guide." });

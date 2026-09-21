@@ -89,6 +89,62 @@ export function DeleteSavedButton({
     );
 }
 
+/**
+ * Duplicate one saved guide, collection or comparison.
+ *
+ * The copy is made entirely server-side (POST to .../copy with no body): the
+ * saved plan or collection text never travels to the browser and back, so a
+ * duplicate cannot be truncated by a size limit or overwritten by whatever
+ * another tab happens to be holding. The new name is chosen by the server
+ * too, which is the only place that can see every name the account already
+ * uses.
+ *
+ * `kind` is the API segment, constrained to the three literals rather than an
+ * open string so a caller cannot aim this at an arbitrary endpoint.
+ */
+export function DuplicateSavedButton({
+    kind,
+    id,
+}: {
+    kind: "guides" | "collections" | "analyses";
+    id: number;
+}) {
+    const router = useRouter();
+    const [busy, setBusy] = useState(false);
+
+    const duplicate = async () => {
+        setBusy(true);
+        try {
+            const res = await fetch(`/api/${kind}/${id}/copy`, { method: "POST" });
+            if (res.ok) {
+                // Re-fetch the server component rather than splicing a row
+                // into a local copy, so the list shows the name the database
+                // actually settled on.
+                router.refresh();
+                setBusy(false);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error ?? "Could not duplicate that.");
+                setBusy(false);
+            }
+        } catch {
+            alert("Could not duplicate that.");
+            setBusy(false);
+        }
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={busy ? undefined : duplicate}
+            disabled={busy}
+            className="px-3 py-2 rounded text-sm text-ink/60 hover:text-brand-dark hover:bg-brand/10 transition-colors disabled:opacity-50"
+        >
+            {busy ? "Copying..." : "Duplicate"}
+        </button>
+    );
+}
+
 /** Delete the account and everything attached to it. */
 export function DeleteAccountButton() {
     const [busy, setBusy] = useState(false);

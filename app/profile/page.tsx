@@ -6,7 +6,12 @@ import { listCollections, listAnalyses } from "@/lib/saved";
 import { hasDatabase } from "@/lib/db";
 import { isAuthConfigured } from "@/lib/authConfig";
 import PageHeader from "../components/PageHeader";
-import { DeleteGuideButton, DeleteAccountButton, DeleteSavedButton } from "../components/ProfileActions";
+import {
+    DeleteGuideButton,
+    DeleteAccountButton,
+    DeleteSavedButton,
+    DuplicateSavedButton,
+} from "../components/ProfileActions";
 
 export const metadata = {
     title: "Your Profile — MTG Planning App",
@@ -87,6 +92,7 @@ export default async function ProfilePage() {
                                         >
                                             Open
                                         </Link>
+                                        <DuplicateSavedButton kind="guides" id={g.id} />
                                         <DeleteGuideButton id={g.id} name={g.name} />
                                     </div>
                                 </li>
@@ -144,6 +150,10 @@ export default async function ProfilePage() {
                                                         >
                                                             Open
                                                         </Link>
+                                                        <DuplicateSavedButton
+                                                            kind="collections"
+                                                            id={c.id}
+                                                        />
                                                         <DeleteSavedButton
                                                             kind="collections"
                                                             id={c.id}
@@ -201,6 +211,7 @@ export default async function ProfilePage() {
                                             >
                                                 Open
                                             </Link>
+                                            <DuplicateSavedButton kind="analyses" id={a.id} />
                                             <DeleteSavedButton
                                                 kind="analyses"
                                                 id={a.id}

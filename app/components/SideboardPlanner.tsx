@@ -244,6 +244,19 @@ interface PlanState {
      * a matchup, not destroy work — re-ticking it brings the plan back.
      */
     stash: Record<string, Matchup>;
+    /**
+     * Which saved guide this plan came from, if any.
+     *
+     * Without it the planner had no idea what was open, so Save could only
+     * ever ask for a name and match on it — overwriting the guide you were
+     * editing meant retyping its name exactly, and a near-miss quietly
+     * created a second guide instead. Kept inside PlanState rather than
+     * beside it so it survives a reload with the work it belongs to:
+     * reopening the tab tomorrow still knows you were editing "Azorious
+     * Control".
+     */
+    savedId: number | null;
+    savedName: string | null;
 }
 
 /**
@@ -284,6 +297,11 @@ export function normalisePlan(parsed: Record<string, unknown>, fallback: PlanSta
             raw.stash && typeof raw.stash === "object"
                 ? (raw.stash as Record<string, Matchup>)
                 : {},
+        // Present in plans written since the planner started tracking what is
+        // open, absent in every older one — and deliberately overridden by the
+        // guide loader, which knows the row it actually fetched.
+        savedId: typeof raw.savedId === "number" ? raw.savedId : null,
+        savedName: typeof raw.savedName === "string" ? raw.savedName : null,
     };
 }
 
@@ -295,6 +313,8 @@ const EMPTY_PLAN: PlanState = {
     matchups: [],
     available: [],
     stash: {},
+    savedId: null,
+    savedName: null,
 };
 
 export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean }) {
@@ -516,6 +536,10 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * Format, the archetype count and the pulled metagame list are kept — they
      * are fetched data rather than your work, and re-pulling the metagame on
      * every reset is a pointless round trip.
+     *
+     * The open guide is cleared too, and has to be: leaving it set would aim
+     * the next Save at the guide you just walked away from and overwrite it
+     * with the blank plan you started instead.
      */
     const resetEverything = () =>
         setPlan((prev) => ({
@@ -524,6 +548,8 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             loadedText: "",
             matchups: [],
             stash: {},
+            savedId: null,
+            savedName: null,
         }));
 
     const printRef = useRef<HTMLDivElement>(null);
@@ -674,7 +700,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 component out of prerendering, and /sideboard is static. */}
             <Suspense fallback={null}>
                 <GuideLoader
-                    onLoad={(loaded) => setPlan(normalisePlan(loaded, EMPTY_PLAN))}
+                    onLoad={(loaded, opened) =>
+                        setPlan({
+                            ...normalisePlan(loaded, EMPTY_PLAN),
+                            // From the row that was actually fetched, not from
+                            // whatever id the stored JSON happens to carry.
+                            savedId: opened.id,
+                            savedName: opened.name,
+                        })
+                    }
                 />
             </Suspense>
 
@@ -1138,13 +1172,25 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                         title="Fix the matchups that board you below 60 first"
                                         className="px-6 py-3 rounded shadow-card font-title text-xl bg-gray-400 cursor-not-allowed text-midnight-light"
                                     >
-                                        Save to Profile
+                                        {plan.savedId === null ? "Save to Profile" : "Save"}
                                     </button>
                                 ) : (
                                     <SaveToProfileButton
                                         plan={plan}
                                         format={format}
                                         formatLabel={formatLabel(format)}
+                                        savedId={plan.savedId}
+                                        savedName={plan.savedName}
+                                        onSaved={(saved) =>
+                                            // Whichever way it saved — updating
+                                            // the open guide, or branching a new
+                                            // one — that row is now what is open.
+                                            setPlan((p) => ({
+                                                ...p,
+                                                savedId: saved.id,
+                                                savedName: saved.name,
+                                            }))
+                                        }
                                     />
                                 ))}
 
@@ -1200,8 +1246,9 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                         {authEnabled ? (
                             <p className="text-sm text-ink/70">
-                                Save it to your profile first if you want it back later. Saving under a
-                                name you&apos;ve already used just updates that guide.
+                                {plan.savedName
+                                    ? `Save and clear updates “${plan.savedName}”, so you can open it again from your profile.`
+                                    : "Save it to your profile first if you want it back later. Saving under a name you’ve already used just updates that guide."}
                             </p>
                         ) : (
                             <p className="text-sm text-amber-700">
@@ -1235,6 +1282,13 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                     plan={plan}
                                     format={format}
                                     formatLabel={formatLabel(format)}
+                                    savedId={plan.savedId}
+                                    savedName={plan.savedName}
+                                    // Branching a copy in the middle of a reset
+                                    // is a different intent from "keep this
+                                    // before I wipe it"; a second button here
+                                    // only invites a misclick.
+                                    allowSaveAsNew={false}
                                     label="Save and clear"
                                     onSaved={() => {
                                         resetEverything();

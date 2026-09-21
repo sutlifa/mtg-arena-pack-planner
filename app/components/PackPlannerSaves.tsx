@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
 
 interface CollectionSummary {
     id: number;
@@ -66,8 +67,6 @@ function CollectionGroup({
     );
 }
 
-type Draft = { kind: "collection" | "comparison"; name: string; arena: boolean } | null;
-
 /**
  * Save and reload the Pack Planner's inputs against a signed-in profile.
  *
@@ -86,37 +85,48 @@ type Draft = { kind: "collection" | "comparison"; name: string; arena: boolean }
  * Only inputs are saved, never the computed breakdown: prices, Arena
  * availability and set legality all move underneath us, so a stored result
  * would begin drifting the moment it was written.
+ *
+ * Which saved rows are *open* is owned by the parent, not by this panel. The
+ * Start Over dialog lives up there and has to clear them along with the
+ * decks and the collection — a reset that left an id behind would point the
+ * next Save at the work you just abandoned.
  */
 export default function PackPlannerSaves({
     decks,
     collection,
     arenaMode,
+    openCollection,
+    openAnalysis,
     onLoad,
+    onOpenChange,
 }: {
     decks: string[];
     collection: string;
     arenaMode: boolean;
+    openCollection: SavedRef;
+    openAnalysis: SavedRef;
     onLoad: (next: { decks?: string[]; collection?: string; arenaMode?: boolean }) => void;
+    onOpenChange: (next: { collection?: SavedRef; analysis?: SavedRef }) => void;
 }) {
     const { data: session } = useSession();
     const searchParams = useSearchParams();
 
     const [collections, setCollections] = useState<CollectionSummary[]>([]);
     const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
-    const [draft, setDraft] = useState<Draft>(null);
-    const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
 
     const signedIn = Boolean(session?.user);
 
-    // The parent recreates onLoad every render. Holding it in a ref keeps the
+    // The parent recreates these every render. Holding them in refs keeps the
     // URL-param effect from re-running (and re-loading the saved item) on
     // every keystroke, without lying to the dependency linter.
     const onLoadRef = useRef(onLoad);
+    const onOpenChangeRef = useRef(onOpenChange);
     useEffect(() => {
         onLoadRef.current = onLoad;
-    }, [onLoad]);
+        onOpenChangeRef.current = onOpenChange;
+    }, [onLoad, onOpenChange]);
 
     const fetchLists = useCallback(async () => {
         const [c, a] = await Promise.all([
@@ -171,12 +181,19 @@ export default function PackPlannerSaves({
             // comparing an Arena collection in Paper Mode silently gives the
             // wrong answer.
             onLoad({ collection: loaded.raw_text, arenaMode: loaded.arena_mode });
+            // Now the open collection, so Save updates it instead of asking
+            // for its name again. The open comparison is left alone: its
+            // decklists are still on screen, so it is still the comparison
+            // being edited.
+            onOpenChange({
+                collection: { id: loaded.id, name: loaded.name, arena: loaded.arena_mode },
+            });
             setMessage(
                 `Loaded ${loaded.arena_mode ? "Arena" : "Paper"} collection "${loaded.name}".`
             );
             setOpen(false);
         },
-        [onLoad]
+        [onLoad, onOpenChange]
     );
 
     const loadAnalysis = useCallback(
@@ -192,10 +209,16 @@ export default function PackPlannerSaves({
                 collection: analysis.collection ?? "",
                 arenaMode: analysis.arena_mode,
             });
+            // A comparison brings its own collection text with it, which is
+            // not a saved collection row — so any open one stops applying.
+            onOpenChange({
+                analysis: { id: analysis.id, name: analysis.name, arena: analysis.arena_mode },
+                collection: null,
+            });
             setMessage(`Loaded comparison "${analysis.name}".`);
             setOpen(false);
         },
-        [onLoad]
+        [onLoad, onOpenChange]
     );
 
     // Opening a saved item from the profile page arrives as ?collection= or
@@ -224,6 +247,13 @@ export default function PackPlannerSaves({
                         collection: data.collection.raw_text,
                         arenaMode: data.collection.arena_mode,
                     });
+                    onOpenChangeRef.current({
+                        collection: {
+                            id: data.collection.id,
+                            name: data.collection.name,
+                            arena: data.collection.arena_mode,
+                        },
+                    });
                     setMessage(
                         `Loaded ${data.collection.arena_mode ? "Arena" : "Paper"} collection "${data.collection.name}".`
                     );
@@ -232,6 +262,14 @@ export default function PackPlannerSaves({
                         decks: data.analysis.decklists?.length ? data.analysis.decklists : [""],
                         collection: data.analysis.collection ?? "",
                         arenaMode: data.analysis.arena_mode,
+                    });
+                    onOpenChangeRef.current({
+                        analysis: {
+                            id: data.analysis.id,
+                            name: data.analysis.name,
+                            arena: data.analysis.arena_mode,
+                        },
+                        collection: null,
                     });
                     setMessage(`Loaded comparison "${data.analysis.name}".`);
                 }
@@ -259,88 +297,37 @@ export default function PackPlannerSaves({
         );
     }
 
-    const submitDraft = async () => {
-        if (!draft) return;
-
-        if (!draft.name.trim()) {
-            setMessage("Give it a name.");
-            return;
-        }
-
-        setBusy(true);
-        setMessage(null);
-
-        const [url, body, label] =
-            draft.kind === "collection"
-                ? ["/api/collections", { name: draft.name, rawText: collection, arenaMode: draft.arena }, "collection"]
-                : [
-                    "/api/analyses",
-                    { name: draft.name, decklists: decks, collection, arenaMode: draft.arena },
-                    "comparison",
-                ];
-
-        try {
-            const res = await fetch(url as string, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                setMessage(data.error ?? `Could not save that ${label}.`);
-            } else {
-                setMessage(`Saved "${data.name}" as ${draft.arena ? "Arena" : "Paper"}.`);
-                setDraft(null);
-                refresh();
-            }
-        } catch {
-            setMessage(`Could not save that ${label}.`);
-        }
-        setBusy(false);
-    };
-
-    const startCollection = () => {
-        if (!collection.trim()) {
-            setMessage("Paste a collection first.");
-            return;
-        }
-        setMessage(null);
-        // Defaults to the mode you're in, but stays changeable — you might be
-        // pasting an Arena export while the toggle is still on Paper.
-        setDraft({ kind: "collection", name: "", arena: arenaMode });
-    };
-
-    const startComparison = () => {
-        if (!decks.some((d) => d.trim())) {
-            setMessage("Add at least one decklist first.");
-            return;
-        }
-        setMessage(null);
-        setDraft({ kind: "comparison", name: "", arena: arenaMode });
-    };
-
     const arenaCollections = collections.filter((c) => c.arena_mode);
     const paperCollections = collections.filter((c) => !c.arena_mode);
+
+    const saved = (next: { id: number; name: string; arena: boolean; kind: "collection" | "comparison" }) => {
+        onOpenChange(
+            next.kind === "collection"
+                ? { collection: { id: next.id, name: next.name, arena: next.arena } }
+                : { analysis: { id: next.id, name: next.name, arena: next.arena } }
+        );
+        refresh();
+    };
 
     return (
         <div className="space-y-3">
             <div className="flex flex-wrap justify-center gap-3">
-                <button
-                    type="button"
-                    onClick={busy ? undefined : startCollection}
-                    disabled={busy}
-                    className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
-                >
-                    Save Collection
-                </button>
-                <button
-                    type="button"
-                    onClick={busy ? undefined : startComparison}
-                    disabled={busy}
-                    className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
-                >
-                    Save Comparison
-                </button>
+                <PackPlannerSave
+                    kind="collection"
+                    decks={decks}
+                    collection={collection}
+                    arenaMode={arenaMode}
+                    open={openCollection}
+                    onSaved={saved}
+                />
+                <PackPlannerSave
+                    kind="comparison"
+                    decks={decks}
+                    collection={collection}
+                    arenaMode={arenaMode}
+                    open={openAnalysis}
+                    onSaved={saved}
+                />
                 {(collections.length > 0 || analyses.length > 0) && (
                     <button
                         type="button"
@@ -352,80 +339,19 @@ export default function PackPlannerSaves({
                 )}
             </div>
 
-            {draft && (
-                <div className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3 max-w-lg mx-auto">
-                    <p className="font-title text-lg">
-                        Save {draft.kind === "collection" ? "collection" : "comparison"}
-                    </p>
-
-                    <label className="block">
-                        <span className="text-sm text-ink/70">Name</span>
-                        <input
-                            type="text"
-                            autoFocus
-                            value={draft.name}
-                            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") submitDraft();
-                                if (e.key === "Escape") setDraft(null);
-                            }}
-                            placeholder={
-                                draft.kind === "collection"
-                                    ? draft.arena
-                                        ? "My Arena collection"
-                                        : "My paper collection"
-                                    : "My comparison"
-                            }
-                            className="mt-1 w-full px-3 py-2 rounded bg-parchment-dark text-ink shadow-inner-parchment"
-                        />
-                    </label>
-
-                    <div>
-                        <span className="text-sm text-ink/70">Save as</span>
-                        <div className="mt-1 flex gap-2">
-                            {[
-                                { label: "Arena", value: true },
-                                { label: "Paper", value: false },
-                            ].map((opt) => (
-                                <button
-                                    key={opt.label}
-                                    type="button"
-                                    onClick={() => setDraft({ ...draft, arena: opt.value })}
-                                    aria-pressed={draft.arena === opt.value}
-                                    className={
-                                        "px-4 py-2 rounded font-title text-sm transition-colors " +
-                                        (draft.arena === opt.value
-                                            ? "bg-brass text-brass-ink"
-                                            : "bg-parchment-dark text-ink/70 hover:bg-parchment-dark/70")
-                                    }
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                        <p className="text-xs text-ink/55 mt-1">
-                            Loading it later puts the planner back into this mode.
-                        </p>
-                    </div>
-
-                    <div className="flex gap-2 justify-end">
-                        <button
-                            type="button"
-                            onClick={() => setDraft(null)}
-                            className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={busy ? undefined : submitDraft}
-                            disabled={busy}
-                            className="px-5 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
-                        >
-                            {busy ? "Saving..." : "Save"}
-                        </button>
-                    </div>
-                </div>
+            {/* What Save will overwrite, spelled out. Without it the button
+                changes meaning invisibly depending on what was opened. */}
+            {(openCollection || openAnalysis) && (
+                <p className="text-sm text-center text-ink/70">
+                    {openCollection && (
+                        <>
+                            Editing {openCollection.arena ? "Arena" : "Paper"} collection &quot;
+                            {openCollection.name}&quot;.
+                        </>
+                    )}
+                    {openCollection && openAnalysis && " "}
+                    {openAnalysis && <>Editing comparison &quot;{openAnalysis.name}&quot;.</>}
+                </p>
             )}
 
             {message && (

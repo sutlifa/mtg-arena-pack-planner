@@ -18,21 +18,38 @@ import { useSession } from "next-auth/react";
  * the app, can't be styled, and on some platforms reads as a security prompt.
  * Inline also means it works inside the Start Over dialog without stacking a
  * browser modal on top of a page modal.
+ *
+ * Two modes, decided by `savedId`:
+ *
+ * - Nothing open — the button opens the name form and creates a guide.
+ * - A guide open — the button updates THAT row by id and keeps its name, and
+ *   "Save as new..." is the way to branch off a second guide. Before this
+ *   existed, saving an edited guide meant retyping its exact name to hit the
+ *   name-keyed upsert; a typo silently produced a duplicate instead of the
+ *   overwrite the user asked for.
  */
 export default function SaveToProfileButton({
     plan,
     format,
     formatLabel,
-    label = "Save to Profile",
+    savedId = null,
+    savedName = null,
+    label,
+    allowSaveAsNew = true,
     onSaved,
 }: {
     plan: unknown;
     format: string;
     formatLabel: string;
+    /** The guide currently open in the planner, if any. */
+    savedId?: number | null;
+    savedName?: string | null;
     /** Override the button text — the clear dialog reuses this as "Save and clear". */
     label?: string;
-    /** Fires only after a save actually succeeds. */
-    onSaved?: () => void;
+    /** The clear dialog turns this off: branching a copy mid-reset is noise. */
+    allowSaveAsNew?: boolean;
+    /** Fires only after a save actually succeeds, with the row it wrote. */
+    onSaved?: (saved: { id: number; name: string }) => void;
 }) {
     const { data: session } = useSession();
     const [naming, setNaming] = useState(false);
@@ -52,12 +69,16 @@ export default function SaveToProfileButton({
     }
 
     const startNaming = () => {
-        setName(`${formatLabel} sideboard guide`);
+        // Branching off an open guide defaults to "<name> (copy)", the same
+        // shape the Duplicate button produces, so the two routes to a second
+        // guide don't leave differently-named results.
+        setName(savedName ? `${savedName} (copy)` : `${formatLabel} sideboard guide`);
         setMessage(null);
         setNaming(true);
     };
 
-    const save = async () => {
+    /** Creates a new guide from the inline name form. */
+    const saveAsNew = async () => {
         if (!name.trim()) {
             setMessage("Give it a name.");
             return;
@@ -83,7 +104,39 @@ export default function SaveToProfileButton({
             } else {
                 setMessage(`Saved as "${data.name}".`);
                 setNaming(false);
-                onSaved?.();
+                onSaved?.({ id: data.id, name: data.name });
+            }
+        } catch {
+            setMessage("Could not save that guide.");
+        }
+        setSaving(false);
+    };
+
+    /** Updates the open guide in place, keeping its name. */
+    const saveOpen = async () => {
+        if (savedId === null) return;
+
+        setSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch(`/api/guides/${savedId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                // No name in the body: this is "save what I'm editing", and
+                // omitting it tells the server to leave the name alone.
+                body: JSON.stringify({ format, plan }),
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (res.status === 401) {
+                setMessage("Sign in first to save to your profile.");
+            } else if (res.status === 404) {
+                setMessage("That guide no longer exists — use “Save as new” to keep this.");
+            } else if (!res.ok) {
+                setMessage(data.error ?? "Could not save that guide.");
+            } else {
+                setMessage(`Saved "${data.name}".`);
+                onSaved?.({ id: data.id, name: data.name });
             }
         } catch {
             setMessage("Could not save that guide.");
@@ -104,7 +157,7 @@ export default function SaveToProfileButton({
                         onKeyDown={(e) => {
                             if (e.key === "Enter") {
                                 e.preventDefault();
-                                save();
+                                saveAsNew();
                             }
                             if (e.key === "Escape") setNaming(false);
                         }}
@@ -114,7 +167,9 @@ export default function SaveToProfileButton({
                 </label>
 
                 <p className="text-xs text-ink/55">
-                    Reusing a name updates that guide instead of making a second one.
+                    {savedId === null
+                        ? "Reusing a name updates that guide instead of making a second one."
+                        : `This creates a second guide and leaves "${savedName}" as it was.`}
                 </p>
 
                 {message && (
@@ -133,7 +188,7 @@ export default function SaveToProfileButton({
                     </button>
                     <button
                         type="button"
-                        onClick={saving ? undefined : save}
+                        onClick={saving ? undefined : saveAsNew}
                         disabled={saving}
                         className={
                             "px-5 py-2 rounded font-title " +
@@ -149,15 +204,40 @@ export default function SaveToProfileButton({
         );
     }
 
+    const open = savedId !== null;
+
     return (
         <>
             <button
                 type="button"
-                onClick={startNaming}
-                className="px-6 py-3 rounded shadow-card font-title text-xl bg-brand text-midnight-light hover:bg-brand-dark"
+                onClick={saving ? undefined : open ? saveOpen : startNaming}
+                disabled={saving}
+                className={
+                    "px-6 py-3 rounded shadow-card font-title text-xl " +
+                    (saving
+                        ? "bg-gray-400 cursor-not-allowed text-midnight-light"
+                        : "bg-brand text-midnight-light hover:bg-brand-dark")
+                }
             >
-                {label}
+                {saving ? "Saving..." : label ?? (open ? "Save" : "Save to Profile")}
             </button>
+
+            {open && allowSaveAsNew && (
+                <button
+                    type="button"
+                    onClick={saving ? undefined : startNaming}
+                    disabled={saving}
+                    className="px-5 py-3 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
+                >
+                    Save as new...
+                </button>
+            )}
+
+            {open && savedName && (
+                <p className="w-full text-sm text-center text-ink/70">
+                    Editing &quot;{savedName}&quot;. Save updates that guide.
+                </p>
+            )}
 
             {message && (
                 <p className="w-full text-sm text-center text-ink/80" role="status">
