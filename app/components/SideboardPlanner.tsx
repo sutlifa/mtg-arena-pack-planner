@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HelpTip from "./HelpTip";
 import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import SaveToProfileButton from "./SaveToProfileButton";
+import GuideLoader from "./GuideLoader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import { SUPPORTED_FORMATS, MAX_ARCHETYPES, ONE_PAGE_MATCHUPS, formatLabel } from "@/lib/formats";
@@ -51,6 +52,8 @@ interface PlanCheck {
     /** Maindeck size once the swaps are made. */
     after: number;
     state: "empty" | "ok" | "short" | "over";
+    /** False when no deck is loaded, so `after` is meaningless. */
+    judged: boolean;
 }
 
 /**
@@ -69,12 +72,16 @@ function checkPlan(outRows: CardRow[], inRows: CardRow[], deckSize: number): Pla
     const inN = sumQty(inRows);
     const after = deckSize - out + inN;
 
-    if (out === 0 && inN === 0) return { out, in: inN, after, state: "empty" };
-    if (deckSize < MIN_DECK) return { out, in: inN, after, state: "ok" };
+    if (out === 0 && inN === 0) return { out, in: inN, after, state: "empty", judged: false };
 
-    if (after < MIN_DECK) return { out, in: inN, after, state: "short" };
-    if (after > deckSize) return { out, in: inN, after, state: "over" };
-    return { out, in: inN, after, state: "ok" };
+    // No deck loaded (or a half-pasted one): `after` would be nonsense — it
+    // read "0 cards" in the green "this is fine" colour — so the swap counts
+    // are shown without any verdict about deck size.
+    if (deckSize < MIN_DECK) return { out, in: inN, after, state: "ok", judged: false };
+
+    if (after < MIN_DECK) return { out, in: inN, after, state: "short", judged: true };
+    if (after > deckSize) return { out, in: inN, after, state: "over", judged: true };
+    return { out, in: inN, after, state: "ok", judged: true };
 }
 
 /** Every plan in a matchup — one, or two when play and draw differ. */
@@ -188,14 +195,19 @@ function PlanPair({
                 <p
                     className={
                         "text-xs " +
-                        (check.state === "short"
-                            ? "text-red-700 font-semibold"
-                            : check.state === "over"
-                                ? "text-amber-700"
-                                : "text-green-800/80")
+                        (!check.judged
+                            ? "text-ink/60"
+                            : check.state === "short"
+                                ? "text-red-700 font-semibold"
+                                : check.state === "over"
+                                    ? "text-amber-700"
+                                    : "text-green-800/80")
                     }
                 >
-                    &minus;{check.out} / +{check.in} &middot; {check.after} cards
+                    &minus;{check.out} / +{check.in}
+                    {check.judged
+                        ? ` · ${check.after} cards`
+                        : " · load your deck to check the count"}
                     {check.state === "short" &&
                         ` — illegal, you can't board below ${MIN_DECK}. Bring in ${MIN_DECK - check.after} more.`}
                     {check.state === "over" &&
@@ -232,6 +244,47 @@ interface PlanState {
      * a matchup, not destroy work — re-ticking it brings the plan back.
      */
     stash: Record<string, Matchup>;
+}
+
+/**
+ * Turns whatever shape a stored plan happens to be into a complete PlanState.
+ *
+ * Shared by both restore paths — localStorage and a guide loaded from the
+ * database. They used to be separate, and only one of them existed: guides
+ * could be saved and listed but never actually opened, so "Open" on the
+ * profile page quietly left the planner showing localStorage instead. On a
+ * machine with nothing in localStorage that looked exactly like the saved
+ * work had been wiped.
+ *
+ * Every field is defaulted because plans written by older versions of the app
+ * genuinely lack some of them.
+ */
+export function normalisePlan(parsed: Record<string, unknown>, fallback: PlanState): PlanState {
+    const raw = parsed ?? {};
+    const decklist = typeof raw.decklist === "string" ? raw.decklist : "";
+
+    return {
+        decklist,
+        loadedText: typeof raw.loadedText === "string" ? raw.loadedText : decklist,
+        format: typeof raw.format === "string" ? raw.format : fallback.format,
+        count: typeof raw.count === "number" ? raw.count : fallback.count,
+        matchups: Array.isArray(raw.matchups)
+            // Tolerate plans saved before the Play/Draw split existed.
+            ? (raw.matchups as Partial<Matchup>[]).map((m) => ({
+                ...emptyMatchup(m.name ?? "Matchup"),
+                ...m,
+                id: m.id ?? newId(),
+                splitPlayDraw: m.splitPlayDraw ?? false,
+                drawOut: m.drawOut ?? [],
+                drawIn: m.drawIn ?? [],
+            }))
+            : [],
+        available: Array.isArray(raw.available) ? (raw.available as Archetype[]) : [],
+        stash:
+            raw.stash && typeof raw.stash === "object"
+                ? (raw.stash as Record<string, Matchup>)
+                : {},
+    };
 }
 
 const EMPTY_PLAN: PlanState = {
@@ -284,33 +337,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
-                const parsed = JSON.parse(saved);
-                const restored: PlanState = {
-                    decklist: typeof parsed.decklist === "string" ? parsed.decklist : "",
-                    loadedText:
-                        typeof parsed.loadedText === "string"
-                            ? parsed.loadedText
-                            : typeof parsed.decklist === "string"
-                                ? parsed.decklist
-                                : "",
-                    format: typeof parsed.format === "string" ? parsed.format : EMPTY_PLAN.format,
-                    count: typeof parsed.count === "number" ? parsed.count : EMPTY_PLAN.count,
-                    matchups: Array.isArray(parsed.matchups)
-                        // Tolerate plans saved before the Play/Draw split existed.
-                        ? parsed.matchups.map((m: Partial<Matchup>) => ({
-                            ...emptyMatchup(m.name ?? "Matchup"),
-                            ...m,
-                            id: m.id ?? newId(),
-                            splitPlayDraw: m.splitPlayDraw ?? false,
-                            drawOut: m.drawOut ?? [],
-                            drawIn: m.drawIn ?? [],
-                        }))
-                        : [],
-                    available: Array.isArray(parsed.available) ? parsed.available : [],
-                    stash:
-                        parsed.stash && typeof parsed.stash === "object" ? parsed.stash : {},
-                };
-                setPlan(restored);
+                setPlan(normalisePlan(JSON.parse(saved), EMPTY_PLAN));
             }
         } catch {
             /* corrupt or unavailable storage is not worth failing over */
@@ -642,6 +669,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
     return (
         <div className="space-y-10">
+            {/* Opening a saved guide arrives as ?guide=<id>. This lives in its
+                own Suspense-wrapped child because useSearchParams opts a
+                component out of prerendering, and /sideboard is static. */}
+            <Suspense fallback={null}>
+                <GuideLoader
+                    onLoad={(loaded) => setPlan(normalisePlan(loaded, EMPTY_PLAN))}
+                />
+            </Suspense>
+
             {/* ===================== screen UI ===================== */}
             <div className="sb-noprint space-y-10">
 
