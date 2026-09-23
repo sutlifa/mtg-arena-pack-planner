@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HelpTip from "./HelpTip";
 import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import SaveToProfileButton from "./SaveToProfileButton";
 import GuideLoader from "./GuideLoader";
 import GuideNameBar from "./GuideNameBar";
+import OpponentDeck from "./OpponentDeck";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import {
@@ -34,6 +35,11 @@ interface Matchup {
     drawOut: CardRow[];
     drawIn: CardRow[];
     notes: string;
+    /**
+     * An MTGGoldfish link pasted for this matchup's opponent list, overriding
+     * the archetype's own. Null means "use the archetype's".
+     */
+    deckUrl: string | null;
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -48,6 +54,7 @@ const emptyMatchup = (name: string, pct: number | null = null): Matchup => ({
     drawOut: [],
     drawIn: [],
     notes: "",
+    deckUrl: null,
 });
 
 const sumQty = (rows: CardRow[]) =>
@@ -254,6 +261,31 @@ function PlanPair({
 interface Archetype {
     name: string;
     pct: number | null;
+    /** Its MTGGoldfish page, for the opponent list. Absent in older saved plans. */
+    url?: string | null;
+}
+
+/**
+ * Whether the screen is wide enough for the opponent list to sit beside the
+ * matchups. Below that it opens inline under each matchup instead.
+ *
+ * A media query rather than a CSS-only `hidden xl:block`: a hidden panel
+ * would still mount, and mounting it is what fetches the list from
+ * MTGGoldfish — a phone would download lists it never shows.
+ */
+const WIDE_QUERY = "(min-width: 1280px)";
+function useWide(): boolean {
+    return useSyncExternalStore(
+        (onChange) => {
+            const mq = window.matchMedia(WIDE_QUERY);
+            mq.addEventListener("change", onChange);
+            return () => mq.removeEventListener("change", onChange);
+        },
+        () => window.matchMedia(WIDE_QUERY).matches,
+        // The server can't know the screen; render the narrow layout and let
+        // the client switch after hydration.
+        () => false
+    );
 }
 
 interface PlanState {
@@ -331,6 +363,12 @@ export function normalisePlan(parsed: Record<string, unknown>, fallback: PlanSta
                 splitPlayDraw: m.splitPlayDraw ?? false,
                 drawOut: m.drawOut ?? [],
                 drawIn: m.drawIn ?? [],
+                // Only ever an MTGGoldfish link: it becomes the panel's
+                // "MTGGoldfish ↗" href, and a saved plan is user-editable JSON.
+                deckUrl:
+                    typeof m.deckUrl === "string" && isGoldfishDeckUrl(m.deckUrl)
+                        ? m.deckUrl
+                        : null,
             }))
             : [],
         available: Array.isArray(raw.available) ? (raw.available as Archetype[]) : [],
@@ -776,6 +814,33 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         }, 0);
     };
 
+    /* ---- opponent lists ---- */
+
+    const wide = useWide();
+    // The matchup the side panel shows: whichever one you last clicked or
+    // tabbed into. Not saved — it's where you are, not part of the guide.
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const active = matchups.find((m) => m.id === activeId) ?? matchups[0] ?? null;
+    // Narrow screens: which matchups have their list opened inline.
+    const [openLists, setOpenLists] = useState<Record<string, boolean>>({});
+
+    const archetypeUrls = new Map(
+        available
+            .filter((a) => a.url)
+            .map((a) => [a.name.toLowerCase(), a.url as string])
+    );
+    const listUrl = (m: Matchup) => m.deckUrl ?? archetypeUrls.get(m.name.toLowerCase()) ?? null;
+
+    const opponentDeck = (m: Matchup) => (
+        <OpponentDeck
+            name={m.name}
+            url={listUrl(m)}
+            customUrl={m.deckUrl !== null}
+            onSetUrl={(url) => patch(m.id, { deckUrl: url })}
+            stickyPreview={wide}
+        />
+    );
+
     /**
      * Adds a blank matchup at the end of the list and puts the cursor in its
      * name, so you can type the archetype straight away. There are two Add
@@ -1147,9 +1212,20 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             </p>
                         )}
 
+                        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-6 xl:items-start">
                         <div className="space-y-4">
                             {matchups.map((m, idx) => (
-                                <div key={m.id} className="bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3">
+                                <div
+                                    key={m.id}
+                                    // Capture phase, so clicking or tabbing into any
+                                    // field inside counts as working on this matchup.
+                                    onPointerDownCapture={() => setActiveId(m.id)}
+                                    onFocusCapture={() => setActiveId(m.id)}
+                                    className={
+                                        "bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3 " +
+                                        (wide && active?.id === m.id ? "ring-2 ring-brass/70" : "")
+                                    }
+                                >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-ink/40 text-sm w-6 shrink-0">{idx + 1}.</span>
 
@@ -1264,8 +1340,35 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                             className="mt-1 w-full px-2 py-1.5 rounded bg-parchment-dark text-ink text-sm font-normal normal-case tracking-normal shadow-inner-parchment resize-y"
                                         />
                                     </label>
+
+                                    {!wide && (
+                                        <div className="border-t border-brass/20 pt-2">
+                                            <button
+                                                type="button"
+                                                aria-expanded={!!openLists[m.id]}
+                                                onClick={() =>
+                                                    setOpenLists((o) => ({ ...o, [m.id]: !o[m.id] }))
+                                                }
+                                                className="text-sm text-brand hover:text-brand-dark underline underline-offset-2"
+                                            >
+                                                {openLists[m.id] ? "Hide their list" : "Show their list"}
+                                            </button>
+                                            {openLists[m.id] && (
+                                                <div className="pt-3">{opponentDeck(m)}</div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
+                        </div>
+
+                        {wide && active && (
+                            <aside className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto bg-parchment rounded shadow-inner-parchment p-4">
+                                {/* Keyed by matchup so the preview resets when you
+                                    switch to a different opponent. */}
+                                <div key={active.id}>{opponentDeck(active)}</div>
+                            </aside>
+                        )}
                         </div>
 
                         <div className="flex justify-center">

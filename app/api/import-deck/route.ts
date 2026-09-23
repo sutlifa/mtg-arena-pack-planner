@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { goldfishFetch, readCappedText, isGoldfishHost } from "@/lib/goldfishFetch";
+import { readJsonBody } from "@/lib/requestBody";
 
 /** An archetype page is HTML; anything far larger than this isn't one. */
 const MAX_RESPONSE_BYTES = 2_000_000;
@@ -51,7 +52,11 @@ async function resolveDownloadUrl(rawUrl: string): Promise<string | null> {
 
 export async function POST(req: Request) {
     try {
-        const { url } = await req.json();
+        const payload = await readJsonBody(req);
+        if (!payload) {
+            return NextResponse.json({ error: "Missing deck URL" }, { status: 400 });
+        }
+        const { url } = payload;
 
         if (typeof url !== "string" || !url.trim()) {
             return NextResponse.json({ error: "Missing deck URL" }, { status: 400 });

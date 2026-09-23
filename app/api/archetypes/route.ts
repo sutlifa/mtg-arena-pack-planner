@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { goldfishFetch, readCappedText } from "@/lib/goldfishFetch";
+import { readJsonBody } from "@/lib/requestBody";
 import {
     isSupportedFormat,
     isMetaPeriod,
@@ -31,6 +32,11 @@ function decodeEntities(s: string): string {
 export interface Archetype {
     name: string;
     pct: number | null;
+    /**
+     * The archetype's MTGGoldfish page. The Sideboard Planner loads its
+     * featured decklist to show what you're boarding against.
+     */
+    url: string | null;
 }
 
 /**
@@ -47,11 +53,11 @@ function parseArchetypes(html: string): Archetype[] {
 
     for (const chunk of html.split("<div class='archetype-tile' ").slice(1)) {
         const nameMatch = chunk.match(
-            /<span class='deck-price-paper'>\s*<a href="\/archetype\/[^"]*">([^<]+)<\/a>/
+            /<span class='deck-price-paper'>\s*<a href="\/archetype\/([^"#?]*)[^"]*">([^<]+)<\/a>/
         );
         if (!nameMatch) continue;
 
-        const name = decodeEntities(nameMatch[1]).trim();
+        const name = decodeEntities(nameMatch[2]).trim();
         if (!name) continue;
 
         const key = name.toLowerCase();
@@ -60,7 +66,14 @@ function parseArchetypes(html: string): Archetype[] {
 
         const pctMatch = chunk.match(/metagame-percentage'>[\s\S]*?([\d.]+)%/);
 
-        out.push({ name, pct: pctMatch ? parseFloat(pctMatch[1]) : null });
+        // The slug is only ever used to build a mtggoldfish.com URL, and
+        // /api/import-deck re-checks the host before fetching it anyway.
+        const slug = nameMatch[1];
+        const url = /^[a-z0-9-]+$/i.test(slug)
+            ? `https://www.mtggoldfish.com/archetype/${slug}`
+            : null;
+
+        out.push({ name, pct: pctMatch ? parseFloat(pctMatch[1]) : null, url });
     }
 
     return out;
@@ -143,10 +156,8 @@ async function fetchMetagameHtml(format: string, period: MetaPeriod): Promise<st
 
 export async function POST(req: Request) {
     try {
-        // Anything that isn't a JSON object is the caller's mistake: a 400,
-        // not a 500 from destructuring null or a parse error.
-        const body = await req.json().catch(() => null);
-        if (!body || typeof body !== "object") {
+        const body = await readJsonBody(req);
+        if (!body) {
             return NextResponse.json({ error: "Bad request" }, { status: 400 });
         }
         const { format, limit, period: rawPeriod } = body;
