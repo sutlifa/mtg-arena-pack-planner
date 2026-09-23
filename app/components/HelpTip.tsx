@@ -24,10 +24,16 @@ export default function HelpTip({ text }: { text: string }) {
         const absLeft = wrapRect.left + left;
         const absRight = absLeft + bubbleWidth;
 
+        // clientWidth, not window.innerWidth. The bubble's first, unclamped
+        // render can hang off the right edge and widen the page, and on a
+        // phone innerWidth grows with it — so clamping to innerWidth clamps to
+        // the overflow the bubble itself caused, and it stays off-screen.
+        const viewportWidth = document.documentElement.clientWidth;
+
         if (absLeft < VIEWPORT_PADDING) {
             left += VIEWPORT_PADDING - absLeft;
-        } else if (absRight > window.innerWidth - VIEWPORT_PADDING) {
-            left -= absRight - (window.innerWidth - VIEWPORT_PADDING);
+        } else if (absRight > viewportWidth - VIEWPORT_PADDING) {
+            left -= absRight - (viewportWidth - VIEWPORT_PADDING);
         }
 
         setBubbleLeft(left);
@@ -70,7 +76,7 @@ export default function HelpTip({ text }: { text: string }) {
                     ref={bubbleRef}
                     role="tooltip"
                     style={{ left: bubbleLeft }}
-                    className="absolute z-50 top-full mt-2 w-64 max-w-[80vw] p-3 rounded bg-parchment-dark text-ink text-sm font-[family-name:var(--font-body)] normal-case leading-snug text-left shadow-card border border-line"
+                    className="absolute z-50 top-full mt-2 w-64 max-w-[80vw] p-3 whitespace-normal rounded bg-parchment-dark text-ink text-sm font-[family-name:var(--font-body)] normal-case leading-snug text-left shadow-card border border-line"
                 >
                     {text}
                 </span>

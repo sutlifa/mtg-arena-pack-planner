@@ -729,6 +729,32 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         }, 0);
     };
 
+    /**
+     * Adds a blank matchup at the end of the list and puts the cursor in its
+     * name, so you can type the archetype straight away. There are two Add
+     * buttons — beside Load Metagame and under the last matchup — so a long
+     * guide doesn't mean scrolling back to the top to add one more; focusing
+     * the new name also brings it into view from either one.
+     */
+    const focusMatchupId = useRef<string | null>(null);
+    const addMatchup = () => {
+        const m = emptyMatchup("New matchup");
+        focusMatchupId.current = m.id;
+        setMatchups((p) => [...p, m]);
+    };
+
+    // Runs after the new row has rendered. An effect rather than a timer or
+    // animation frame, which can fire before the commit or not at all in a
+    // background tab.
+    useEffect(() => {
+        const id = focusMatchupId.current;
+        if (!id) return;
+        focusMatchupId.current = null;
+        const input = document.querySelector<HTMLInputElement>(`[data-matchup-name="${id}"]`);
+        input?.focus();
+        input?.select();
+    }, [matchups]);
+
     const patch = (id: string, fields: Partial<Matchup>) =>
         setMatchups((prev) => prev.map((m) => (m.id === id ? { ...m, ...fields } : m)));
 
@@ -948,7 +974,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                         <button
                             type="button"
-                            onClick={() => setMatchups((p) => [...p, emptyMatchup("New matchup")])}
+                            onClick={addMatchup}
                             className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
                         >
                             + Add Matchup
@@ -1057,6 +1083,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                         <input
                                             type="text"
                                             aria-label="Archetype name"
+                                            data-matchup-name={m.id}
                                             value={m.name}
                                             onChange={(e) => patch(m.id, { name: e.target.value })}
                                             className="flex-1 min-w-[12rem] px-2 py-1 rounded bg-parchment-dark text-ink font-title text-lg shadow-inner-parchment"
@@ -1168,6 +1195,16 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             ))}
                         </div>
 
+                        <div className="flex justify-center">
+                            <button
+                                type="button"
+                                onClick={addMatchup}
+                                className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
+                            >
+                                + Add Matchup
+                            </button>
+                        </div>
+
                         {illegal.length > 0 && (
                             <div
                                 role="alert"
@@ -1275,8 +1312,9 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                         {fitNow &&
                             (fitNow.fits ? (
-                                <p className="text-sm text-ink/70 text-center">
-                                    Fits on one page &mdash; text prints at {pxToPt(fitNow.px)} pt.
+                                <p className="text-sm text-ink/60 text-center flex items-center justify-center">
+                                    Fits on one page at {pxToPt(fitNow.px)} pt
+                                    <HelpTip text="Export opens your browser's print dialog; pick Save as PDF. Text sizes itself to fill one page, so fewer matchups print bigger. If a date or web address still shows up, untick Headers and footers." />
                                 </p>
                             ) : (
                                 <div className="bg-amber-700/10 border border-amber-700/40 rounded p-4 space-y-1">
@@ -1284,19 +1322,12 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                         This guide runs onto a second page
                                     </p>
                                     <p className="text-sm text-ink/80">
-                                        Even at the smallest readable size ({pxToPt(MIN_SHEET_PX)} pt) it
-                                        won&apos;t fit on one sheet. Trim some notes or cut a matchup or two
-                                        if you want it on a single page at the table.
+                                        Even at {pxToPt(MIN_SHEET_PX)} pt it won&apos;t fit. Trim some notes or
+                                        cut a matchup to keep it to one sheet.
                                     </p>
                                 </div>
                             ))}
 
-                        <p className="text-xs text-ink/55 text-center">
-                            Export opens your browser&apos;s print dialog — choose &quot;Save as PDF&quot; as the
-                            destination. The text sizes itself to fill one page: fewer matchups print
-                            bigger, more shrink to fit. If your browser still adds a date or web address,
-                            untick &quot;Headers and footers&quot; under More settings.
-                        </p>
                     </section>
                 )}
             </div>
