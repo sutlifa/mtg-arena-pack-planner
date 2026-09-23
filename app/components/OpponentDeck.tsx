@@ -72,17 +72,27 @@ function loadDeck(url: string): Promise<LoadedDeck> {
  */
 export default function OpponentDeck({
     name,
+    resolving = false,
     url,
-    customUrl,
+    guessUrl,
+    choices,
     onSetUrl,
     sideBySide = false,
     lazy = false,
 }: {
     name: string;
-    /** The list to show: the pasted link if there is one, else the archetype's. */
+    /** Still fetching the metagame to guess from; don't offer the paste box yet. */
+    resolving?: boolean;
+    /** The list to show: one picked or pasted for this matchup, else the guess. */
     url: string | null;
-    /** Whether `url` is a link the user pasted, so it can be cleared. */
-    customUrl: boolean;
+    /** The planner's best guess for this matchup, for the picker's default. */
+    guessUrl: string | null;
+    /** The format's archetypes, most-played first, for the picker. */
+    choices: { name: string; pct: number | null; url?: string | null }[];
+    /**
+     * Stores a picked or pasted list on the matchup. Null goes back to the
+     * best guess.
+     */
     onSetUrl: (url: string | null) => void;
     /**
      * List and picture side by side, as on an MTGGoldfish deck page, with the
@@ -105,6 +115,7 @@ export default function OpponentDeck({
     const [preview, setPreview] = useState<string | null>(null);
     const [linkDraft, setLinkDraft] = useState("");
     const [linkError, setLinkError] = useState<string | null>(null);
+    const [pasting, setPasting] = useState(false);
 
     // Lazy panels wait until they're within a screen or so of view. Once
     // seen, always loaded: scrolling back up shouldn't unload anything.
@@ -159,7 +170,9 @@ export default function OpponentDeck({
         }
         setLinkError(null);
         setLinkDraft("");
-        onSetUrl(link);
+        setPasting(false);
+        // Pasting the guess's own link is the same as following the guess.
+        onSetUrl(link === guessUrl ? null : link);
     };
 
     const linkForm = (
@@ -239,12 +252,58 @@ export default function OpponentDeck({
         </div>
     );
 
+    // What the picker shows as chosen. A pasted link that isn't one of the
+    // archetypes gets its own entry, so the picker never claims a list that
+    // isn't the one on screen.
+    const isGuess = url !== null && url === guessUrl;
+    const inChoices = url !== null && choices.some((c) => c.url === url);
+    const PASTE = "__paste__";
+    const pickerValue = pasting ? PASTE : url ?? "";
+
+    const picker = (choices.length > 0 || url) && (
+        <label className="block">
+            <span className="sr-only">Their list for {name}</span>
+            <select
+                value={pickerValue}
+                onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === PASTE) {
+                        setPasting(true);
+                        return;
+                    }
+                    setPasting(false);
+                    // Choosing the guess again is "follow the guess", not a
+                    // pin — so renaming the matchup keeps updating it.
+                    onSetUrl(v === guessUrl ? null : v);
+                }}
+                className="w-full px-2 py-1.5 rounded bg-parchment-dark text-ink text-sm shadow-inner-parchment"
+            >
+                {!url && <option value="">Pick their deck...</option>}
+                {/* A list that isn't among this format's archetypes: pasted, or
+                    picked before the format changed. */}
+                {url && !inChoices && (
+                    <option value={url}>
+                        {url.includes("/archetype/") ? "Your chosen list" : "Your pasted link"}
+                    </option>
+                )}
+                {choices.map((c) => (
+                    <option key={c.url} value={c.url ?? ""}>
+                        {c.name}
+                        {c.pct !== null ? ` (${c.pct}%)` : ""}
+                        {c.url === guessUrl ? " — best guess" : ""}
+                    </option>
+                ))}
+                <option value={PASTE}>Paste an MTGGoldfish link...</option>
+            </select>
+        </label>
+    );
+
     return (
         <div ref={rootRef} className="space-y-3">
             <div className="flex items-baseline justify-between gap-2">
                 <p className="font-title text-lg leading-tight min-w-0 break-words">
                     <span className="block text-xs font-sans font-semibold uppercase tracking-wider text-ink/55">
-                        Their list
+                        Their list{isGuess ? " · best guess" : ""}
                     </span>
                     {name}
                 </p>
@@ -260,22 +319,29 @@ export default function OpponentDeck({
                 )}
             </div>
 
-            {!url ? (
+            {picker}
+            {pasting && linkForm}
+
+            {!url && resolving ? (
+                <p className="text-sm text-ink/60" role="status">
+                    Finding their list...
+                </p>
+            ) : !url ? (
                 <div className="space-y-2">
                     <p className="text-sm text-ink/70">
-                        No MTGGoldfish list for this matchup yet. Paste one to see it here.
+                        Couldn&apos;t load MTGGoldfish&apos;s metagame to find this deck. Paste a
+                        deck link to use one.
                     </p>
-                    {linkForm}
+                    {!pasting && linkForm}
                 </div>
             ) : !current ? (
                 <p className="text-sm text-ink/60" role="status">
                     Loading their list...
                 </p>
             ) : current.error !== null ? (
-                <div className="space-y-2">
-                    <p className="text-sm text-red-700">{current.error}</p>
-                    {linkForm}
-                </div>
+                <p className="text-sm text-red-700">
+                    {current.error} Pick another deck above, or paste a link.
+                </p>
             ) : (
                 deck && (
                     <>
@@ -292,23 +358,18 @@ export default function OpponentDeck({
                                 {lists}
                             </>
                         )}
-                        <details className="text-sm">
-                            <summary className="cursor-pointer text-xs text-ink/60 hover:text-ink">
-                                {customUrl ? "Using your link — change it" : "Use a different list"}
-                            </summary>
-                            <div className="pt-2 space-y-2">
-                                {linkForm}
-                                {customUrl && (
-                                    <button
-                                        type="button"
-                                        onClick={() => onSetUrl(null)}
-                                        className="text-xs text-brand underline underline-offset-2 hover:text-brand-dark"
-                                    >
-                                        Go back to the metagame list
-                                    </button>
-                                )}
-                            </div>
-                        </details>
+                        {!isGuess && guessUrl && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPasting(false);
+                                    onSetUrl(null);
+                                }}
+                                className="text-xs text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                Back to the best guess
+                            </button>
+                        )}
                     </>
                 )
             )}

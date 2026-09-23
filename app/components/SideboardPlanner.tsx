@@ -8,6 +8,7 @@ import SaveToProfileButton from "./SaveToProfileButton";
 import GuideLoader from "./GuideLoader";
 import GuideNameBar from "./GuideNameBar";
 import OpponentDeck from "./OpponentDeck";
+import { matchArchetype } from "@/lib/archetypeMatch";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import {
@@ -820,25 +821,94 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     // Narrow screens: which matchups have their list opened inline.
     const [openLists, setOpenLists] = useState<Record<string, boolean>>({});
 
-    const archetypeUrls = new Map(
-        available
-            .filter((a) => a.url)
-            .map((a) => [a.name.toLowerCase(), a.url as string])
-    );
-    const listUrl = (m: Matchup) => m.deckUrl ?? archetypeUrls.get(m.name.toLowerCase()) ?? null;
+    /**
+     * The archetype list used to find each matchup's MTGGoldfish page when
+     * the planner's own `available` can't: a guide saved before archetypes
+     * carried links, or opened without pressing Load Metagame. Fetched once
+     * per format and window, in the background, so a matchup's list simply
+     * appears — nobody should have to go and find a link by hand.
+     */
+    const refWindow = plan.availablePeriod ?? period;
+    const refKey = `${format}:${refWindow}`;
+    const [reference, setReference] = useState<{
+        key: string;
+        archetypes: Archetype[];
+        failed: boolean;
+    } | null>(null);
+    const refArchetypes = reference?.key === refKey ? reference.archetypes : [];
 
-    const opponentDeck = (m: Matchup) => (
-        <OpponentDeck
-            name={m.name}
-            url={listUrl(m)}
-            customUrl={m.deckUrl !== null}
-            onSetUrl={(url) => patch(m.id, { deckUrl: url })}
-            sideBySide={wide}
-            // Beside every matchup on a wide screen, so each list only loads
-            // as its matchup scrolls near — not eleven at once on page load.
-            lazy={wide}
-        />
-    );
+    // Everything the planner knows of this format's metagame, with links:
+    // the pulled list plus the background one, each archetype once. This is
+    // both what matchups are matched against and what the list picker offers.
+    const archetypeChoices: Archetype[] = [];
+    {
+        const seen = new Set<string>();
+        // `available` is whatever was last pulled, and switching the format
+        // doesn't clear it — so only its archetypes from THIS format count.
+        // MTGGoldfish's archetype slugs start with the format.
+        const thisFormat = `/archetype/${format}-`;
+        for (const a of [...available, ...refArchetypes]) {
+            const key = a.name.toLowerCase();
+            if (!a.url || !a.url.includes(thisFormat) || seen.has(key)) continue;
+            seen.add(key);
+            archetypeChoices.push(a);
+        }
+        archetypeChoices.sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+    }
+
+    // Fetched once per format and window whenever there are matchups: it's
+    // the full list to match against and to pick from, which `available` —
+    // only the top N someone chose to pull, or nothing at all in an older
+    // saved guide — can't be relied on for.
+    const needsReference = matchups.length > 0 && reference?.key !== refKey;
+
+    useEffect(() => {
+        if (!needsReference) return;
+        let cancelled = false;
+        fetch("/api/archetypes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ format, limit: MAX_ARCHETYPES, period: refWindow }),
+        })
+            .then((res) => (res.ok ? res.json() : Promise.reject()))
+            .then(
+                (data) => {
+                    if (cancelled) return;
+                    setReference({
+                        key: refKey,
+                        archetypes: Array.isArray(data.archetypes) ? data.archetypes : [],
+                        failed: false,
+                    });
+                },
+                () => {
+                    // Settles on "failed" rather than retrying on every render;
+                    // the paste box is the way forward from here.
+                    if (!cancelled) setReference({ key: refKey, archetypes: [], failed: true });
+                }
+            );
+        return () => {
+            cancelled = true;
+        };
+    }, [needsReference, format, refWindow, refKey]);
+
+    const opponentDeck = (m: Matchup) => {
+        // The best guess always shows; a list someone picked or pasted wins.
+        const guess = matchArchetype(m.name, archetypeChoices);
+        return (
+            <OpponentDeck
+                name={m.name}
+                url={m.deckUrl ?? guess?.url ?? null}
+                guessUrl={guess?.url ?? null}
+                choices={archetypeChoices}
+                resolving={!m.deckUrl && !guess && needsReference}
+                onSetUrl={(url) => patch(m.id, { deckUrl: url })}
+                sideBySide={wide}
+                // Beside every matchup on a wide screen, so each list only
+                // loads as its matchup scrolls near — not eleven at once.
+                lazy={wide}
+            />
+        );
+    };
 
     /**
      * Adds a blank matchup at the end of the list and puts the cursor in its
