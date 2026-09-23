@@ -8,7 +8,8 @@ import SaveToProfileButton from "./SaveToProfileButton";
 import GuideLoader from "./GuideLoader";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
-import { SUPPORTED_FORMATS, MAX_ARCHETYPES, ONE_PAGE_MATCHUPS, formatLabel } from "@/lib/formats";
+import { SUPPORTED_FORMATS, MAX_ARCHETYPES, SHEET_TARGET_MATCHUPS, formatLabel } from "@/lib/formats";
+import { fitSheet, pxToPt, MIN_SHEET_PX, type SheetFit } from "@/lib/printFit";
 
 const STORAGE_KEY = "mtgpp:sideboard";
 
@@ -94,6 +95,17 @@ function matchupChecks(m: Matchup, deckSize: number): PlanCheck[] {
 /** "2 Torpor Orb, 1 Snakeskin Veil" — the compact form used on the printed sheet. */
 const inlineList = (rows: CardRow[]) =>
     rows.filter((r) => r.name.trim()).map((r) => `${r.qty} ${r.name.trim()}`).join(", ");
+
+/** One OUT or IN line of the printed sheet: two cells of the .sb-rows grid. */
+function SheetRow({ label, rows }: { label: "out" | "in"; rows: CardRow[] }) {
+    const list = inlineList(rows);
+    return (
+        <>
+            <span className={`sb-label sb-label-${label}`}>{label.toUpperCase()}</span>
+            <span className="sb-cards">{list || <span className="sb-empty">—</span>}</span>
+        </>
+    );
+}
 
 /* ------------------------------------------------------------------ */
 /* One Out or In box                                                   */
@@ -556,6 +568,49 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     const [exporting, setExporting] = useState(false);
 
     /**
+     * How big the printed sheet's text can be while it still fits one page,
+     * and whether it fits at all — measured, so the planner can say "this will
+     * run onto a second page" before you print rather than after.
+     *
+     * The sheet lives inside .sb-print, which is display:none on screen and so
+     * has no size to measure. A clone goes into an invisible off-screen host,
+     * gets measured there, and is thrown away; the real template only receives
+     * the answer, through the --sb-size style below.
+     *
+     * Debounced, because it lays the sheet out a dozen or so times and there
+     * is no point doing that on every keystroke in a notes box. The setState
+     * runs in the timer, not in the effect body.
+     *
+     * `count` records how many matchups the answer was measured for. Until a
+     * change in that number has been re-measured, the result is not shown:
+     * ticking the top 30 would otherwise flash the size measured for the old
+     * selection. Notes edits don't hide it — a quarter-second-old size while
+     * you type is close enough, and hiding it on every keystroke would flicker.
+     */
+    const [fit, setFit] = useState<(SheetFit & { count: number }) | null>(null);
+    const fitNow = fit && fit.count === matchups.length ? fit : null;
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const sheet = printRef.current?.querySelector<HTMLElement>(".sb-sheet");
+            if (!sheet) return;
+
+            const host = document.createElement("div");
+            host.setAttribute("aria-hidden", "true");
+            host.style.cssText =
+                "position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;";
+            const clone = sheet.cloneNode(true) as HTMLElement;
+            host.appendChild(clone);
+            document.body.appendChild(host);
+            try {
+                setFit({ ...fitSheet(clone), count: matchups.length });
+            } finally {
+                host.remove();
+            }
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [matchups, format, plan.savedName]);
+
+    /**
      * Prints the guide from an isolated iframe rather than calling
      * window.print() on this page.
      *
@@ -569,10 +624,14 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * output deterministic: nothing from the editor can leak in because nothing
      * from the editor is in the document.
      *
-     * The page's own @media print rules are still the single source of truth for
-     * how the sheet looks — the iframe loads the same stylesheets rather than
-     * carrying a second copy of them. Falls back to window.print() if anything
-     * about the iframe path fails.
+     * globals.css is still the single source of truth for how the sheet looks —
+     * the iframe loads the same stylesheets rather than carrying a second copy
+     * of them. The one rule it adds is the page box: zero margin, which is what
+     * keeps the browser from stamping the date, title, web address and page
+     * number on the sheet (they are drawn in the margin, and there is none).
+     * The sheet is re-fitted inside the iframe right before printing, so the
+     * size that prints is measured in the document that prints. Falls back to
+     * window.print() if anything about the iframe path fails.
      */
     const exportSheet = () => {
         // Guarded here as well as on the button: a disabled button is a hint,
@@ -580,7 +639,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         // illegal deck.
         if (illegal.length > 0) return;
 
-        const src = printRef.current;
+        const src = printRef.current?.querySelector(".sb-sheet");
         if (!src) {
             window.print();
             return;
@@ -614,9 +673,11 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 const html =
                     "<!doctype html><html><head><meta charset=\"utf-8\">" +
                     head +
-                    "</head><body><div class=\"sb-print\">" +
-                    src.innerHTML +
-                    "</div></body></html>";
+                    "<style>@page{size:letter portrait;margin:0}" +
+                    "html,body{margin:0;padding:0;background:#fff}</style>" +
+                    "</head><body>" +
+                    src.outerHTML +
+                    "</body></html>";
 
                 iframe = document.createElement("iframe");
                 iframe.setAttribute("aria-hidden", "true");
@@ -631,10 +692,12 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     // on that event produces a blank page, so wait for the load
                     // that actually carries the sheet.
                     const doc = iframe?.contentDocument;
-                    if (!doc || !doc.querySelector(".sb-print-item")) return;
+                    const sheet = doc?.querySelector<HTMLElement>(".sb-sheet");
+                    if (!sheet) return;
 
                     settled = true;
                     try {
+                        fitSheet(sheet);
                         iframe?.contentWindow?.focus();
                         iframe?.contentWindow?.print();
                     } catch {
@@ -911,10 +974,10 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => selectTop(ONE_PAGE_MATCHUPS)}
+                                        onClick={() => selectTop(SHEET_TARGET_MATCHUPS)}
                                         className="text-xs px-2 py-1 rounded bg-parchment text-ink hover:bg-parchment/70 shadow-inner-parchment"
                                     >
-                                        Tick top {ONE_PAGE_MATCHUPS}
+                                        Tick top {SHEET_TARGET_MATCHUPS}
                                     </button>
                                     <button
                                         type="button"
@@ -956,12 +1019,12 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             <p
                                 className={
                                     "text-sm " +
-                                    (matchups.length > ONE_PAGE_MATCHUPS ? "text-amber-700" : "text-ink/70")
+                                    (fitNow && !fitNow.fits && matchups.length > 0 ? "text-amber-700" : "text-ink/70")
                                 }
                             >
                                 {matchups.length} selected for your guide.
-                                {matchups.length > ONE_PAGE_MATCHUPS
-                                    ? ` Around ${ONE_PAGE_MATCHUPS} fully written matchups fills a printed page, so this many may run onto a second — it depends how much you write.`
+                                {fitNow && !fitNow.fits && matchups.length > 0
+                                    ? " With everything you've written, the printed guide runs onto a second page."
                                     : ""}
                             </p>
                         </div>
@@ -1210,9 +1273,29 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             </button>
                         </div>
 
+                        {fitNow &&
+                            (fitNow.fits ? (
+                                <p className="text-sm text-ink/70 text-center">
+                                    Fits on one page &mdash; text prints at {pxToPt(fitNow.px)} pt.
+                                </p>
+                            ) : (
+                                <div className="bg-amber-700/10 border border-amber-700/40 rounded p-4 space-y-1">
+                                    <p className="font-title text-lg text-amber-800">
+                                        This guide runs onto a second page
+                                    </p>
+                                    <p className="text-sm text-ink/80">
+                                        Even at the smallest readable size ({pxToPt(MIN_SHEET_PX)} pt) it
+                                        won&apos;t fit on one sheet. Trim some notes or cut a matchup or two
+                                        if you want it on a single page at the table.
+                                    </p>
+                                </div>
+                            ))}
+
                         <p className="text-xs text-ink/55 text-center">
                             Export opens your browser&apos;s print dialog — choose &quot;Save as PDF&quot; as the
-                            destination. The sheet prints in three columns to fit on a single page.
+                            destination. The text sizes itself to fill one page: fewer matchups print
+                            bigger, more shrink to fit. If your browser still adds a date or web address,
+                            untick &quot;Headers and footers&quot; under More settings.
                         </p>
                     </section>
                 )}
@@ -1304,44 +1387,56 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             {/* ===================== printed sheet ===================== */}
             {/* Hidden on screen; globals.css swaps the two in @media print. The
                 printed layout is deliberately separate markup rather than a
-                restyling of the editor, because fitting 25 matchups on one side
-                of one page needs inline card lists, not stacked input rows. */}
+                restyling of the editor, because fitting 30 matchups on one side
+                of one page needs inline card lists, not stacked input rows.
+                --sb-size is the measured text size from `fit`; until there is
+                one, the stylesheet's default applies. */}
+            {/* The page box for Ctrl+P on this page. margin: 0 leaves the browser
+                nowhere to stamp its date, title, web address and page number —
+                they are drawn in the page margin. Rendered here rather than in
+                globals.css so it applies only while the planner is mounted, not
+                to printing every page on the site. */}
+            <style>{"@media print { @page { size: letter portrait; margin: 0; } }"}</style>
             <div ref={printRef} className="sb-print" aria-hidden="true">
-                <div className="sb-print-head">
-                    <strong>Sideboard Guide</strong>
-                    <span>
-                        {formatLabel(format)}
-                        {sections ? ` · ${totalCards(maindeck)} main / ${totalCards(sideboard)} side` : ""}
-                    </span>
-                </div>
+                <div
+                    className={fit && !fit.fits ? "sb-sheet sb-overflow" : "sb-sheet"}
+                    style={fit ? ({ "--sb-size": `${fit.px}px` } as React.CSSProperties) : undefined}
+                >
+                    <div className="sb-sheet-head">
+                        <span className="sb-sheet-title">{plan.savedName ?? "Sideboard Guide"}</span>
+                        <span className="sb-sheet-format">{formatLabel(format)}</span>
+                    </div>
 
-                <div className="sb-print-cols">
-                    {matchups.map((m) => (
-                        <div key={m.id} className="sb-print-item">
-                            <div className="sb-print-title">
-                                {m.name}
-                                {m.pct !== null && <span className="sb-print-pct">{m.pct}%</span>}
+                    <div className="sb-cols">
+                        {matchups.map((m) => (
+                            <div key={m.id} className="sb-item">
+                                <div className="sb-item-title">
+                                    <span className="sb-item-name">{m.name}</span>
+                                    {m.pct !== null && <span className="sb-item-pct">{m.pct}%</span>}
+                                </div>
+
+                                {m.splitPlayDraw ? (
+                                    <div className="sb-rows sb-split">
+                                        <span className="sb-when">Play</span>
+                                        <SheetRow label="out" rows={m.out} />
+                                        <span />
+                                        <SheetRow label="in" rows={m.in} />
+                                        <span className="sb-when">Draw</span>
+                                        <SheetRow label="out" rows={m.drawOut} />
+                                        <span />
+                                        <SheetRow label="in" rows={m.drawIn} />
+                                    </div>
+                                ) : (
+                                    <div className="sb-rows">
+                                        <SheetRow label="out" rows={m.out} />
+                                        <SheetRow label="in" rows={m.in} />
+                                    </div>
+                                )}
+
+                                {m.notes.trim() && <div className="sb-notes">{m.notes.trim()}</div>}
                             </div>
-
-                            {m.splitPlayDraw ? (
-                                <>
-                                    <div className="sb-print-line"><i>Play</i></div>
-                                    <div className="sb-print-line"><b>OUT</b> {inlineList(m.out) || "—"}</div>
-                                    <div className="sb-print-line"><b>IN</b> {inlineList(m.in) || "—"}</div>
-                                    <div className="sb-print-line"><i>Draw</i></div>
-                                    <div className="sb-print-line"><b>OUT</b> {inlineList(m.drawOut) || "—"}</div>
-                                    <div className="sb-print-line"><b>IN</b> {inlineList(m.drawIn) || "—"}</div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="sb-print-line"><b>OUT</b> {inlineList(m.out) || "—"}</div>
-                                    <div className="sb-print-line"><b>IN</b> {inlineList(m.in) || "—"}</div>
-                                </>
-                            )}
-
-                            {m.notes.trim() && <div className="sb-print-notes">{m.notes.trim()}</div>}
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>

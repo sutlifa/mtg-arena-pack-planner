@@ -19,15 +19,17 @@ export type FormatSlug = (typeof SUPPORTED_FORMATS)[number]["slug"];
 export const MAX_ARCHETYPES = 50;
 
 /**
- * The point past which the printed sheet is worth a word of warning.
+ * How many matchups the "Tick top N" shortcut selects: the most a printed
+ * sheet is designed to hold.
  *
- * Measured rather than guessed, and the measurement is content-dependent:
- * 25 matchups with full out/in lists, notes and some play/draw splits fill
- * about 72% of a Letter page in three columns, while 28 barely-filled ones
- * come in at 53%. So this is a soft advisory, not a limit — the UI says the
- * sheet *may* run to a second page and leaves the choice to the user.
+ * Not a limit. You can pick as many as you like (up to MAX_ARCHETYPES), and
+ * whether they fit one page is measured, not predicted from a count — the
+ * sheet's text shrinks to fit (lib/printFit.ts), and 30 matchups with full
+ * out/in lists and short notes still fit one Letter page at a readable size.
+ * Past that, or with long notes, the planner says when the sheet would run
+ * onto a second page.
  */
-export const ONE_PAGE_MATCHUPS = 25;
+export const SHEET_TARGET_MATCHUPS = 30;
 
 export function isSupportedFormat(slug: unknown): slug is FormatSlug {
     return typeof slug === "string" && SUPPORTED_FORMATS.some((f) => f.slug === slug);

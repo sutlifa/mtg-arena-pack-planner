@@ -248,129 +248,227 @@ body.no-scroll {
 /* Sideboard Planner — printed sheet         */
 /* ========================================= */
 /* The planner renders two versions of the guide: the interactive editor
-   (.sb-noprint) and a compact printed sheet (.sb-print). Only one is ever
-   visible. They are separate markup rather than one restyled tree because
-   fitting 25 matchups on a single side of paper needs inline card lists,
-   not stacked quantity/name input rows.
+   (.sb-noprint) and a compact printed sheet (.sb-sheet, kept inside the
+   hidden .sb-print template). They are separate markup rather than one
+   restyled tree because fitting thirty matchups on one side of paper needs
+   inline card lists, not stacked quantity/name input rows.
 
-   "Export PDF" calls window.print(); the browser's own "Save as PDF"
-   destination produces the file. That keeps the feature dependency-free —
-   no PDF library ships to the client — and gives the user native control
-   over paper size and margins. */
+   "Export PDF" prints the sheet from an isolated document and the browser's
+   own "Save as PDF" produces the file — no PDF library ships to the client. */
 
+/* On screen the planner only keeps the sheet as the template Export copies
+   from; it is never shown. */
 .sb-print {
     display: none;
 }
 
-@media print {
-    @page {
-        size: letter portrait;
-        margin: 0.35in;
-    }
+/* The sheet itself — deliberately NOT inside @media print.
+   lib/printFit.ts measures it on screen to decide how big its text can be,
+   and a measurement is only worth anything if the thing measured is laid out
+   exactly as it will print. So everything that affects its size lives here,
+   in every media, and @media print below only decides what is visible.
 
-    /* Nothing but the sheet. */
+   Two kinds of size, on purpose:
+   - Page geometry is in inches and never changes: the sheet is exactly one
+     US Letter page, with its own padding and column gap.
+   - Everything about text is in `em` of --sb-size, the one number printFit
+     searches over. Growing or shrinking the text keeps the layout's shape. */
+.sb-sheet {
+    --sb-size: 9px;
+    box-sizing: border-box;
+    width: 8.5in;
+    padding: 0.25in 0.28in;
+    /* When a guide is too long for one page, give the second page the same
+       top margin as the first rather than printing flush to the paper edge. */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    background: #fff;
+    color: #111;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: var(--sb-size);
+    line-height: 1.24;
+    letter-spacing: 0;
+    text-align: left;
+}
+
+.sb-sheet *,
+.sb-sheet *::before,
+.sb-sheet *::after {
+    box-sizing: border-box;
+}
+
+.sb-sheet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1em;
+    padding-bottom: 0.3em;
+    margin-bottom: 0.7em;
+    border-bottom: 1.5pt solid #111;
+}
+
+.sb-sheet-title {
+    font-size: 1.55em;
+    font-weight: 700;
+    line-height: 1.1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.sb-sheet-format {
+    font-size: 1.05em;
+    color: #444;
+    white-space: nowrap;
+}
+
+/* `balance` spreads the matchups evenly across the three columns. `auto`
+   would need a fixed height and otherwise pours everything into the first
+   one. The rule between columns costs no width — it is drawn in the gap. */
+.sb-cols {
+    column-count: 3;
+    column-gap: 0.24in;
+    column-fill: balance;
+    column-rule: 0.5pt solid #d4d4d4;
+}
+
+/* Only on a guide too long for one page (lib/printFit.ts sets it). Balanced
+   columns across a page break make Chrome push the whole column block onto
+   page two, leaving page one blank under the title. Filling columns in order
+   instead fills page one top to bottom, then continues on page two. */
+.sb-sheet.sb-overflow .sb-cols {
+    column-fill: auto;
+}
+
+/* A matchup never splits across columns or pages: half a plan in one column
+   and the rest in another is unreadable at the table. */
+.sb-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    padding-bottom: 0.45em;
+    margin-bottom: 0.5em;
+    border-bottom: 0.5pt solid #bdbdbd;
+}
+
+.sb-item-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5em;
+    font-size: 1.13em;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.2em;
+}
+
+.sb-item-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.sb-item-pct {
+    flex: none;
+    font-size: 0.8em;
+    font-weight: 400;
+    color: #6b6b6b;
+}
+
+/* OUT / IN rows as a grid, so a card list that wraps continues under the
+   cards rather than dropping back under its label — that hanging indent was
+   the misalignment in the old layout. A split matchup adds a PLAY / DRAW
+   column in front. */
+.sb-rows {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.45em;
+    row-gap: 0.08em;
+}
+
+.sb-rows.sb-split {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+}
+
+.sb-when,
+.sb-label {
+    font-size: 0.74em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.sb-when {
+    color: #555;
+}
+
+/* Dark enough to read as near-black on a mono laser printer, distinct enough
+   to scan for on a colour one. */
+.sb-label-out {
+    color: #8a1c1c;
+}
+
+.sb-label-in {
+    color: #1d5a31;
+}
+
+.sb-cards {
+    overflow-wrap: anywhere;
+}
+
+.sb-empty {
+    color: #9a9a9a;
+}
+
+/* pre-wrap keeps the line breaks people type into their notes. */
+.sb-notes {
+    margin-top: 0.3em;
+    font-size: 0.93em;
+    line-height: 1.22;
+    color: #333;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media print {
+    /* The page box — margin: 0, which is what removes the browser's own
+       header and footer — is NOT set here. An @page rule in this file would
+       apply to printing every page on the site, and scoping it to the planner
+       would need :has(), which this project's CSS pipeline drops from the
+       built stylesheet. SideboardPlanner renders its own @page rule instead,
+       so it exists only while the planner is on screen, and Export PDF's
+       isolated document carries its own (see exportSheet). */
+
+    /* Nothing but the content. */
     header,
     footer,
     .sb-noprint {
         display: none !important;
     }
 
-    /* The parchment texture and fixed background attachment are wrong for
-       paper (and cost ink); print plain black on white. */
     html,
     body {
         background: #fff !important;
         background-image: none !important;
-        color: #000 !important;
     }
 
-    /* Strip the page chrome's padding so the sheet gets the whole page. */
-    body,
-    main,
-    main > div,
-    main > div > div {
-        margin: 0 !important;
-        padding: 0 !important;
-        max-width: none !important;
-    }
+    /* Ctrl+P on the planner. Export PDF prints an isolated document holding
+       only the sheet; this makes the planner page itself print the same way.
 
+       The sheet is pinned to the top-left corner of the first page, out of
+       the page's flow. Left in flow, it would inherit the spacing of every
+       wrapper around it — page padding that differs per breakpoint, and the
+       top margin Tailwind's space-y-* gives it as the editor's sibling — and
+       40px of that is enough to push a sheet fitted to exactly one page onto
+       a second. With the editor hidden, those wrappers are left holding
+       nothing but their own padding, well inside the first page.
+
+       Not done by resetting the wrappers with :has(): this project's CSS
+       pipeline drops :has() selectors from the built stylesheet. */
     .sb-print {
         display: block !important;
-        font-family: Arial, Helvetica, sans-serif;
-        color: #000;
-    }
-
-    .sb-print-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        border-bottom: 1pt solid #000;
-        padding-bottom: 2pt;
-        margin-bottom: 6pt;
-        font-size: 9pt;
-    }
-
-    .sb-print-cols {
-        column-count: 3;
-        column-gap: 12pt;
-        /* `balance` spreads the matchups evenly across the three columns.
-           `auto` needs an explicit height to fill column-by-column; without
-           one it pours everything into the first column, which measured at
-           roughly 1.9 pages for a full 25-matchup guide instead of 0.7. */
-        column-fill: balance;
-    }
-
-    /* Keep a matchup whole — a plan split across two columns is unreadable
-       at the table. */
-    .sb-print-item {
-        break-inside: avoid;
-        page-break-inside: avoid;
-        margin: 0 0 5pt 0;
-        padding-bottom: 4pt;
-        border-bottom: 0.5pt solid #999;
-        orphans: 2;
-        widows: 2;
-    }
-
-    .sb-print-title {
-        display: flex;
-        justify-content: space-between;
-        gap: 4pt;
-        font-size: 7.5pt;
-        font-weight: 700;
-        line-height: 1.2;
-        margin-bottom: 1pt;
-    }
-
-    .sb-print-pct {
-        font-weight: 400;
-        color: #555;
-        white-space: nowrap;
-    }
-
-    .sb-print-line {
-        font-size: 6.6pt;
-        line-height: 1.28;
-        margin: 0;
-    }
-
-    .sb-print-line b {
-        display: inline-block;
-        min-width: 16pt;
-        font-size: 6pt;
-        letter-spacing: 0.02em;
-    }
-
-    .sb-print-line i {
-        font-size: 6pt;
-        color: #444;
-    }
-
-    .sb-print-notes {
-        font-size: 6.2pt;
-        line-height: 1.25;
-        font-style: italic;
-        color: #333;
-        margin-top: 1pt;
+        position: absolute;
+        top: 0;
+        left: 0;
+        margin: 0 !important;
     }
 }
