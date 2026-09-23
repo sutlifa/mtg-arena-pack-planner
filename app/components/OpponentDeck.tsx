@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
@@ -75,7 +75,8 @@ export default function OpponentDeck({
     url,
     customUrl,
     onSetUrl,
-    stickyPreview = false,
+    sideBySide = false,
+    lazy = false,
 }: {
     name: string;
     /** The list to show: the pasted link if there is one, else the archetype's. */
@@ -84,13 +85,14 @@ export default function OpponentDeck({
     customUrl: boolean;
     onSetUrl: (url: string | null) => void;
     /**
-     * Pin the preview to the top of its scrolling panel. In the side panel a
-     * 75-card list is taller than the screen, and without this the picture
-     * scrolls away just as you reach the sideboard you most want to see.
-     * Off for the inline phone view, where a pinned card would cover most of
-     * the screen while you scroll the list.
+     * List and picture side by side, as on an MTGGoldfish deck page, with the
+     * picture pinned while you scroll down the list to their sideboard. Off
+     * on a phone, where there's no room beside the list and a pinned card
+     * would cover most of the screen.
      */
-    stickyPreview?: boolean;
+    sideBySide?: boolean;
+    /** Don't fetch until this scrolls near the screen. */
+    lazy?: boolean;
 }) {
     // Results are tied to the URL they answer, as GuideLoader does with its
     // guide id: switching matchups can never show the previous one's list,
@@ -104,8 +106,27 @@ export default function OpponentDeck({
     const [linkDraft, setLinkDraft] = useState("");
     const [linkError, setLinkError] = useState<string | null>(null);
 
+    // Lazy panels wait until they're within a screen or so of view. Once
+    // seen, always loaded: scrolling back up shouldn't unload anything.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const [seen, setSeen] = useState(!lazy);
     useEffect(() => {
-        if (!url) return;
+        if (seen || !rootRef.current) return;
+        const io = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((e) => e.isIntersecting)) {
+                    setSeen(true);
+                    io.disconnect();
+                }
+            },
+            { rootMargin: "600px 0px" }
+        );
+        io.observe(rootRef.current);
+        return () => io.disconnect();
+    }, [seen]);
+
+    useEffect(() => {
+        if (!url || !seen) return;
         let cancelled = false;
         loadDeck(url).then(
             (deck) => {
@@ -118,7 +139,7 @@ export default function OpponentDeck({
         return () => {
             cancelled = true;
         };
-    }, [url]);
+    }, [url, seen]);
 
     const current = result && result.url === url ? result : null;
     const deck = current?.deck ?? null;
@@ -200,8 +221,26 @@ export default function OpponentDeck({
             </div>
         );
 
-    return (
+    const picture = shownImage && (
+        <Image
+            unoptimized
+            src={shownImage}
+            alt={shown ?? ""}
+            width={244}
+            height={340}
+            className="w-full max-w-[244px] mx-auto h-auto rounded-[4.5%] shadow-card"
+        />
+    );
+
+    const lists = deck && (
         <div className="space-y-3">
+            {list("Maindeck", deck.maindeck)}
+            {list("Sideboard", deck.sideboard)}
+        </div>
+    );
+
+    return (
+        <div ref={rootRef} className="space-y-3">
             <div className="flex items-baseline justify-between gap-2">
                 <p className="font-title text-lg leading-tight min-w-0 break-words">
                     <span className="block text-xs font-sans font-semibold uppercase tracking-wider text-ink/55">
@@ -240,28 +279,19 @@ export default function OpponentDeck({
             ) : (
                 deck && (
                     <>
-                        {shownImage && (
-                            <div
-                                className={
-                                    stickyPreview
-                                        ? "sticky -top-4 z-10 -mx-4 px-4 py-2 bg-parchment"
-                                        : ""
-                                }
-                            >
-                            <Image
-                                unoptimized
-                                src={shownImage}
-                                alt={shown ?? ""}
-                                width={244}
-                                height={340}
-                                className="w-full max-w-[244px] mx-auto h-auto rounded-[4.5%] shadow-card"
-                            />
+                        {sideBySide ? (
+                            <div className="flex gap-4 items-start">
+                                <div className="flex-1 min-w-0">{lists}</div>
+                                {/* Pinned while the list scrolls past, so the
+                                    card you point at is always in view. */}
+                                <div className="w-[176px] shrink-0 sticky top-4">{picture}</div>
                             </div>
+                        ) : (
+                            <>
+                                {picture}
+                                {lists}
+                            </>
                         )}
-                        <div className="space-y-3">
-                            {list("Maindeck", deck.maindeck)}
-                            {list("Sideboard", deck.sideboard)}
-                        </div>
                         <details className="text-sm">
                             <summary className="cursor-pointer text-xs text-ink/60 hover:text-ink">
                                 {customUrl ? "Using your link — change it" : "Use a different list"}

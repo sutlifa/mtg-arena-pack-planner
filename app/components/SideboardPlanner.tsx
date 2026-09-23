@@ -817,10 +817,6 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     /* ---- opponent lists ---- */
 
     const wide = useWide();
-    // The matchup the side panel shows: whichever one you last clicked or
-    // tabbed into. Not saved — it's where you are, not part of the guide.
-    const [activeId, setActiveId] = useState<string | null>(null);
-    const active = matchups.find((m) => m.id === activeId) ?? matchups[0] ?? null;
     // Narrow screens: which matchups have their list opened inline.
     const [openLists, setOpenLists] = useState<Record<string, boolean>>({});
 
@@ -837,7 +833,10 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             url={listUrl(m)}
             customUrl={m.deckUrl !== null}
             onSetUrl={(url) => patch(m.id, { deckUrl: url })}
-            stickyPreview={wide}
+            sideBySide={wide}
+            // Beside every matchup on a wide screen, so each list only loads
+            // as its matchup scrolls near — not eleven at once on page load.
+            lazy={wide}
         />
     );
 
@@ -1212,20 +1211,21 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             </p>
                         )}
 
-                        <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-6 xl:items-start">
                         <div className="space-y-4">
                             {matchups.map((m, idx) => (
+                                // On a wide screen each matchup is a row: your plan
+                                // on the left, their list beside it, so the two stay
+                                // together however far down the guide you are.
                                 <div
                                     key={m.id}
-                                    // Capture phase, so clicking or tabbing into any
-                                    // field inside counts as working on this matchup.
-                                    onPointerDownCapture={() => setActiveId(m.id)}
-                                    onFocusCapture={() => setActiveId(m.id)}
                                     className={
-                                        "bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 space-y-3 " +
-                                        (wide && active?.id === m.id ? "ring-2 ring-brass/70" : "")
+                                        "bg-parchment rounded shadow-inner-parchment p-3 sm:p-4 " +
+                                        (wide
+                                            ? "grid grid-cols-[minmax(0,1fr)_27rem] gap-5 items-start"
+                                            : "")
                                     }
                                 >
+                                <div className="min-w-0 space-y-3">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-ink/40 text-sm w-6 shrink-0">{idx + 1}.</span>
 
@@ -1359,16 +1359,14 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                         </div>
                                     )}
                                 </div>
-                            ))}
-                        </div>
 
-                        {wide && active && (
-                            <aside className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto bg-parchment rounded shadow-inner-parchment p-4">
-                                {/* Keyed by matchup so the preview resets when you
-                                    switch to a different opponent. */}
-                                <div key={active.id}>{opponentDeck(active)}</div>
-                            </aside>
-                        )}
+                                {wide && (
+                                    <div className="min-w-0 border-l border-brass/25 pl-5">
+                                        {opponentDeck(m)}
+                                    </div>
+                                )}
+                                </div>
+                            ))}
                         </div>
 
                         <div className="flex justify-center">
