@@ -94,6 +94,27 @@ export async function updateGuide(args: {
 }
 
 /**
+ * Rename a guide without touching its plan.
+ *
+ * Separate from updateGuide on purpose: renaming from the planner's title bar
+ * must not also write whatever is in the editor. Someone halfway through
+ * rethinking a guide wants to fix a typo in its name, not commit the half-done
+ * edits along with it.
+ */
+export async function renameGuide(
+    userId: number,
+    id: number,
+    name: string
+): Promise<{ id: number; name: string } | null> {
+    const rows = await sql<{ id: number; name: string }[]>`
+        UPDATE sideboard_guides SET name = ${name}, updated_at = now()
+        WHERE id = ${id} AND user_id = ${userId}
+        RETURNING id, name
+    `;
+    return rows[0] ?? null;
+}
+
+/**
  * Duplicate a guide entirely inside the database.
  *
  * The plan never round-trips through the browser: a copy made client-side

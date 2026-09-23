@@ -6,6 +6,7 @@ import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
 import SaveToProfileButton from "./SaveToProfileButton";
 import GuideLoader from "./GuideLoader";
+import GuideNameBar from "./GuideNameBar";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import { SUPPORTED_FORMATS, MAX_ARCHETYPES, SHEET_TARGET_MATCHUPS, formatLabel } from "@/lib/formats";
@@ -106,6 +107,14 @@ function SheetRow({ label, rows }: { label: "out" | "in"; rows: CardRow[] }) {
         </>
     );
 }
+
+/**
+ * Shared shape for the action bar under the matchups (Export, Save, Save as
+ * new, Start Over), so they line up as one row of equal-height buttons; each
+ * caller adds its own colours. Full-width on a phone, natural width above.
+ */
+const ACTION_BUTTON =
+    "flex-1 sm:flex-none whitespace-nowrap px-5 py-2.5 rounded shadow-card font-title text-lg ";
 
 /* ------------------------------------------------------------------ */
 /* One Out or In box                                                   */
@@ -803,6 +812,13 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
             {/* ===================== screen UI ===================== */}
             <div className="sb-noprint space-y-10">
+                {plan.savedId !== null && plan.savedName && (
+                    <GuideNameBar
+                        id={plan.savedId}
+                        name={plan.savedName}
+                        onRenamed={(name) => setPlan((p) => ({ ...p, savedName: name }))}
+                    />
+                )}
 
                 {/* ---- decklist ---- */}
                 <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
@@ -1244,57 +1260,63 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             </div>
                         )}
 
-                        <div className="flex flex-wrap justify-center gap-3 pt-2">
-                            <button
-                                type="button"
-                                onClick={exporting || illegal.length > 0 ? undefined : exportSheet}
-                                disabled={exporting || illegal.length > 0}
-                                aria-busy={exporting}
-                                title={
-                                    illegal.length > 0
-                                        ? "Fix the matchups that board you below 60 first"
-                                        : undefined
-                                }
-                                className={
-                                    "px-6 py-3 rounded shadow-card font-title text-xl " +
-                                    (exporting || illegal.length > 0
-                                        ? "bg-gray-400 cursor-not-allowed text-midnight-light"
-                                        : "bg-brass text-brass-ink hover:bg-brass-dark")
-                                }
-                            >
-                                {exporting ? "Preparing..." : "Export PDF"}
-                            </button>
-                            {authEnabled &&
-                                (illegal.length > 0 ? (
-                                    <button
-                                        type="button"
-                                        disabled
-                                        title="Fix the matchups that board you below 60 first"
-                                        className="px-6 py-3 rounded shadow-card font-title text-xl bg-gray-400 cursor-not-allowed text-midnight-light"
-                                    >
-                                        {plan.savedId === null ? "Save to Profile" : "Save"}
-                                    </button>
-                                ) : (
-                                    <SaveToProfileButton
-                                        plan={plan}
-                                        format={format}
-                                        formatLabel={formatLabel(format)}
-                                        savedId={plan.savedId}
-                                        savedName={plan.savedName}
-                                        onSaved={(saved) =>
-                                            // Whichever way it saved — updating
-                                            // the open guide, or branching a new
-                                            // one — that row is now what is open.
-                                            setPlan((p) => ({
-                                                ...p,
-                                                savedId: saved.id,
-                                                savedName: saved.name,
-                                            }))
-                                        }
-                                    />
-                                ))}
+                        {/* Keep, print, save on the left; Start Over apart on the right
+                            and in red, so the one button that throws work away never
+                            sits in the same row of look-alikes as Save. */}
+                        <div className="border-t border-brass/25 pt-5 flex flex-col sm:flex-row sm:items-start gap-3">
+                            <div className="flex flex-wrap gap-3 flex-1">
+                                <button
+                                    type="button"
+                                    onClick={exporting || illegal.length > 0 ? undefined : exportSheet}
+                                    disabled={exporting || illegal.length > 0}
+                                    aria-busy={exporting}
+                                    title={
+                                        illegal.length > 0
+                                            ? "Fix the matchups that board you below 60 first"
+                                            : undefined
+                                    }
+                                    className={
+                                        ACTION_BUTTON +
+                                        (exporting || illegal.length > 0
+                                            ? "bg-gray-400 cursor-not-allowed text-midnight-light"
+                                            : "bg-brass text-brass-ink hover:bg-brass-dark")
+                                    }
+                                >
+                                    {exporting ? "Preparing..." : "Export PDF"}
+                                </button>
+                                {authEnabled &&
+                                    (illegal.length > 0 ? (
+                                        <button
+                                            type="button"
+                                            disabled
+                                            title="Fix the matchups that board you below 60 first"
+                                            className={ACTION_BUTTON + "bg-gray-400 cursor-not-allowed text-midnight-light"}
+                                        >
+                                            {plan.savedId === null ? "Save to Profile" : "Save"}
+                                        </button>
+                                    ) : (
+                                        <SaveToProfileButton
+                                            plan={plan}
+                                            format={format}
+                                            formatLabel={formatLabel(format)}
+                                            savedId={plan.savedId}
+                                            savedName={plan.savedName}
+                                            buttonClass={ACTION_BUTTON}
+                                            onSaved={(saved) =>
+                                                // Whichever way it saved — updating
+                                                // the open guide, or branching a new
+                                                // one — that row is now what is open.
+                                                setPlan((p) => ({
+                                                    ...p,
+                                                    savedId: saved.id,
+                                                    savedName: saved.name,
+                                                }))
+                                            }
+                                        />
+                                    ))}
+                            </div>
 
-                                                        <button
+                            <button
                                 type="button"
                                 onClick={() => {
                                     // Nothing written yet — no point asking.
@@ -1304,7 +1326,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                     }
                                     setConfirmClear(true);
                                 }}
-                                className="px-5 py-3 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
+                                className={ACTION_BUTTON + "bg-red-700 text-white hover:bg-red-800"}
                             >
                                 Start Over
                             </button>
@@ -1312,7 +1334,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
                         {fitNow &&
                             (fitNow.fits ? (
-                                <p className="text-sm text-ink/60 text-center flex items-center justify-center">
+                                <p className="text-sm text-ink/60 flex items-center">
                                     Fits on one page at {pxToPt(fitNow.px)} pt
                                     <HelpTip text="Export opens your browser's print dialog; pick Save as PDF. Text sizes itself to fill one page, so fewer matchups print bigger. If a date or web address still shows up, untick Headers and footers." />
                                 </p>
@@ -1344,7 +1366,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     }}
                 >
                     <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
-                        <h3 id="clear-plan-title" className="font-title text-2xl">
+                        <h3 id="clear-plan-title" className="font-title text-2xl text-red-800">
                             Start over?
                         </h3>
 
@@ -1358,11 +1380,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                             straight in.
                         </p>
 
+                        <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
+                            There&apos;s no undo. Anything you haven&apos;t saved is gone.
+                        </p>
+
                         {authEnabled ? (
                             <p className="text-sm text-ink/70">
                                 {plan.savedName
-                                    ? `Save and clear updates “${plan.savedName}”, so you can open it again from your profile.`
-                                    : "Save it to your profile first if you want it back later. Saving under a name you’ve already used just updates that guide."}
+                                    ? `Save your progress first: Save and clear updates “${plan.savedName}”, so you can open it again from your profile.`
+                                    : "Save your progress first if you want it back later. Save and clear puts it in your profile, then starts fresh."}
                             </p>
                         ) : (
                             <p className="text-sm text-amber-700">
@@ -1404,6 +1430,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                     // only invites a misclick.
                                     allowSaveAsNew={false}
                                     label="Save and clear"
+                                    buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
                                     onSaved={() => {
                                         resetEverything();
                                         setConfirmClear(false);

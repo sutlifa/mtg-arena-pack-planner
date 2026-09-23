@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getGuide, deleteGuide, updateGuide } from "@/lib/guides";
+import { getGuide, deleteGuide, updateGuide, renameGuide } from "@/lib/guides";
 import { hasDatabase } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/savedRoutes";
 
@@ -109,6 +109,52 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         }
         console.error("UPDATE GUIDE ERROR:", err);
         return NextResponse.json({ error: "Could not save your guide" }, { status: 500 });
+    }
+}
+
+/**
+ * Rename only. The planner's title bar calls this so changing a guide's name
+ * never also saves the plan being edited — see renameGuide.
+ */
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
+    if (!hasDatabase) {
+        return NextResponse.json({ error: "Saving isn't configured" }, { status: 503 });
+    }
+
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+    const id = await resolve(context);
+    if (!id) return NextResponse.json({ error: "Bad id" }, { status: 400 });
+
+    let name = "";
+
+    try {
+        const body = await req.json().catch(() => ({}));
+        name = typeof body?.name === "string" ? body.name.trim() : "";
+        if (!name) {
+            return NextResponse.json({ error: "Give the guide a name" }, { status: 400 });
+        }
+        if (name.length > MAX_NAME_LENGTH) {
+            return NextResponse.json(
+                { error: `Name is too long (max ${MAX_NAME_LENGTH} characters)` },
+                { status: 400 }
+            );
+        }
+
+        const renamed = await renameGuide(userId, id, name);
+        if (!renamed) return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return NextResponse.json(renamed);
+    } catch (err) {
+        if (isUniqueViolation(err)) {
+            return NextResponse.json(
+                { error: `You already have a guide called "${name}"` },
+                { status: 409 }
+            );
+        }
+        console.error("RENAME GUIDE ERROR:", err);
+        return NextResponse.json({ error: "Could not rename your guide" }, { status: 500 });
     }
 }
 

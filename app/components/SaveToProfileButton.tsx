@@ -36,6 +36,7 @@ export default function SaveToProfileButton({
     savedName = null,
     label,
     allowSaveAsNew = true,
+    buttonClass = "px-6 py-3 rounded shadow-card font-title text-xl ",
     onSaved,
 }: {
     plan: unknown;
@@ -48,6 +49,11 @@ export default function SaveToProfileButton({
     label?: string;
     /** The clear dialog turns this off: branching a copy mid-reset is noise. */
     allowSaveAsNew?: boolean;
+    /**
+     * Size and shape, without colours, so the buttons match whatever row they
+     * sit in: the planner's action bar, or the smaller Start Over dialog.
+     */
+    buttonClass?: string;
     /** Fires only after a save actually succeeds, with the row it wrote. */
     onSaved?: (saved: { id: number; name: string }) => void;
 }) {
@@ -61,7 +67,7 @@ export default function SaveToProfileButton({
         return (
             <a
                 href="/signin?callbackUrl=%2Fsideboard"
-                className="px-6 py-3 rounded shadow-card font-title text-xl bg-parchment text-ink hover:bg-parchment/70"
+                className={buttonClass + "text-center bg-parchment text-ink hover:bg-parchment/70"}
             >
                 Sign in to Save
             </a>
@@ -213,7 +219,7 @@ export default function SaveToProfileButton({
                 onClick={saving ? undefined : open ? saveOpen : startNaming}
                 disabled={saving}
                 className={
-                    "px-6 py-3 rounded shadow-card font-title text-xl " +
+                    buttonClass +
                     (saving
                         ? "bg-gray-400 cursor-not-allowed text-midnight-light"
                         : "bg-brand text-midnight-light hover:bg-brand-dark")
@@ -227,20 +233,14 @@ export default function SaveToProfileButton({
                     type="button"
                     onClick={saving ? undefined : startNaming}
                     disabled={saving}
-                    className="px-5 py-3 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
+                    className={buttonClass + "bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"}
                 >
                     Save as new...
                 </button>
             )}
 
-            {open && savedName && (
-                <p className="w-full text-sm text-center text-ink/70">
-                    Editing &quot;{savedName}&quot;. Save updates that guide.
-                </p>
-            )}
-
             {message && (
-                <p className="w-full text-sm text-center text-ink/80" role="status">
+                <p className="w-full text-sm text-ink/80" role="status">
                     {message}
                 </p>
             )}

@@ -35,6 +35,11 @@ export default function CardAutocomplete({
     onEnterCommit?: () => void;
 }) {
     const [open, setOpen] = useState(false);
+    // What's in the quantity box while it's being edited, when that isn't a
+    // number yet — an empty box between Backspace and the next digit. The
+    // input is controlled, so without this React would put the old number
+    // straight back and the next digit would land after it ("1" → "13").
+    const [qtyDraft, setQtyDraft] = useState<string | null>(null);
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [highlight, setHighlight] = useState(0);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -135,15 +140,30 @@ export default function CardAutocomplete({
         <div ref={wrapRef} className="relative flex items-center gap-1.5 sm:gap-2">
             <input
                 type="number"
-                min={1}
+                min={0}
                 max={maxQty}
-                value={row.qty}
+                value={qtyDraft ?? row.qty}
                 aria-label="Quantity"
                 onChange={(e) => {
                     const raw = parseInt(e.target.value, 10);
-                    const n = Number.isNaN(raw) ? 1 : raw;
-                    onChange({ ...row, qty: Math.min(Math.max(1, n), maxQty) });
+                    // Clearing the box to type a new number isn't a request to
+                    // drop the card: show the empty box, keep the row's real
+                    // quantity until a number lands.
+                    if (Number.isNaN(raw)) {
+                        setQtyDraft(e.target.value);
+                        return;
+                    }
+                    setQtyDraft(null);
+                    // Stepping down to 0 means "none of these": remove the row
+                    // rather than leave "0 Card" in the plan and on the sheet.
+                    if (raw <= 0) {
+                        onRemove();
+                        return;
+                    }
+                    onChange({ ...row, qty: Math.min(raw, maxQty) });
                 }}
+                // Left empty: show the quantity it still has.
+                onBlur={() => setQtyDraft(null)}
                 className={
                     "w-12 sm:w-14 shrink-0 px-2 py-1 rounded bg-parchment text-ink text-sm shadow-inner-parchment " +
                     (overMax ? "ring-2 ring-red-600" : "")
