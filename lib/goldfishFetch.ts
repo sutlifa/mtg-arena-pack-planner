@@ -30,8 +30,24 @@ function isAllowedTarget(url: URL): boolean {
     return url.protocol === "https:" && isGoldfishHost(url);
 }
 
-export async function goldfishFetch(startUrl: string): Promise<Response | null> {
+/**
+ * Extra request options, for the metagame route's one POST. Only what that
+ * needs: a method, a form body, and headers (cookie, CSRF token) layered on
+ * top of the fixed User-Agent.
+ */
+export interface GoldfishInit {
+    method?: "GET" | "POST";
+    headers?: Record<string, string>;
+    body?: string;
+}
+
+export async function goldfishFetch(
+    startUrl: string,
+    init: GoldfishInit = {}
+): Promise<Response | null> {
     let current = startUrl;
+    let method = init.method ?? "GET";
+    let body = init.body;
 
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
         let parsed: URL;
@@ -44,7 +60,9 @@ export async function goldfishFetch(startUrl: string): Promise<Response | null> 
         if (!isAllowedTarget(parsed)) return null;
 
         const res = await fetch(parsed.toString(), {
-            headers: { "User-Agent": GOLDFISH_UA },
+            method,
+            headers: { ...init.headers, "User-Agent": GOLDFISH_UA },
+            body,
             redirect: "manual",
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
@@ -53,6 +71,10 @@ export async function goldfishFetch(startUrl: string): Promise<Response | null> 
             const location = res.headers.get("location");
             if (!location) return null;
             current = new URL(location, parsed).toString();
+            // A redirect answers a POST with a page to GET, as browsers do;
+            // re-sending the form body to wherever it points would be wrong.
+            method = "GET";
+            body = undefined;
             continue;
         }
 
@@ -62,13 +84,39 @@ export async function goldfishFetch(startUrl: string): Promise<Response | null> 
     return null; // too many redirects
 }
 
-/** Reads a response body, refusing anything implausibly large. */
+/**
+ * Reads a response body, refusing anything implausibly large.
+ *
+ * Streamed and counted in bytes as it arrives, so the cap holds even when
+ * there's no Content-Length (chunked responses): reading the whole body with
+ * res.text() and measuring afterwards would already have buffered all of it.
+ */
 export async function readCappedText(res: Response, maxBytes: number): Promise<string | null> {
     const declared = Number(res.headers.get("content-length") ?? "0");
     if (declared > maxBytes) return null;
 
-    const text = await res.text();
-    if (text.length > maxBytes) return null;
+    if (!res.body) return "";
 
-    return text;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+            await reader.cancel().catch(() => {});
+            return null;
+        }
+        chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
 }

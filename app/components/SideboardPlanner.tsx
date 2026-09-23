@@ -9,7 +9,15 @@ import GuideLoader from "./GuideLoader";
 import GuideNameBar from "./GuideNameBar";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
-import { SUPPORTED_FORMATS, MAX_ARCHETYPES, SHEET_TARGET_MATCHUPS, formatLabel } from "@/lib/formats";
+import {
+    SUPPORTED_FORMATS,
+    MAX_ARCHETYPES,
+    SHEET_TARGET_MATCHUPS,
+    META_PERIODS,
+    DEFAULT_META_PERIOD,
+    isMetaPeriod,
+    formatLabel,
+} from "@/lib/formats";
 import { fitSheet, pxToPt, MIN_SHEET_PX, type SheetFit } from "@/lib/printFit";
 
 const STORAGE_KEY = "mtgpp:sideboard";
@@ -257,9 +265,18 @@ interface PlanState {
     loadedText: string;
     format: string;
     count: number;
+    /** Metagame window to pull, in days — MTGGoldfish's "Show decks from the last". */
+    period: number;
     matchups: Matchup[];
     /** The archetypes pulled from the metagame, for the picker. */
     available: Archetype[];
+    /**
+     * The window `available` (and the percentages on the matchups) came from.
+     * Separate from `period` because changing the dropdown doesn't re-pull:
+     * until Load Metagame is pressed again, the list is still the old window,
+     * and the picker and printed sheet should say so.
+     */
+    availablePeriod: number | null;
     /**
      * Plans for archetypes the user has unchecked. Unticking a box should hide
      * a matchup, not destroy work — re-ticking it brings the plan back.
@@ -302,6 +319,9 @@ export function normalisePlan(parsed: Record<string, unknown>, fallback: PlanSta
         loadedText: typeof raw.loadedText === "string" ? raw.loadedText : decklist,
         format: typeof raw.format === "string" ? raw.format : fallback.format,
         count: typeof raw.count === "number" ? raw.count : fallback.count,
+        // Plans saved before the time frame existed were all pulled at
+        // MTGGoldfish's default, which is what they get here.
+        period: isMetaPeriod(raw.period) ? raw.period : DEFAULT_META_PERIOD,
         matchups: Array.isArray(raw.matchups)
             // Tolerate plans saved before the Play/Draw split existed.
             ? (raw.matchups as Partial<Matchup>[]).map((m) => ({
@@ -314,6 +334,11 @@ export function normalisePlan(parsed: Record<string, unknown>, fallback: PlanSta
             }))
             : [],
         available: Array.isArray(raw.available) ? (raw.available as Archetype[]) : [],
+        availablePeriod: isMetaPeriod(raw.availablePeriod)
+            ? raw.availablePeriod
+            : Array.isArray(raw.available) && raw.available.length > 0
+                ? DEFAULT_META_PERIOD
+                : null,
         stash:
             raw.stash && typeof raw.stash === "object"
                 ? (raw.stash as Record<string, Matchup>)
@@ -331,8 +356,10 @@ const EMPTY_PLAN: PlanState = {
     loadedText: "",
     format: "modern",
     count: 50,
+    period: DEFAULT_META_PERIOD,
     matchups: [],
     available: [],
+    availablePeriod: null,
     stash: {},
     savedId: null,
     savedName: null,
@@ -351,11 +378,12 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     const [archLoading, setArchLoading] = useState(false);
     const [archError, setArchError] = useState<string | null>(null);
 
-    const { decklist, format, count, matchups, available } = plan;
+    const { decklist, format, count, period, matchups, available } = plan;
 
     const setDecklist = (v: string) => setPlan((p) => ({ ...p, decklist: v }));
     const setFormat = (v: string) => setPlan((p) => ({ ...p, format: v }));
     const setCount = (v: number) => setPlan((p) => ({ ...p, count: v }));
+    const setPeriod = (v: number) => setPlan((p) => ({ ...p, period: v }));
     const setMatchups = (fn: (prev: Matchup[]) => Matchup[]) =>
         setPlan((p) => ({ ...p, matchups: fn(p.matchups) }));
 
@@ -450,7 +478,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             const res = await fetch("/api/archetypes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ format, limit: count }),
+                body: JSON.stringify({ format, limit: count, period }),
             });
             const data = await res.json();
 
@@ -467,13 +495,23 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 const pcts = new Map<string, number | null>(
                     data.archetypes.map((a: Archetype) => [a.name.toLowerCase(), a.pct])
                 );
+                const pulled = typeof data.period === "number" ? data.period : period;
+                // A matchup missing from a pull over a DIFFERENT window loses
+                // its share: keeping it would print an old window's figure
+                // under the new window's heading. Over the same window it
+                // keeps it — pulling the top 10 after the top 50 shouldn't
+                // wipe the shares of decks 11 to 50 you'd already ticked.
+                const windowChanged = p.availablePeriod !== null && p.availablePeriod !== pulled;
                 return {
                     ...p,
                     available: data.archetypes,
+                    availablePeriod: pulled,
                     matchups: p.matchups.map((m) =>
                         pcts.has(m.name.toLowerCase())
                             ? { ...m, pct: pcts.get(m.name.toLowerCase()) ?? m.pct }
-                            : m
+                            : windowChanged
+                                ? { ...m, pct: null }
+                                : m
                     ),
                 };
             });
@@ -959,6 +997,19 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                         </label>
 
                         <label className="flex flex-col gap-1">
+                            <span className="text-sm text-ink/70">Decks from the last</span>
+                            <select
+                                value={period}
+                                onChange={(e) => setPeriod(Number(e.target.value))}
+                                className="px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
+                            >
+                                {META_PERIODS.map((d) => (
+                                    <option key={d} value={d}>{d} days</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="flex flex-col gap-1">
                             <span className="text-sm text-ink/70">Pull top (1–{MAX_ARCHETYPES})</span>
                             <input
                                 type="number"
@@ -1003,8 +1054,14 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                         <div className="space-y-3 pt-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-sm text-ink/70">
-                                    {available.length} archetypes in the current {formatLabel(format)} metagame
-                                    &mdash; tick the ones you want in your guide.
+                                    {available.length} archetypes in the {formatLabel(format)} metagame
+                                    {plan.availablePeriod ? ` over the last ${plan.availablePeriod} days` : ""}
+                                    {" "}&mdash; tick the ones you want in your guide.
+                                    {plan.availablePeriod !== null && plan.availablePeriod !== period && (
+                                        <span className="text-amber-700">
+                                            {" "}Press Load Metagame to switch to the last {period} days.
+                                        </span>
+                                    )}
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     <button
@@ -1462,7 +1519,14 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 >
                     <div className="sb-sheet-head">
                         <span className="sb-sheet-title">{plan.savedName ?? "Sideboard Guide"}</span>
-                        <span className="sb-sheet-format">{formatLabel(format)}</span>
+                        <span className="sb-sheet-format">
+                            {formatLabel(format)}
+                            {/* The percentages on the sheet only mean something
+                                with the window they were measured over. */}
+                            {plan.availablePeriod && matchups.some((m) => m.pct !== null)
+                                ? ` · meta % over ${plan.availablePeriod} days`
+                                : ""}
+                        </span>
                     </div>
 
                     <div className="sb-cols">

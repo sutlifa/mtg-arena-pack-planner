@@ -31,6 +31,19 @@ export const MAX_ARCHETYPES = 50;
  */
 export const SHEET_TARGET_MATCHUPS = 30;
 
+/**
+ * The metagame windows MTGGoldfish offers ("Show decks from the last N
+ * days"), and the one its metagame page shows by default. Only these values
+ * are ever sent upstream.
+ */
+export const META_PERIODS = [7, 14, 30, 90, 365] as const;
+export type MetaPeriod = (typeof META_PERIODS)[number];
+export const DEFAULT_META_PERIOD: MetaPeriod = 30;
+
+export function isMetaPeriod(n: unknown): n is MetaPeriod {
+    return typeof n === "number" && (META_PERIODS as readonly number[]).includes(n);
+}
+
 export function isSupportedFormat(slug: unknown): slug is FormatSlug {
     return typeof slug === "string" && SUPPORTED_FORMATS.some((f) => f.slug === slug);
 }
