@@ -36,7 +36,7 @@ export default function GuideLoader({
     // The message is tied to the guide it describes rather than held loose.
     // Deriving visibility from that means navigating back to a bare
     // /sideboard hides it for free — no effect needed to clear it, and no
-    // window where `Opened "X".` sits above a page that isn't X.
+    // window where an error about X sits above a page that isn't X.
     const [status, setStatus] = useState<{ id: string; message: string } | null>(null);
     const message = status && status.id === guideId ? status.message : null;
 
@@ -76,7 +76,9 @@ export default function GuideLoader({
                     id: guide.id,
                     name: guide.name,
                 });
-                setStatus({ id: guideId, message: `Opened "${guide.name}".` });
+                // No "Opened X" line on success: the Editing bar at the top of
+                // the planner already names the guide, so it only repeated it.
+                // This component speaks up only when the open fails.
             } catch {
                 if (!cancelled) setStatus({ id: guideId, message: "Could not open that guide." });
             }
