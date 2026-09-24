@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tidyCollection } from "@/lib/collectionText";
 import { listCollections, saveCollection } from "@/lib/saved";
 import { requireUser, isGuardFailure, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
 
@@ -31,10 +32,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "That collection is too large to save" }, { status: 413 });
         }
 
+        // Stored merged — one line per card, copies of every printing added
+        // together — whichever page or tool sent it.
         const id = await saveCollection({
             userId: g.userId,
             name: String(name).trim(),
-            rawText,
+            rawText: tidyCollection(rawText),
             arenaMode: Boolean(arenaMode),
         });
 

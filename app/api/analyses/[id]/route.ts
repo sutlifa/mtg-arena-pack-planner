@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tidyCollection } from "@/lib/collectionText";
 import { getAnalysis, deleteAnalysis, updateAnalysis } from "@/lib/saved";
 import {
     requireUser,
@@ -69,7 +70,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
             id,
             name,
             decklists: decks,
-            collection: collectionText,
+            // Merged like a saved collection: one line per card.
+            collection: tidyCollection(collectionText),
             arenaMode: Boolean(arenaMode),
         });
         if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });

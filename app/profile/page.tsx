@@ -85,7 +85,12 @@ export default async function ProfilePage() {
                                             {formatDate(g.updated_at)}
                                         </p>
                                     </div>
-                                    <div className="shrink-0 flex items-center gap-1">
+                                    {/* No shrink-0, and flex-wrap: the actions shrink
+                                        to the row and wrap onto a second line on a
+                                        phone instead of pushing the row wider than
+                                        the screen. The same on all three lists, so
+                                        they line up with each other. */}
+                                    <div className="flex flex-wrap items-center gap-1">
                                         <Link
                                             href={`/sideboard?guide=${g.id}`}
                                             className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
@@ -143,12 +148,20 @@ export default async function ProfilePage() {
                                                             {formatDate(c.updated_at)}
                                                         </p>
                                                     </div>
-                                                    <div className="shrink-0 flex items-center gap-1">
+                                                    {/* Four actions come to ~396px, wider than a
+                                                        375px phone's row — see the guides list. */}
+                                                    <div className="flex flex-wrap items-center gap-1">
                                                         <Link
-                                                            href={`/planner?collection=${c.id}`}
+                                                            href={`/collection?collection=${c.id}`}
                                                             className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
                                                         >
-                                                            Open
+                                                            Edit
+                                                        </Link>
+                                                        <Link
+                                                            href={`/planner?collection=${c.id}`}
+                                                            className="px-4 py-2 rounded font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
+                                                        >
+                                                            Use in Pack Planner
                                                         </Link>
                                                         <DuplicateSavedButton
                                                             kind="collections"
@@ -168,7 +181,8 @@ export default async function ProfilePage() {
                             ))}
                             <p className="text-xs text-ink/55 leading-relaxed">
                                 Arena and paper collections are kept separately, so the same name can exist
-                                in both. Opening one switches the Pack Planner into that mode.
+                                in both. Edit opens it on the Collection page with a picture of every card;
+                                Use in Pack Planner loads it there and switches the planner into its mode.
                             </p>
                         </div>
                     )}
@@ -204,7 +218,8 @@ export default async function ProfilePage() {
                                                 {formatDate(a.updated_at)}
                                             </p>
                                         </div>
-                                        <div className="shrink-0 flex items-center gap-1">
+                                        {/* Wraps like the guides list above. */}
+                                        <div className="flex flex-wrap items-center gap-1">
                                             <Link
                                                 href={`/planner?analysis=${a.id}`}
                                                 className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"

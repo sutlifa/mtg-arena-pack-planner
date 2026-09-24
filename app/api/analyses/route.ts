@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tidyCollection } from "@/lib/collectionText";
 import { listAnalyses, saveAnalysis } from "@/lib/saved";
 import { requireUser, isGuardFailure, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
 
@@ -45,7 +46,8 @@ export async function POST(req: Request) {
             userId: g.userId,
             name: String(name).trim(),
             decklists: decks,
-            collection: collectionText,
+            // Merged like a saved collection: one line per card.
+            collection: tidyCollection(collectionText),
             arenaMode: Boolean(arenaMode),
         });
 

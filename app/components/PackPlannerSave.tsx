@@ -36,6 +36,7 @@ export default function PackPlannerSave({
     label,
     allowSaveAsNew = true,
     variant = "secondary",
+    returnTo = "/planner",
     onSaved,
 }: {
     kind: SaveKind;
@@ -48,6 +49,8 @@ export default function PackPlannerSave({
     label?: string;
     allowSaveAsNew?: boolean;
     variant?: "primary" | "secondary";
+    /** Where signing in from the "Sign in to Save" link comes back to. */
+    returnTo?: string;
     onSaved?: (saved: { id: number; name: string; arena: boolean; kind: SaveKind }) => void;
 }) {
     const { data: session } = useSession();
@@ -64,7 +67,7 @@ export default function PackPlannerSave({
     if (!session?.user) {
         return (
             <a
-                href="/signin?callbackUrl=%2Fplanner"
+                href={`/signin?callbackUrl=${encodeURIComponent(returnTo)}`}
                 className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
             >
                 Sign in to Save

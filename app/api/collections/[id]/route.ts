@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tidyCollection } from "@/lib/collectionText";
 import { getCollection, deleteCollection, updateCollection } from "@/lib/saved";
 import {
     requireUser,
@@ -62,11 +63,13 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
             return NextResponse.json({ error: "That collection is too large to save" }, { status: 413 });
         }
 
+        // Stored merged — one line per card, copies of every printing added
+        // together — whichever page or tool sent it.
         const updated = await updateCollection({
             userId: g.userId,
             id,
             name,
-            rawText,
+            rawText: tidyCollection(rawText),
             arenaMode: Boolean(arenaMode),
         });
         if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });

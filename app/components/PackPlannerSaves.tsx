@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
+import { tidyCollection } from "@/lib/collectionText";
 
 interface CollectionSummary {
     id: number;
@@ -180,7 +181,10 @@ export default function PackPlannerSaves({
             // Switch the planner into the mode the collection was saved as —
             // comparing an Arena collection in Paper Mode silently gives the
             // wrong answer.
-            onLoad({ collection: loaded.raw_text, arenaMode: loaded.arena_mode });
+            // Loaded with each card on one line, copies of every printing
+            // added together — the analysis counts them that way anyway, and
+            // an Arena export's one-line-per-printing is hard to read.
+            onLoad({ collection: tidyCollection(loaded.raw_text), arenaMode: loaded.arena_mode });
             // Now the open collection, so Save updates it instead of asking
             // for its name again. The open comparison is left alone: its
             // decklists are still on screen, so it is still the comparison
@@ -206,7 +210,7 @@ export default function PackPlannerSaves({
             const { analysis } = await res.json();
             onLoad({
                 decks: analysis.decklists?.length ? analysis.decklists : [""],
-                collection: analysis.collection ?? "",
+                collection: tidyCollection(analysis.collection ?? ""),
                 arenaMode: analysis.arena_mode,
             });
             // A comparison brings its own collection text with it, which is
@@ -243,8 +247,9 @@ export default function PackPlannerSaves({
                 if (cancelled) return;
 
                 if (collectionId && data.collection) {
+                    // Merged on load, like the Load Saved list below.
                     onLoadRef.current({
-                        collection: data.collection.raw_text,
+                        collection: tidyCollection(data.collection.raw_text ?? ""),
                         arenaMode: data.collection.arena_mode,
                     });
                     onOpenChangeRef.current({
@@ -260,7 +265,7 @@ export default function PackPlannerSaves({
                 } else if (data.analysis) {
                     onLoadRef.current({
                         decks: data.analysis.decklists?.length ? data.analysis.decklists : [""],
-                        collection: data.analysis.collection ?? "",
+                        collection: tidyCollection(data.analysis.collection ?? ""),
                         arenaMode: data.analysis.arena_mode,
                     });
                     onOpenChangeRef.current({
@@ -273,6 +278,17 @@ export default function PackPlannerSaves({
                     });
                     setMessage(`Loaded comparison "${data.analysis.name}".`);
                 }
+
+                // Drop the parameter once it has loaded, as the Collection
+                // page does: left in the address, a reload or Back to this
+                // page fetched the saved copy again over everything edited
+                // since. Native replaceState, which Next keeps
+                // useSearchParams in step with; re-running this effect with
+                // no parameter is then a no-op.
+                const here = new URL(window.location.href);
+                here.searchParams.delete("collection");
+                here.searchParams.delete("analysis");
+                window.history.replaceState(null, "", here.pathname + here.search + here.hash);
             } catch {
                 if (!cancelled) setMessage("Could not load that saved item.");
             }

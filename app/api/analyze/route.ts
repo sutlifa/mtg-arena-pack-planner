@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { parseDecklist } from "@/lib/deckParser";
 import { parseArenaCollection } from "@/lib/collectionParser";
+import { tidyCollection } from "@/lib/collectionText";
 import { lookupCard } from "@/lib/scryfall";
 import { rankSets } from "@/lib/setRecommender";
 import { estimateWildcards } from "@/lib/wildcardEstimator";
@@ -34,8 +35,27 @@ export async function POST(req: Request) {
         const { map: deckMap, missing: missingDeckCards } =
             await parseDecklist(decklist, arenaMode, mergePaperCounts);
 
+        // Copies of one card merged into one line before anything reads the
+        // collection, whichever page or tool sent it. That's the rule
+        // everywhere a collection is pasted, saved or loaded, and it matters
+        // most here: parseArenaCollection picks ONE format for the whole
+        // text from the first line that fits, so a list mixing "4 Opt (XLN)
+        // 65" with plain "2 Shock" lines silently dropped the plain ones.
+        // Tidied, every line is plain "qty name", which it always reads.
+        //
+        // After the size check above on purpose: the limits bound the text as
+        // it arrived, and tidying is itself per-line work that shouldn't run
+        // on a request those limits exist to refuse.
+        //
+        // Nothing left (no collection pasted, or only "Deck"/"Sideboard"
+        // headers) is simply owning nothing; the parser isn't called, since
+        // it logs empty input as an error and this isn't one.
+        const mergedCollection = typeof collection === "string" ? tidyCollection(collection) : "";
+
         // Collection MUST use same mode so canonical keys match
-        const collectionMap = await parseArenaCollection(collection, arenaMode);
+        const collectionMap = mergedCollection
+            ? await parseArenaCollection(mergedCollection, arenaMode)
+            : new Map<string, number>();
 
         const lookupResults: any[] = [];
 

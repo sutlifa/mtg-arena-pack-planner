@@ -9,6 +9,7 @@ import AuthButton from "./AuthButton";
 const TABS = [
     { href: "/", label: "Home" },
     { href: "/planner", label: "Pack Planner" },
+    { href: "/collection", label: "Collection" },
     { href: "/rotation", label: "Standard Rotation" },
     { href: "/sideboard", label: "Sideboard Planner" },
 ];

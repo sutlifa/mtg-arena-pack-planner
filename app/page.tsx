@@ -30,6 +30,19 @@ const TOOLS = [
         ],
     },
     {
+        href: "/collection",
+        name: "Collection",
+        art: "/art/banner-planner.svg",
+        tagline: "What do I already own?",
+        body: "Build the collection the Pack Planner compares your decks against, one card at a time or by pasting an export, and see a picture of every card in it. Every printing of a card counts together, so an Arena export's scattered lines become one tidy entry per card.",
+        points: [
+            "Add cards by name, or paste a list or an Arena export",
+            "A picture of every card, with quick +/− counts",
+            "Copies across printings combined into one line",
+            "Saves to your profile as Arena or Paper",
+        ],
+    },
+    {
         href: "/rotation",
         name: "Standard Rotation",
         art: "/art/banner-rotation.svg",

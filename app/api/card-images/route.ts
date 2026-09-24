@@ -27,7 +27,7 @@ function imageOf(card: Images & { raw?: { card_faces?: Images[] } }): string | n
 
 /**
  * Card images for a list of names, for the Sideboard Planner's opponent
- * decklist.
+ * decklist and the Collection page's tiles.
  *
  * Answered from lib/data/cards-min.json — the same data the Pack Planner
  * uses — rather than from Scryfall's API, so showing a 75-card list costs no
@@ -55,15 +55,27 @@ export async function POST(req: Request) {
             { status: 413 }
         );
     }
-    if (!names.every((n) => typeof n === "string" && n.trim() && n.length <= MAX_NAME_LENGTH)) {
-        return NextResponse.json({ error: "Card names must be short text" }, { status: 400 });
-    }
 
     try {
         // Built as entries, not by assigning onto `{}`: a card named
         // "__proto__" would set the object's prototype instead of a key.
         const entries: [string, string | null][] = [];
-        for (const name of new Set(names.map((n: string) => n.trim()))) {
+        // Strings only: there's no name to key an answer by for a number or
+        // an object, so those are left out rather than guessed at.
+        const asked = new Set(
+            names.filter((n): n is string => typeof n === "string").map((n) => n.trim())
+        );
+        for (const name of asked) {
+            // One bad name answers null for itself, the same as an unknown
+            // card, instead of rejecting the whole request. The Collection
+            // page asks about a whole page of tiles at once, and a single
+            // pasted paragraph in someone's collection used to cost every
+            // other card on the page its picture. The length cap still
+            // bounds the work: an over-long name is never looked up.
+            if (!name || name.length > MAX_NAME_LENGTH) {
+                entries.push([name, null]);
+                continue;
+            }
             const card = await lookupCard(name, false);
             entries.push([name, card.failed ? null : imageOf(card)]);
         }

@@ -6,11 +6,18 @@ import HelpTip from "./HelpTip";
 import { activate } from "./activate";
 import FitText from "./FitText";
 import PageHeader from "./PageHeader";
+import Link from "next/link";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
+import { tidyCollection } from "@/lib/collectionText";
+import {
+    COLLECTION_KEY,
+    MODE_KEY,
+    OPEN_KEY,
+    decodeOpen,
+    encodeOpen,
+} from "@/lib/openCollection";
 import PackPlannerSaves from "./PackPlannerSaves";
 import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
-
-const COLLECTION_STORAGE_KEY = "mtgpp:collection";
 
 type Wildcards = {
     common: number;
@@ -37,6 +44,8 @@ interface AnalyzeResponse {
 export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     const [decks, setDecks] = useState<string[]>([""]);
     const [collection, setCollection] = useState("");
+    // Set by the collection box's paste event, read by the change it causes.
+    const pastedRef = useRef(false);
 
     /**
      * Which saved rows are open, if any.
@@ -46,6 +55,14 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
      * an id behind would aim the next Save at the work just abandoned. They
      * are two separate refs because a collection and a comparison are saved
      * independently and either can be open without the other.
+     *
+     * The open collection is also shared with the Collection page through
+     * localStorage (lib/openCollection), next to the collection text itself:
+     * open "My Arena collection" here and the Collection page knows it's
+     * editing that row, and the other way round. Every write of the text
+     * rewrites the ref with it, so loading a different collection, a
+     * comparison or Start Over here can never leave the other page pointing
+     * Save at a row whose cards are no longer on screen.
      */
     const [openCollection, setOpenCollection] = useState<SavedRef>(null);
     const [openAnalysis, setOpenAnalysis] = useState<SavedRef>(null);
@@ -96,32 +113,67 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         return () => window.removeEventListener("keydown", handleKey);
     }, []);
 
+    // Nothing is written back to storage until the saved values have been
+    // read. The write effects below also run on the very first render, with
+    // an empty collection and Arena mode, and would otherwise wipe the
+    // stored ones before the restore landed — it only worked before because
+    // the read effect happened to be declared first.
+    const [hydrated, setHydrated] = useState(false);
+
     // Load any previously-saved collection once, after mount (not during the
     // initial render, so the server-rendered and first client render both
-    // start empty and hydration stays consistent).
+    // start empty and hydration stays consistent). The Arena/Paper mode and
+    // the open saved collection are shared with the Collection page too.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         try {
-            const saved = localStorage.getItem(COLLECTION_STORAGE_KEY);
-            if (saved) setCollection(saved);
+            const saved = localStorage.getItem(COLLECTION_KEY);
+            // Merged on the way in, so a collection pasted before merging
+            // existed reads as one line per card too.
+            if (saved) setCollection(tidyCollection(saved));
+            // Only if it still belongs to that exact text — see
+            // lib/openCollection.
+            setOpenCollection(decodeOpen(localStorage.getItem(OPEN_KEY), saved));
+            const mode = localStorage.getItem(MODE_KEY);
+            if (mode) setDisableArena(mode === "paper");
         } catch {
             // localStorage unavailable (private browsing, etc.) — ignore
         }
+        setHydrated(true);
     }, []);
     /* eslint-enable react-hooks/set-state-in-effect */
 
-    // Keep the saved collection in sync as the user edits it.
+    // Keep the saved collection in sync as the user edits it, and the open
+    // collection's fingerprint with it: an edit here is still an edit of the
+    // collection that's open, and clearing the text drops the ref.
     useEffect(() => {
+        if (!hydrated) return;
         try {
             if (collection) {
-                localStorage.setItem(COLLECTION_STORAGE_KEY, collection);
+                localStorage.setItem(COLLECTION_KEY, collection);
             } else {
-                localStorage.removeItem(COLLECTION_STORAGE_KEY);
+                localStorage.removeItem(COLLECTION_KEY);
             }
+            const openValue = encodeOpen(openCollection, collection);
+            if (openValue) localStorage.setItem(OPEN_KEY, openValue);
+            else localStorage.removeItem(OPEN_KEY);
         } catch {
             // localStorage unavailable — ignore
         }
-    }, [collection]);
+    }, [hydrated, collection, openCollection]);
+
+    // Arena/Paper is shared with the Collection page, so choosing Paper there
+    // opens the planner in Paper Mode and the other way round. Written on
+    // every change, which covers the toggle and loading a saved collection or
+    // comparison (both set disableArena).
+    useEffect(() => {
+        if (!hydrated) return;
+        try {
+            localStorage.setItem(MODE_KEY, disableArena ? "paper" : "arena");
+        } catch {
+            // localStorage unavailable — ignore
+        }
+    }, [hydrated, disableArena]);
 
     const clearCollection = () => setCollection("");
 
@@ -514,8 +566,36 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
                             placeholder="Paste your MTG collection here..."
                             value={collection}
-                            onChange={(e) => setCollection(e.target.value)}
+                            // Copies of the same card are merged automatically — an
+                            // Arena export lists every printing on its own line. On
+                            // paste and on leaving the box, not on every keystroke:
+                            // merging re-sorts the list, which would jump around
+                            // under someone typing a card in by hand.
+                            onPaste={() => {
+                                pastedRef.current = true;
+                            }}
+                            onChange={(e) => {
+                                const next = e.target.value;
+                                if (pastedRef.current) {
+                                    pastedRef.current = false;
+                                    setCollection(tidyCollection(next));
+                                } else {
+                                    setCollection(next);
+                                }
+                            }}
+                            onBlur={() => {
+                                const merged = tidyCollection(collection);
+                                if (merged !== collection) setCollection(merged);
+                            }}
                         />
+                        <div className="text-sm">
+                            <Link
+                                href="/collection"
+                                className="text-brand hover:text-brand-dark underline underline-offset-2"
+                            >
+                                Edit on the Collection page, with pictures
+                            </Link>
+                        </div>
                     </section>
 
                     {/* TOGGLE + BUTTON */}
