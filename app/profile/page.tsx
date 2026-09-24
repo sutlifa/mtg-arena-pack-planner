@@ -111,14 +111,21 @@ export default async function ProfilePage() {
 
                     {collections.length === 0 ? (
                         <p className="text-ink/75 leading-relaxed">
-                            Nothing saved yet. Paste a collection in the{" "}
+                            Nothing saved yet. Build one on the{" "}
+                            <Link
+                                href="/collection"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                Collection
+                            </Link>{" "}
+                            page or paste one into the{" "}
                             <Link
                                 href="/planner"
                                 className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
                                 Pack Planner
-                            </Link>{" "}
-                            and press <strong>Save Collection</strong>.
+                            </Link>
+                            , then press <strong>Save Collection</strong>.
                         </p>
                     ) : (
                         <div className="space-y-5">
@@ -248,8 +255,8 @@ export default async function ProfilePage() {
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
                     <h2 className="text-2xl font-title flex items-center">Your Data</h2>
                     <p className="text-ink/75 leading-relaxed">
-                        Deleting your account removes your saved guides and the name, email and
-                        avatar taken from your Google account. It happens immediately and cannot be
+                        Deleting your account removes your saved guides, collections and comparisons,
+                        and the name, email and avatar taken from your Google account. It happens immediately and cannot be
                         undone. Signing out alone does not delete anything.
                     </p>
                     <DeleteAccountButton />

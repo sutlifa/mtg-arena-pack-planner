@@ -7,7 +7,7 @@ import { SessionProvider } from "next-auth/react";
  *
  * The NFL app reads the session server-side with `auth()`, which is the more
  * direct approach when every page is per-user. This app is the other way
- * round: all six pages are currently statically prerendered, and the tools
+ * round: every page but /signin and /profile is statically prerendered, and the tools
  * work perfectly well signed out. Calling `auth()` in the root layout reads
  * cookies, which would turn every one of those pages dynamic to render a
  * single nav button.

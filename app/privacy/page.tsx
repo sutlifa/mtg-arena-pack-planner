@@ -4,7 +4,7 @@ import { isAuthConfigured } from "@/lib/authConfig";
 export const metadata = {
     title: "Privacy — MTG Planning App",
     description:
-        "What this site stores, what it sends, and which third parties are involved. No tracking, no ads, and an optional account you can delete yourself.",
+        "What this site stores, what it sends, and which third parties are involved. No ads, no tracking, no data sold.",
 };
 
 /**
@@ -14,7 +14,9 @@ export const metadata = {
  *
  * The account sections render only where sign-in is actually configured, so a
  * deployment without Google credentials doesn't describe features it does not
- * have.
+ * have. That includes the subtitle. The metadata description can't follow
+ * isAuthConfigured() — `metadata` is a static export — so it says only what is
+ * true either way.
  */
 export default function PrivacyPage() {
     const accounts = isAuthConfigured();
@@ -24,17 +26,27 @@ export default function PrivacyPage() {
             <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Privacy"
-                    subtitle="No ads, no tracking, no data sold. An account is optional, and you can delete it yourself."
+                    subtitle={
+                        accounts
+                            ? "No ads, no tracking, no data sold. An account is optional, and you can delete it yourself."
+                            : "No ads, no tracking, no data sold, and no account to sign up for."
+                    }
                     art="/art/banner-rotation.svg"
                 />
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                     <h2 className="text-2xl font-title flex items-center">The short version</h2>
                     <ul className="list-disc list-outside pl-5 space-y-2 leading-relaxed">
-                        <li>
-                            Every tool works without an account. Signing in is optional and only adds
-                            somewhere to save your work.
-                        </li>
+                        {accounts ? (
+                            <li>
+                                Every tool works without an account. Signing in is optional and only adds
+                                somewhere to save your work.
+                            </li>
+                        ) : (
+                            // No Google credentials on this deployment: /signin and
+                            // /profile 404, so don't describe signing in at all.
+                            <li>Every tool works without an account, and there is nothing to sign up for.</li>
+                        )}
                         <li>
                             Without an account, nothing you type is stored anywhere but your own browser.
                         </li>
@@ -56,19 +68,31 @@ export default function PrivacyPage() {
                     <h2 className="text-2xl font-title flex items-center">What&apos;s stored on your device</h2>
                     <div className="space-y-3 leading-relaxed">
                         <p>
-                            Two things are saved in your browser&apos;s{" "}
+                            A few things are saved in your browser&apos;s{" "}
                             <code className="px-1 rounded bg-parchment">localStorage</code> so you don&apos;t
-                            have to re-enter them next visit: the collection you paste into the Pack Planner
-                            (under <code className="px-1 rounded bg-parchment">mtgpp:collection</code>), and
-                            the decklist, format and matchup plans you build in the Sideboard Planner (under{" "}
-                            <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
+                            have to re-enter them next visit: the collection shared by the Pack Planner and
+                            the Collection page (under{" "}
+                            <code className="px-1 rounded bg-parchment">mtgpp:collection</code>), whether
+                            you&apos;re working in Arena or Paper mode (
+                            <code className="px-1 rounded bg-parchment">mtgpp:collection-mode</code>),
+                            {accounts ? (
+                                <>
+                                    {" "}which saved collection it was opened from, if any, so Save updates
+                                    that one (
+                                    <code className="px-1 rounded bg-parchment">mtgpp:collection-open</code>
+                                    ),
+                                </>
+                            ) : null}{" "}
+                            and the decklist, format and matchup plans you build in the Sideboard Planner
+                            (under <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
                         </p>
                         <p>
                             That data stays on your device. It is not tied to any identifier, and this site
-                            cannot read it on any other device. Clearing it is immediate: use the{" "}
-                            <strong>Clear</strong> button next to the collection box, or{" "}
-                            <strong>Clear All</strong> in the Sideboard Planner, or clear site data in your
-                            browser.
+                            cannot read it on any other device. Clearing it is immediate: the{" "}
+                            <strong>Clear</strong> button next to the Pack Planner&apos;s collection box, or{" "}
+                            <strong>Start Over</strong> in the Pack Planner, Collection page or Sideboard
+                            Planner, empties what you entered. Clearing site data in your browser removes
+                            all of it, including which mode and format you last used.
                         </p>
                     </div>
                 </section>
@@ -95,10 +119,14 @@ export default function PrivacyPage() {
                                 </li>
                                 <li>
                                     <strong>Whatever you explicitly save.</strong> That means sideboard guides
-                                    (the decklist, format and matchup plans), collections (the text you pasted,
-                                    kept verbatim), and comparisons (the decklists, collection and mode you
-                                    ran). Nothing is saved automatically — pressing a Save button is the only
-                                    way anything reaches the server for storage.
+                                    (the decklist, format and matchup plans), collections, and comparisons (the
+                                    decklists, collection and mode you ran). A collection — saved on its own or
+                                    as part of a comparison — is stored tidied rather than exactly as you pasted
+                                    it: one line per card with its count, copies across printings added
+                                    together, set codes, collector numbers and foil markers removed, and the
+                                    lines sorted alphabetically. Nothing is saved automatically — something is
+                                    stored only when you press Save, or rename or duplicate something you
+                                    already saved.
                                 </li>
                                 <li>
                                     <strong>Results are never stored.</strong> A saved comparison keeps only
@@ -149,12 +177,39 @@ export default function PrivacyPage() {
                             accepted, so this can&apos;t be used to make the server fetch arbitrary addresses.
                         </p>
                         <p>
-                            The Sideboard Planner does its work in your browser: splitting your decklist and
-                            building your matchup plans never involves the server.
-                            {accounts
-                                ? " It reaches the server only when you import a deck link, load the current metagame, or press Save to Profile."
-                                : " It reaches the server only when you import a deck link or load the current metagame."}
+                            The Collection page asks the server for card-name suggestions as you type into
+                            its add box, and for the pictures of the cards on the page you&apos;re looking
+                            at. Those requests carry only what you typed or the card names, and the app
+                            keeps none of it — though a suggestion request puts what you typed in its web
+                            address, so it appears in Vercel&apos;s standard request logs like any other
+                            address.
                         </p>
+                        {/*
+                          * Written against SideboardPlanner's `reference` effect and
+                          * OpponentDeck's lazy loading, which fetch without a click. An
+                          * earlier "only when you ask" was wrong on both counts; if either
+                          * stops being automatic, loosen this, don't just leave it.
+                          */}
+                        <p>
+                            The Sideboard Planner does its work in your browser: splitting your decklist and
+                            building your matchup plans never involves the server. It does contact the
+                            server — sending a link, a format, or card names, not your deck — when you
+                            import a deck link or pull the current metagame, and on its own in two cases.
+                            Whenever your guide has matchups, it fetches the format&apos;s metagame list in
+                            the background, to match each matchup to an archetype. And each
+                            opponent&apos;s list, with its card pictures, loads automatically as its
+                            matchup scrolls near on a wide screen, or when you open &quot;Show their
+                            list&quot; on a narrower one.
+                        </p>
+                        {accounts && (
+                            <p>
+                                While you&apos;re signed in, a few requests read or change your own saved
+                                work: the Pack Planner fetches the list of your saved collections and
+                                comparisons when it opens, so they&apos;re ready to load; opening a saved
+                                guide, collection or comparison fetches it; and pressing Save, renaming a
+                                guide, duplicating or deleting anything sends that change.
+                            </p>
+                        )}
                     </div>
                 </section>
 
@@ -183,9 +238,11 @@ export default function PrivacyPage() {
                                 font CDN.
                             </li>
                             <li>
-                                <strong>MTGGoldfish</strong> — contacted when you paste a deck link, and when the
-                                Sideboard Planner loads the current metagame for a format. Both requests are made
-                                by the server rather than your browser, and neither sends anything about you.
+                                <strong>MTGGoldfish</strong> — contacted when a deck link you entered is
+                                imported, and by the Sideboard Planner for the current metagame and for
+                                opponents&apos; lists, including the automatic fetches described above.
+                                These requests are made by the server rather than your browser, and none of
+                                them sends anything about you.
                             </li>
                             {accounts && (
                                 <>
@@ -195,8 +252,8 @@ export default function PrivacyPage() {
                                         and avatar.
                                     </li>
                                     <li>
-                                        <strong>Neon</strong> — the hosted Postgres database where saved accounts
-                                        and guides live. Only used if you sign in and save something.
+                                        <strong>Neon</strong> — the hosted Postgres database where accounts and
+                                        saved guides, collections and comparisons live. Only used if you sign in and save something.
                                     </li>
                                 </>
                             )}

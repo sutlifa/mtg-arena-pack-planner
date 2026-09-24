@@ -10,7 +10,7 @@ import { Analytics } from "@vercel/analytics/next";
 export const metadata = {
     title: "MTG Planning App",
     description:
-        "Analyze decks against your collection, and get pack recommendations for arena or a shopping list for TCGPlayer.",
+        "Free Magic: The Gathering deck planning tools: compare decks against your collection for Arena wildcards or a TCGPlayer shopping list, keep your collection with card pictures, check Standard rotation, and build a printable sideboard guide.",
 };
 
 export default function RootLayout({

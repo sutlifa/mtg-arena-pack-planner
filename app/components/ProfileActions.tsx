@@ -153,7 +153,7 @@ export function DeleteAccountButton() {
         if (
             !confirm(
                 "Delete your account and everything saved to it?\n\n" +
-                "This removes your saved guides and your account details permanently. It cannot be undone."
+                "This removes your saved guides, collections and comparisons and your account details permanently. It cannot be undone."
             )
         ) {
             return;
