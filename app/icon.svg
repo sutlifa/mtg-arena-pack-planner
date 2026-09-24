@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <!--
+    The header's mark (public/art/mark.svg) on the header's own midnight
+    backdrop. The backdrop is deliberate: the mark was drawn to sit on the
+    dark nav bar (its inner lozenge is filled midnight, not left hollow), and
+    bare brass on a transparent background washes out on light browser tabs.
+    The mark is scaled to 90% so its outer ring clears the rounded corners.
+    app/favicon.ico and app/apple-icon.png are rasterised from this drawing;
+    if the mark changes, regenerate them too.
+  -->
+  <rect width="40" height="40" rx="8" fill="#1c2b23"/>
+  <g transform="translate(20 20) scale(0.9) translate(-20 -20)">
+    <circle cx="20" cy="20" r="18.5" fill="none" stroke="#b8893a" stroke-width="1.6"/>
+    <circle cx="20" cy="20" r="14" fill="none" stroke="#b8893a" stroke-opacity="0.45" stroke-width="1"/>
+    <path d="M20 7 L31 20 L20 33 L9 20 Z" fill="#b8893a" opacity="0.9"/>
+    <path d="M20 13 L26 20 L20 27 L14 20 Z" fill="#1c2b23"/>
+    <circle cx="20" cy="20" r="2.4" fill="#d4a75c"/>
+  </g>
+</svg>
