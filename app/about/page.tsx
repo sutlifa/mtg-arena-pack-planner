@@ -209,7 +209,7 @@ export default function AboutPage() {
                             <p>
                                 Every tool works without an account, and there is nothing to sign up for.
                                 Your collection and sideboard plan are remembered in this browser between
-                                visits, and nothing you enter is saved anywhere else. The{" "}
+                                visits, and the app keeps nothing you enter anywhere else. The{" "}
                                 <a
                                     href="/privacy"
                                     className="text-brand underline underline-offset-2 hover:text-brand-dark"

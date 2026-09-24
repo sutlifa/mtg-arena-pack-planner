@@ -66,8 +66,8 @@ export default async function SignInPage({
                     </form>
 
                     <p className="text-xs text-ink/55 leading-relaxed">
-                        We store your Google account&apos;s name, email and avatar, and whatever you
-                        choose to save. See the{" "}
+                        We store your Google account ID, name, email and avatar, the date you first
+                        signed in, and whatever you choose to save. See the{" "}
                         <a
                             href="/privacy"
                             className="text-brand underline underline-offset-2 hover:text-brand-dark"

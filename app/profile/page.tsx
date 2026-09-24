@@ -256,7 +256,8 @@ export default async function ProfilePage() {
                     <h2 className="text-2xl font-title flex items-center">Your Data</h2>
                     <p className="text-ink/75 leading-relaxed">
                         Deleting your account removes your saved guides, collections and comparisons,
-                        and the name, email and avatar taken from your Google account. It happens immediately and cannot be
+                        and your account record: the account ID, name, email and avatar taken from your
+                        Google account, and the date it was created. It happens immediately and cannot be
                         undone. Signing out alone does not delete anything.
                     </p>
                     <DeleteAccountButton />
