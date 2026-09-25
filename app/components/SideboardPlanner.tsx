@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 import HelpTip from "./HelpTip";
 import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
@@ -20,7 +21,15 @@ import {
     isMetaPeriod,
     formatLabel,
 } from "@/lib/formats";
-import { fitSheet, pxToPt, MIN_SHEET_PX, type SheetFit } from "@/lib/printFit";
+import {
+    fitSheet,
+    fitDetached,
+    pagesFor,
+    printsTopLevelOnly,
+    pxToPt,
+    MIN_SHEET_PX,
+    type SheetFit,
+} from "@/lib/printFit";
 
 const STORAGE_KEY = "mtgpp:sideboard";
 
@@ -121,6 +130,38 @@ function SheetRow({ label, rows }: { label: "out" | "in"; rows: CardRow[] }) {
             <span className={`sb-label sb-label-${label}`}>{label.toUpperCase()}</span>
             <span className="sb-cards">{list || <span className="sb-empty">—</span>}</span>
         </>
+    );
+}
+
+/** One matchup on the printed sheet. */
+function SheetItem({ m }: { m: Matchup }) {
+    return (
+        <div className="sb-item">
+            <div className="sb-item-title">
+                <span className="sb-item-name">{m.name}</span>
+                {m.pct !== null && <span className="sb-item-pct">{m.pct}%</span>}
+            </div>
+
+            {m.splitPlayDraw ? (
+                <div className="sb-rows sb-split">
+                    <span className="sb-when">Play</span>
+                    <SheetRow label="out" rows={m.out} />
+                    <span />
+                    <SheetRow label="in" rows={m.in} />
+                    <span className="sb-when">Draw</span>
+                    <SheetRow label="out" rows={m.drawOut} />
+                    <span />
+                    <SheetRow label="in" rows={m.drawIn} />
+                </div>
+            ) : (
+                <div className="sb-rows">
+                    <SheetRow label="out" rows={m.out} />
+                    <SheetRow label="in" rows={m.in} />
+                </div>
+            )}
+
+            {m.notes.trim() && <div className="sb-notes">{m.notes.trim()}</div>}
+        </div>
     );
 }
 
@@ -659,9 +700,10 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * run onto a second page" before you print rather than after.
      *
      * The sheet lives inside .sb-print, which is display:none on screen and so
-     * has no size to measure. A clone goes into an invisible off-screen host,
-     * gets measured there, and is thrown away; the real template only receives
-     * the answer, through the --sb-size style below.
+     * has no size to measure. fitDetached measures a clone in an invisible
+     * off-screen host and throws it away; the real template only receives the
+     * answer — the --sb-size style and which matchups go in which column —
+     * and renders it below.
      *
      * Debounced, because it lays the sheet out a dozen or so times and there
      * is no point doing that on every keystroke in a notes box. The setState
@@ -675,23 +717,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      */
     const [fit, setFit] = useState<(SheetFit & { count: number }) | null>(null);
     const fitNow = fit && fit.count === matchups.length ? fit : null;
+    // Which matchups print in which column. pagesFor checks the layout still
+    // covers exactly this many matchups and falls back to an even split if
+    // not, so a matchup added a moment ago is never left off the sheet.
+    const sheetPages = pagesFor(fit, matchups.length);
     useEffect(() => {
         const timer = setTimeout(() => {
             const sheet = printRef.current?.querySelector<HTMLElement>(".sb-sheet");
             if (!sheet) return;
-
-            const host = document.createElement("div");
-            host.setAttribute("aria-hidden", "true");
-            host.style.cssText =
-                "position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;";
-            const clone = sheet.cloneNode(true) as HTMLElement;
-            host.appendChild(clone);
-            document.body.appendChild(host);
-            try {
-                setFit({ ...fitSheet(clone), count: matchups.length });
-            } finally {
-                host.remove();
-            }
+            setFit({ ...fitDetached(sheet), count: matchups.length });
         }, 250);
         return () => clearTimeout(timer);
     }, [matchups, format, plan.savedName]);
@@ -718,6 +752,17 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * The sheet is re-fitted inside the iframe right before printing, so the
      * size that prints is measured in the document that prints. Falls back to
      * window.print() if anything about the iframe path fails.
+     *
+     * Phones and tablets do NOT take the iframe path, and must not: iOS
+     * browsers ignore an iframe's print() or print the top-level page instead,
+     * and a phone only honours print() inside the tap that asked for it, which
+     * an iframe's load event is not. There the planner page prints itself —
+     * its print styles already hide everything but the sheet — straight from
+     * the click handler. The sheet it prints is the one React renders, so it
+     * is re-fitted first and the result committed synchronously (flushSync):
+     * the page that prints has to be the page that was just measured, not the
+     * one from before the last keystroke. The freeze described above is a
+     * desktop-dialog problem; a phone hands printing to the OS.
      */
     const exportSheet = () => {
         // Guarded here as well as on the button: a disabled button is a hint,
@@ -725,8 +770,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         // illegal deck.
         if (illegal.length > 0) return;
 
-        const src = printRef.current?.querySelector(".sb-sheet");
+        const src = printRef.current?.querySelector<HTMLElement>(".sb-sheet");
         if (!src) {
+            window.print();
+            return;
+        }
+
+        if (printsTopLevelOnly(window)) {
+            const next = fitDetached(src);
+            flushSync(() => setFit({ ...next, count: matchups.length }));
             window.print();
             return;
         }
@@ -1683,53 +1735,48 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 globals.css so it applies only while the planner is mounted, not
                 to printing every page on the site. */}
             <style>{"@media print { @page { size: letter portrait; margin: 0; } }"}</style>
+            {/* The page / column structure is the one lib/printFit.ts builds
+                (.sb-page > .sb-cols > .sb-col), dealt out from the measured
+                `fit`. The two must stay the same shape: a phone prints THIS
+                markup, and fitSheet re-deals a copy of it for the desktop's
+                isolated print document. */}
             <div ref={printRef} className="sb-print" aria-hidden="true">
                 <div
-                    className={fit && !fit.fits ? "sb-sheet sb-overflow" : "sb-sheet"}
+                    className="sb-sheet"
                     style={fit ? ({ "--sb-size": `${fit.px}px` } as React.CSSProperties) : undefined}
                 >
-                    <div className="sb-sheet-head">
-                        <span className="sb-sheet-title">{plan.savedName ?? "Sideboard Guide"}</span>
-                        <span className="sb-sheet-format">
-                            {formatLabel(format)}
-                            {/* The percentages on the sheet only mean something
-                                with the window they were measured over. */}
-                            {plan.availablePeriod && matchups.some((m) => m.pct !== null)
-                                ? ` · meta % over ${plan.availablePeriod} days`
-                                : ""}
-                        </span>
-                    </div>
-
-                    <div className="sb-cols">
-                        {matchups.map((m) => (
-                            <div key={m.id} className="sb-item">
-                                <div className="sb-item-title">
-                                    <span className="sb-item-name">{m.name}</span>
-                                    {m.pct !== null && <span className="sb-item-pct">{m.pct}%</span>}
+                    {sheetPages.map((cols, p) => (
+                        <div
+                            key={p}
+                            className={p < sheetPages.length - 1 ? "sb-page sb-page-full" : "sb-page"}
+                        >
+                            {p === 0 && (
+                                <div className="sb-sheet-head">
+                                    <span className="sb-sheet-title">
+                                        {plan.savedName ?? "Sideboard Guide"}
+                                    </span>
+                                    <span className="sb-sheet-format">
+                                        {formatLabel(format)}
+                                        {/* The percentages on the sheet only mean
+                                            something with the window they were
+                                            measured over. */}
+                                        {plan.availablePeriod && matchups.some((m) => m.pct !== null)
+                                            ? ` · meta % over ${plan.availablePeriod} days`
+                                            : ""}
+                                    </span>
                                 </div>
-
-                                {m.splitPlayDraw ? (
-                                    <div className="sb-rows sb-split">
-                                        <span className="sb-when">Play</span>
-                                        <SheetRow label="out" rows={m.out} />
-                                        <span />
-                                        <SheetRow label="in" rows={m.in} />
-                                        <span className="sb-when">Draw</span>
-                                        <SheetRow label="out" rows={m.drawOut} />
-                                        <span />
-                                        <SheetRow label="in" rows={m.drawIn} />
+                            )}
+                            <div className="sb-cols">
+                                {cols.map((col, c) => (
+                                    <div key={c} className="sb-col">
+                                        {col.map((i) => (
+                                            <SheetItem key={matchups[i].id} m={matchups[i]} />
+                                        ))}
                                     </div>
-                                ) : (
-                                    <div className="sb-rows">
-                                        <SheetRow label="out" rows={m.out} />
-                                        <SheetRow label="in" rows={m.in} />
-                                    </div>
-                                )}
-
-                                {m.notes.trim() && <div className="sb-notes">{m.notes.trim()}</div>}
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>

@@ -253,11 +253,13 @@ body.no-scroll {
    restyled tree because fitting thirty matchups on one side of paper needs
    inline card lists, not stacked quantity/name input rows.
 
-   "Export PDF" prints the sheet from an isolated document and the browser's
-   own "Save as PDF" produces the file — no PDF library ships to the client. */
+   "Export PDF" prints the sheet — from an isolated document on a desktop,
+   from the planner page itself on a phone — and the browser's own "Save as
+   PDF" produces the file. No PDF library ships to the client. */
 
 /* On screen the planner only keeps the sheet as the template Export copies
-   from; it is never shown. */
+   from (and, on a phone, the sheet Export prints in place); it is never
+   shown. */
 .sb-print {
     display: none;
 }
@@ -272,16 +274,21 @@ body.no-scroll {
    - Page geometry is in inches and never changes: the sheet is exactly one
      US Letter page, with its own padding and column gap.
    - Everything about text is in `em` of --sb-size, the one number printFit
-     searches over. Growing or shrinking the text keeps the layout's shape. */
+     searches over. Growing or shrinking the text keeps the layout's shape.
+
+   The width is in inches, never a percentage or a viewport unit, so the sheet
+   lays out identically on a 390px phone and a 1440px monitor: what printFit
+   measured on the phone's screen is what the phone prints. */
 .sb-sheet {
     --sb-size: 9px;
     box-sizing: border-box;
     width: 8.5in;
-    padding: 0.25in 0.28in;
-    /* When a guide is too long for one page, give the second page the same
-       top margin as the first rather than printing flush to the paper edge. */
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
+    /* Phones enlarge text in wide blocks for on-screen reading (iOS text size
+       adjust, Android Chrome's font boosting). An 8.5in sheet on a 390px
+       screen is exactly the kind of block they target, and inflated text
+       would make the measured fit disagree with the printed one. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     background: #fff;
     color: #111;
     font-family: Arial, Helvetica, sans-serif;
@@ -321,26 +328,60 @@ body.no-scroll {
     white-space: nowrap;
 }
 
-/* `balance` spreads the matchups evenly across the three columns. `auto`
-   would need a fixed height and otherwise pours everything into the first
-   one. The rule between columns costs no width — it is drawn in the gap. */
-.sb-cols {
-    column-count: 3;
-    column-gap: 0.24in;
-    column-fill: balance;
-    column-rule: 0.5pt solid #d4d4d4;
+/* One printed page. The padding is the paper margin — @page has margin: 0 so
+   the browser has nowhere to print its own header and footer. */
+.sb-page {
+    padding: 0.25in 0.28in;
 }
 
-/* Only on a guide too long for one page (lib/printFit.ts sets it). Balanced
-   columns across a page break make Chrome push the whole column block onto
-   page two, leaving page one blank under the title. Filling columns in order
-   instead fills page one top to bottom, then continues on page two. */
-.sb-sheet.sb-overflow .sb-cols {
-    column-fill: auto;
+/* Every page but the last of a guide too long for one (lib/printFit.ts only
+   builds more than one page when even the smallest size will not fit). A
+   forced break, and ALSO a box a hair under one page tall: an engine that
+   ignores breaks inside the absolutely positioned print sheet still lands
+   page two's content at the top of sheet two, because the box underneath
+   it is already a page tall. A hair under, not exactly 11in, so the two
+   together can never produce a blank page between them. */
+.sb-page-full {
+    min-height: calc(11in - 2px);
+    break-after: page;
+    page-break-after: always;
+}
+
+/* Three explicit columns. lib/printFit.ts decides which matchups go in each,
+   so the print engine has nothing to balance or break.
+
+   This used to be CSS multicol (column-count: 3, column-fill: balance), which
+   desktop Chrome printed perfectly and phones did not: the same guide came
+   out of a phone as a single column of rows over several pages. Do not go
+   back to it for the printed sheet.
+
+   Equal tracks with no padding on the columns, so every column's text wraps
+   at exactly the width printFit measured it at. The rule between columns is
+   drawn in the middle of the gap by a pseudo-element, costing no width, and
+   only in front of a column that has something in it — as multicol did. */
+.sb-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 0.24in;
+}
+
+.sb-col {
+    position: relative;
+    min-width: 0;
+}
+
+.sb-col + .sb-col:not(:empty)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -0.12in;
+    border-left: 0.5pt solid #d4d4d4;
 }
 
 /* A matchup never splits across columns or pages: half a plan in one column
-   and the rest in another is unreadable at the table. */
+   and the rest in another is unreadable at the table. printFit keeps each one
+   whole in a single column; the break rules are a second line of defence. */
 .sb-item {
     break-inside: avoid;
     page-break-inside: avoid;
@@ -451,8 +492,19 @@ body.no-scroll {
         background-image: none !important;
     }
 
-    /* Ctrl+P on the planner. Export PDF prints an isolated document holding
-       only the sheet; this makes the planner page itself print the same way.
+    /* The body's overflow-x: hidden (from .bg-fantasy-parchment) passes up to
+       the page viewport, and a print engine that sizes the page from the
+       screen — phones do — can then cut the 8.5in sheet off at the screen's
+       width instead of shrinking it to the paper. Its 100vh minimum height
+       adds nothing on paper but a chance of a blank trailing page. */
+    .bg-fantasy-parchment {
+        overflow: visible !important;
+        min-height: 0 !important;
+    }
+
+    /* Ctrl+P on the planner, and Export PDF on a phone (see exportSheet).
+       Export PDF on a desktop prints an isolated document holding only the
+       sheet; this makes the planner page itself print the same way.
 
        The sheet is pinned to the top-left corner of the first page, out of
        the page's flow. Left in flow, it would inherit the spacing of every

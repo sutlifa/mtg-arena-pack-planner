@@ -90,9 +90,12 @@ Build a matchup-by-matchup sideboard guide, then print it on one page.
 - Beside each matchup, the opponent's decklist from MTGGoldfish with card
   pictures, matched automatically to the closest archetype and marked "best
   guess" (`lib/archetypeMatch.ts`). Change it from a picker or by pasting a link.
-- **Export PDF** prints the whole guide on one page in three columns. The text
-  sizes itself to fill the page (`lib/printFit.ts`), 30 matchups still fit, the
-  planner warns when a guide would run onto a second page. The print page has
+- **Export PDF** prints the whole guide on one page in three columns, from a
+  phone as well as a desktop. The text sizes itself to fill the page and the
+  matchups are dealt into the columns by measurement (`lib/printFit.ts`) rather
+  than by CSS multi-column layout, which phone print engines get wrong. 30
+  matchups still fit, and the planner warns when a guide would run onto a
+  second page. The print page has
   a zero margin, which leaves most browsers nowhere to draw their own URL/date
   header and footer; where one still appears, the planner's help tip says to
   untick "Headers and footers" in the print dialog.
