@@ -21,6 +21,16 @@ export const MAX_DECK_CHARS = 200_000;
 export const MAX_COLLECTION_LINES = 100_000;
 export const MAX_COLLECTION_CHARS = 5_000_000;
 
+/**
+ * Longest text /api/card-search will search for. Every real name but a handful
+ * of joke cards is shorter, and by 60 characters typed the list has long since
+ * narrowed to the card, so a longer query is almost always a paste or junk. Here rather than in the route because the Collection
+ * page's add box reads it too, to stop asking once the text is past it — this
+ * module has no server imports, so it is safe in a client component, which
+ * lib/cardNames (it reads the card data) is not.
+ */
+export const MAX_CARD_SEARCH_CHARS = 60;
+
 export interface LimitError {
     error: string;
 }

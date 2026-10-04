@@ -328,7 +328,9 @@ export default function PrivacyPage() {
                         <p>
                             The Collection page asks the server for card-name suggestions as you type into
                             its add box, and for the pictures of the cards on the page you&apos;re looking
-                            at. Those requests carry only what you typed or the card names, and the app
+                            at. It also sends the server the card names you add or paste, and the names
+                            in a collection it opens, to check each is a real card and fix its spelling.
+                            Those requests carry only what you typed or the card names, and the app
                             keeps none of it — though a suggestion request puts what you typed in its web
                             address, so it appears in Vercel&apos;s standard request logs like any other
                             address.

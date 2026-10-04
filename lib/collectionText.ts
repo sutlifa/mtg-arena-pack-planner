@@ -48,7 +48,7 @@ const SET_AND_NUMBER = /\s*\([A-Za-z0-9]{2,6}\)(?:\s+[\w★-]+)?\s*$/;
  * "Lightning Bolt (2XM) 129" behind on the first tidy and cleaned it on the
  * second, so the same collection saved twice came out different.
  */
-function cleanName(raw: string): string {
+export function cleanName(raw: string): string {
     let name = raw.replace(/\s*\[[^\]]*\]/g, ""); // [SET], anywhere
     for (;;) {
         const next = name.replace(FINISH_MARKER, "").replace(SET_AND_NUMBER, "");
@@ -190,6 +190,45 @@ export function mergeCards(cards: readonly CollectionCard[]): CollectionCard[] {
         else byKey.set(key, { name: c.name.replace(/\s+/g, " ").trim(), qty: Math.min(MAX_QTY, c.qty) });
     }
     return [...byKey.values()];
+}
+
+/**
+ * What /api/card-resolve says about one name: the official name of the card
+ * it means, or null with a few real names it might have meant.
+ */
+export type NameVerdict = { name: string } | { name: null; suggestions: string[] };
+
+/**
+ * A collection with every name the server recognised put under its official
+ * spelling, and copies added together where two spellings turned out to be
+ * one card ("lightning bolt" and "Lightning Bolt!").
+ *
+ * Names the verdicts call unknown are kept, not dropped, and listed in
+ * `unknown`: this runs on collections people already had, and deleting
+ * cards from one without being asked is not this function's call. Names with
+ * no verdict at all — added while the check was in flight — are left exactly
+ * as they are, which is why this takes the verdicts and the current cards
+ * separately rather than the cards the check was started with.
+ *
+ * Recognised cards go first into the merge so that, if an unknown spelling
+ * ever shared a key with a real one, the official spelling is the one kept.
+ */
+export function applyVerdicts(
+    cards: readonly CollectionCard[],
+    verdicts: ReadonlyMap<string, NameVerdict>
+): { cards: CollectionCard[]; unknown: string[] } {
+    const known: CollectionCard[] = [];
+    const rest: CollectionCard[] = [];
+    const unknown: string[] = [];
+    for (const c of cards) {
+        const v = verdicts.get(c.name);
+        if (v?.name) known.push({ name: v.name, qty: c.qty });
+        else {
+            if (v) unknown.push(c.name);
+            rest.push(c);
+        }
+    }
+    return { cards: mergeCards([...known, ...rest]), unknown };
 }
 
 /** One "qty name" line per card, alphabetical — the form collections are saved in. */

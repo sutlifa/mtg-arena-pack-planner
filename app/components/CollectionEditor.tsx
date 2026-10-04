@@ -7,13 +7,16 @@ import { useSearchParams } from "next/navigation";
 import HelpTip from "./HelpTip";
 import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
 import {
+    applyVerdicts,
     cardKey,
     formatCollection,
     mergeCards,
     mergeCollection,
     parseCollectionRows,
     type CollectionCard,
+    type NameVerdict,
 } from "@/lib/collectionText";
+import { MAX_CARD_SEARCH_CHARS } from "@/lib/inputLimits";
 // The same keys the Pack Planner keeps its collection under. One collection,
 // two views of it: edit it here with pictures, and the Pack Planner compares
 // your decks against exactly what you left here — and the other way round.
@@ -35,7 +38,70 @@ const PAGE_SIZE = 48;
  */
 const MAX_IMAGE_NAME = 150;
 
+/** /api/card-resolve's per-request limit; longer lists go in chunks of it. */
+const RESOLVE_CHUNK = 500;
+
+/** Rejected paste lines listed with their suggestions; the rest are counted. */
+const MAX_REJECTED_SHOWN = 10;
+
 type Sort = "name" | "qty";
+
+/** A pasted line that isn't a card, with what it might have meant. */
+interface Rejected {
+    name: string;
+    qty: number;
+    suggestions: string[];
+}
+
+/** Why the add box turned a name away, with real names to tap instead. */
+interface AddProblem {
+    message: string;
+    suggestions: string[];
+}
+
+/**
+ * What the server makes of each name: its official spelling, or null and a
+ * few close real names. Throws when the server can't be asked, so a caller
+ * never mistakes "couldn't check" for "not a card".
+ *
+ * Every card in the collection is a real card stored under its real name —
+ * the add box, a paste and an Arena export all go through here first, and
+ * nothing that comes back null is added. That's what lets every tile have a
+ * picture and every name match the Pack Planner's card data exactly.
+ *
+ * `suggest: false` when only the verdict matters (checking a collection that
+ * was already saved), which spares the server its "did you mean" search.
+ */
+async function resolveNames(names: string[], suggest: boolean): Promise<Map<string, NameVerdict>> {
+    const out = new Map<string, NameVerdict>();
+    const unique = [...new Set(names)];
+    for (let i = 0; i < unique.length; i += RESOLVE_CHUNK) {
+        const res = await fetch("/api/card-resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ names: unique.slice(i, i + RESOLVE_CHUNK), suggest }),
+        });
+        if (!res.ok) throw new Error(`card-resolve ${res.status}`);
+        const data = await res.json();
+        // Object.entries rather than data.results[name]: a "__proto__" key
+        // is an own property after JSON.parse, but indexing it reads the
+        // prototype instead.
+        const results: Record<string, { name?: unknown; suggestions?: unknown } | null> =
+            data && typeof data.results === "object" && data.results ? data.results : {};
+        for (const [asked, v] of Object.entries(results)) {
+            if (typeof v?.name === "string") out.set(asked, { name: v.name });
+            else if (v?.name === null) {
+                out.set(asked, {
+                    name: null,
+                    suggestions: Array.isArray(v.suggestions)
+                        ? v.suggestions.filter((s: unknown): s is string => typeof s === "string")
+                        : [],
+                });
+            }
+        }
+    }
+    return out;
+}
 
 /* ------------------------------------------------------------------ */
 /* Loading a saved collection from ?collection=<id>                    */
@@ -124,11 +190,34 @@ function SavedCollectionLoader({
 /* ------------------------------------------------------------------ */
 
 /**
- * `onAdd` answers whether the card went in, so a rejected name (an empty
- * box) stays in the box to be fixed rather than vanishing.
+ * `onAdd` is only ever called with a real card's official name. A name picked
+ * from the list already is one (the list comes from the card data); anything
+ * typed is checked with the server first, and a name that isn't a card stays
+ * in the box with "No card called ..." and a few close names to tap instead.
+ * A near miss is never added on a guess — the user picks.
+ *
+ * The problem line is held by the page, not here, because the page has its
+ * own status line ("Added 1 Lightning Bolt — you now have 3.") a few rows
+ * below. Kept apart, a rejection showed above an older success and the two
+ * contradicted each other; with both in the page, whichever is newer clears
+ * the other (see showNotice and onProblem there).
  */
-function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
+function AddCard({
+    onAdd,
+    problem,
+    onProblem,
+}: {
+    onAdd: (name: string, qty: number) => void;
+    problem: AddProblem | null;
+    onProblem: (problem: AddProblem | null) => void;
+}) {
+    const report = onProblem;
     const [query, setQuery] = useState("");
+    // What the box holds right now, for an answer that arrives after the
+    // user has kept typing: it still adds the card that was asked about,
+    // but doesn't wipe out the newer text.
+    const queryRef = useRef("");
+    const [checking, setChecking] = useState(false);
     const [qty, setQty] = useState(1);
     // Suggestions are tied to the text they answer, so a slow response for
     // "lig" can't replace the list for "lightning".
@@ -139,7 +228,11 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
 
     const trimmed = query.trim();
     useEffect(() => {
-        if (trimmed.length < 2) return;
+        // Past the route's limit it answers 400, so don't ask; the list just
+        // stays empty. Add still works at any length: it checks the text
+        // with card-resolve, which takes up to 150 characters — enough for
+        // the handful of joke cards with names longer than 60.
+        if (trimmed.length < 2 || trimmed.length > MAX_CARD_SEARCH_CHARS) return;
         let cancelled = false;
         // A short pause, so typing a name is one search rather than one per key.
         const t = setTimeout(async () => {
@@ -159,12 +252,43 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
 
     const suggestions = found.q === trimmed ? found.names : [];
 
-    const add = (name: string) => {
-        if (!onAdd(name, qty)) return;
-        setQuery("");
-        setQty(1);
+    /** `name` is a real card's name, from the list or the server. */
+    const add = (name: string, asked = queryRef.current) => {
+        onAdd(name, qty);
+        report(null);
         setOpen(false);
         setHighlight(0);
+        if (queryRef.current === asked) {
+            setQuery("");
+            queryRef.current = "";
+            setQty(1);
+        }
+    };
+
+    /** Whatever is in the box, checked before it goes anywhere. */
+    const addTyped = async () => {
+        if (checking) return;
+        const asked = queryRef.current;
+        const text = asked.replace(/\s+/g, " ").trim();
+        if (!text) {
+            report({ message: "Type a card name first.", suggestions: [] });
+            return;
+        }
+        setChecking(true);
+        setOpen(false);
+        try {
+            const verdict = (await resolveNames([text], true)).get(text);
+            if (verdict?.name) add(verdict.name, asked);
+            else
+                report({
+                    message: `No card called "${text}".`,
+                    suggestions: verdict && verdict.name === null ? verdict.suggestions : [],
+                });
+        } catch {
+            report({ message: "Couldn't check that name. Try again.", suggestions: [] });
+        } finally {
+            setChecking(false);
+        }
     };
 
     return (
@@ -193,6 +317,8 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
                     value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
+                        queryRef.current = e.target.value;
+                        report(null);
                         setOpen(true);
                         setHighlight(0);
                     }}
@@ -207,7 +333,10 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
                             setHighlight((h) => Math.max(h - 1, 0));
                         } else if (e.key === "Enter") {
                             e.preventDefault();
-                            add(open && suggestions[highlight] ? suggestions[highlight] : query);
+                            // A highlighted suggestion is a real name already;
+                            // anything else is checked first.
+                            if (open && suggestions[highlight]) add(suggestions[highlight]);
+                            else void addTyped();
                         } else if (e.key === "Escape") {
                             setOpen(false);
                         }
@@ -244,11 +373,35 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
             </div>
             <button
                 type="button"
-                onClick={() => add(query)}
-                className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark"
+                onClick={() => void addTyped()}
+                disabled={checking}
+                className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
             >
-                Add
+                {checking ? "Checking..." : "Add"}
             </button>
+            {problem && (
+                <div className="basis-full text-sm" role="status">
+                    {/* anywhere, not just break-words: the message echoes
+                        whatever was typed, and one long unbroken token
+                        otherwise widens the whole page on a phone. */}
+                    <p className="text-red-700 [overflow-wrap:anywhere]">{problem.message}</p>
+                    {problem.suggestions.length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="text-ink/70">Did you mean:</span>
+                            {problem.suggestions.map((s) => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => add(s)}
+                                    className="px-3 py-1 rounded bg-parchment text-ink shadow-inner-parchment hover:bg-brass/25"
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -266,15 +419,22 @@ function AddCard({ onAdd }: { onAdd: (name: string, qty: number) => boolean }) {
  * whichever tile rendered next.
  *
  * `img` is undefined while the picture is loading and null when there isn't
- * one, which read differently on the placeholder.
+ * one, which read differently on the placeholder. Every card added here is a
+ * real card, so a missing picture is a hiccup in the card data, not a typo.
+ *
+ * `unrecognised` marks a card from a collection made before names were
+ * checked, whose name the server doesn't know. It stays until the user
+ * removes it (see the notice above the grid) — never deleted unasked.
  */
 function CardTile({
     card,
     img,
+    unrecognised,
     onSetQty,
 }: {
     card: CollectionCard;
     img: string | null | undefined;
+    unrecognised: boolean;
     onSetQty: (qty: number) => void;
 }) {
     // The count box's text while it doesn't hold a number — the box someone
@@ -289,8 +449,13 @@ function CardTile({
     };
 
     return (
-        <li className="bg-parchment rounded shadow-inner-parchment p-2 flex flex-col gap-2">
-            {img ? (
+        <li
+            className={
+                "bg-parchment rounded shadow-inner-parchment p-2 flex flex-col gap-2" +
+                (unrecognised ? " ring-2 ring-red-700/60" : "")
+            }
+        >
+            {img && !unrecognised ? (
                 <Image
                     unoptimized
                     src={img}
@@ -300,10 +465,15 @@ function CardTile({
                     className="w-full h-auto rounded-[4.5%] shadow-card"
                 />
             ) : (
-                // Same card shape while loading, or for a name the
-                // card data doesn't know, so the grid doesn't jump.
-                <div className="aspect-[244/340] rounded-[4.5%] bg-parchment-dark flex items-center justify-center p-2 text-center text-xs text-ink/60">
-                    {img === null ? "No picture for this name" : ""}
+                // Same card shape while loading, or with no picture, so the
+                // grid doesn't jump.
+                <div
+                    className={
+                        "aspect-[244/340] rounded-[4.5%] bg-parchment-dark flex items-center justify-center p-2 text-center text-xs " +
+                        (unrecognised ? "text-red-700" : "text-ink/60")
+                    }
+                >
+                    {unrecognised ? "Not a card we recognise" : img === null ? "No picture available" : ""}
                 </div>
             )}
             <p className="text-sm leading-tight break-words" title={card.name}>
@@ -382,6 +552,20 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
 
     const [paste, setPaste] = useState("");
     const [notice, setNotice] = useState<string | null>(null);
+    // The add box's "No card called ..." line. One status channel with
+    // `notice`: each clears the other, so only the latest outcome shows.
+    const [addProblem, setAddProblem] = useState<AddProblem | null>(null);
+    const showNotice = (message: string | null) => {
+        setNotice(message);
+        setAddProblem(null);
+    };
+    const onAddProblem = (problem: AddProblem | null) => {
+        setAddProblem(problem);
+        // Only a new problem retires the notice. Clearing the problem (the
+        // user typing again, or a card going in) must not, or the
+        // "Added ..." that a successful add just set would vanish with it.
+        if (problem) setNotice(null);
+    };
     const [filter, setFilter] = useState("");
     const [sort, setSort] = useState<Sort>("name");
     const [page, setPage] = useState(0);
@@ -389,6 +573,55 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
 
     const [images, setImages] = useState<Record<string, string | null>>({});
     const requested = useRef(new Set<string>());
+
+    // Pasted lines that aren't cards, with "did you mean" names to tap.
+    const [rejected, setRejected] = useState<Rejected[]>([]);
+    const [pasting, setPasting] = useState(false);
+    // Names in the collection the server doesn't recognise. Only collections
+    // made before names were checked can hold one; see checkCollection.
+    const [unknown, setUnknown] = useState<ReadonlySet<string>>(() => new Set());
+    // Which checkCollection call is the latest; see there.
+    const checkGen = useRef(0);
+
+    /**
+     * Bring a collection that was already here — from localStorage, a saved
+     * collection, or the Pack Planner's shared text — up to the same standard
+     * as anything added now: names that resolve are put under their official
+     * spelling (merging where two spellings were one card), and names that
+     * don't are marked, not deleted. Spelling is the only thing changed
+     * without asking; removing what isn't a card is the user's button.
+     *
+     * The verdicts are applied to the cards as they are when the answer
+     * arrives, not as they were when it was asked, so a card added in the
+     * meantime is neither lost nor second-guessed. If the server can't be
+     * reached nothing changes; the collection is shown exactly as stored.
+     */
+    const checkCollection = (list: readonly CollectionCard[]) => {
+        // Only the newest check may apply. The localStorage restore and a
+        // ?collection= load both start one, moments apart, and either can
+        // answer last: a restore's late answer would otherwise mark the
+        // loaded collection's cards against the wrong list's verdicts. The
+        // old list's unknowns go now, too — they described cards that may
+        // no longer be here. Called with [] it does just that and checks
+        // nothing: Replace and Start Over use it to retire a check in flight.
+        const gen = ++checkGen.current;
+        setUnknown(new Set());
+        if (list.length === 0) return;
+        resolveNames(
+            list.map((c) => c.name),
+            false
+        )
+            .then((verdicts) => {
+                if (gen !== checkGen.current) return;
+                setCards((prev) => applyVerdicts(prev, verdicts).cards);
+                setUnknown(
+                    new Set([...verdicts].filter(([, v]) => v.name === null).map(([name]) => name))
+                );
+            })
+            .catch(() => {
+                /* unchecked is still usable; it just isn't tidied */
+            });
+    };
 
     /* ---- persistence, shared with the Pack Planner ---- */
 
@@ -398,7 +631,11 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
     useEffect(() => {
         try {
             const text = localStorage.getItem(COLLECTION_KEY);
-            if (text) setCards(mergeCollection(text));
+            if (text) {
+                const restored = mergeCollection(text);
+                setCards(restored);
+                checkCollection(restored);
+            }
             const mode = localStorage.getItem(MODE_KEY);
             if (mode) setArena(mode !== "paper");
             // Only if it still belongs to that text: the Pack Planner may
@@ -441,49 +678,106 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                 : prev.map((c) => (c.name === name ? { ...c, qty: Math.min(9999, qty) } : c))
         );
 
-    /** One card from the name box. False when there's no name to add. */
-    const addOne = (rawName: string, qty: number): boolean => {
-        // Internal runs of spaces collapsed too, so "Lightning   Bolt" is
-        // stored and announced the way it will be shown.
-        const name = rawName.replace(/\s+/g, " ").trim();
-        const key = cardKey(name);
-        if (!key) {
-            setNotice("Type a card name first.");
-            return false;
-        }
+    /**
+     * One card from the name box, already resolved to its official name by
+     * AddCard — see there for how an unknown name is turned away.
+     */
+    const addOne = (name: string, qty: number) => {
         // When it lands on a card already here, say so under that card's
-        // existing name — the one on the tile — not the spelling just typed,
-        // which mergeCards drops.
+        // existing name — the one on the tile.
+        const key = cardKey(name);
         const existing = cards.find((c) => cardKey(c.name) === key);
         addCards([{ name, qty }]);
-        setNotice(
+        showNotice(
             existing
                 ? `Added ${qty} ${existing.name} — you now have ${Math.min(9999, existing.qty + qty)}.`
                 : `Added ${qty} ${name}.`
         );
-        return true;
     };
 
-    const addPasted = (replace: boolean) => {
+    /**
+     * A pasted list or Arena export. Every line is resolved first; the cards
+     * that exist go in under their official names, and the lines that don't
+     * are left out and listed, each with the real names it might have meant.
+     * If the names can't be checked at all, nothing is added and the paste
+     * stays in the box to try again — adding unchecked names is exactly what
+     * this replaced.
+     */
+    const addPasted = async (replace: boolean) => {
+        if (pasting) return;
         // Rows, not lines: "Deck", "Sideboard", comments and blank lines
         // aren't cards, and counting them made "3 lines combined into 2"
         // out of a list with nothing to combine.
         const rows = parseCollectionRows(paste);
-        const incoming = mergeCards(rows);
-        if (incoming.length === 0) {
-            setNotice("Nothing to add — paste a list with one card per line.");
+        if (rows.length === 0) {
+            showNotice("Nothing to add — paste a list with one card per line.");
+            setRejected([]);
             return;
         }
-        const lines = rows.length;
+
+        setPasting(true);
+        let verdicts: Map<string, NameVerdict>;
+        try {
+            verdicts = await resolveNames(
+                rows.map((r) => r.name),
+                true
+            );
+        } catch {
+            showNotice("Couldn't check those card names, so nothing was added. Try again.");
+            return;
+        } finally {
+            setPasting(false);
+        }
+
+        const good: CollectionCard[] = [];
+        // Keyed by the line's own spelling, so a typo repeated on two lines
+        // is listed once with both lines' copies.
+        const bad = new Map<string, Rejected>();
+        for (const r of rows) {
+            const v = verdicts.get(r.name);
+            if (v?.name) {
+                good.push({ name: v.name, qty: r.qty });
+                continue;
+            }
+            const have = bad.get(r.name);
+            if (have) have.qty = Math.min(9999, have.qty + r.qty);
+            else bad.set(r.name, { name: r.name, qty: r.qty, suggestions: v && v.name === null ? v.suggestions : [] });
+        }
+        setRejected([...bad.values()]);
+
+        const incoming = mergeCards(good);
+        if (incoming.length === 0) {
+            // Nothing real to add — and for Replace, certainly no reason to
+            // empty the collection. The paste stays in the box to be fixed.
+            showNotice("Nothing added — none of those lines is a card we recognise.");
+            return;
+        }
+        // A replaced collection is all checked names; a check still running
+        // on the one it replaced must not land on it.
+        if (replace) checkCollection([]);
         setCards((prev) => (replace ? incoming : mergeCards([...prev, ...incoming])));
         setPaste("");
         const copies = incoming.reduce((n, c) => n + c.qty, 0);
-        setNotice(
+        showNotice(
             `${replace ? "Replaced with" : "Added"} ${copies} card${copies === 1 ? "" : "s"}` +
-                (lines > incoming.length
-                    ? ` — ${lines} lines combined into ${incoming.length} different card${incoming.length === 1 ? "" : "s"}.`
+                (good.length > incoming.length
+                    ? ` — ${good.length} lines combined into ${incoming.length} different card${incoming.length === 1 ? "" : "s"}.`
                     : ".")
         );
+    };
+
+    /** One tap on a rejected line's suggestion: add it, and the line is done. */
+    const addSuggestion = (miss: Rejected, name: string) => {
+        addOne(name, miss.qty);
+        setRejected((prev) => prev.filter((r) => r !== miss));
+    };
+
+    const unknownHere = cards.filter((c) => unknown.has(c.name));
+    const removeUnknown = () => {
+        const n = unknownHere.length;
+        setCards((prev) => prev.filter((c) => !unknown.has(c.name)));
+        setUnknown(new Set());
+        showNotice(`Removed ${n} unrecognised card${n === 1 ? "" : "s"}.`);
     };
 
     /* ---- what's on screen ---- */
@@ -538,12 +832,15 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
     };
 
     const loadSaved = (loadedText: string, loaded: NonNullable<SavedRef>) => {
-        setCards(mergeCollection(loadedText));
+        const loadedCards = mergeCollection(loadedText);
+        setCards(loadedCards);
+        setRejected([]);
+        checkCollection(loadedCards);
         setArena(loaded.arena);
         setOpen(loaded);
         setPage(0);
         setFilter("");
-        setNotice(`Opened ${loaded.arena ? "Arena" : "Paper"} collection "${loaded.name}".`);
+        showNotice(`Opened ${loaded.arena ? "Arena" : "Paper"} collection "${loaded.name}".`);
     };
 
     return (
@@ -634,7 +931,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                     <HelpTip text="Type a card name and pick it from the list, or paste a whole list or an Arena export below. Copies of the same card are always added together, whichever set or printing they came from." />
                 </h2>
 
-                <AddCard onAdd={addOne} />
+                <AddCard onAdd={addOne} problem={addProblem} onProblem={onAddProblem} />
 
                 <details className="group">
                     <summary className="cursor-pointer text-sm text-brand hover:text-brand-dark underline underline-offset-2">
@@ -648,29 +945,80 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                             placeholder={"4 Lightning Bolt\n2 Opt (XLN) 65\n..."}
                             className="w-full px-3 py-2 rounded bg-parchment text-ink text-sm shadow-inner-parchment font-mono"
                         />
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
-                                onClick={() => addPasted(false)}
-                                className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark"
+                                onClick={() => void addPasted(false)}
+                                disabled={pasting}
+                                className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
                             >
                                 Add to collection
                             </button>
                             <button
                                 type="button"
-                                onClick={() => addPasted(true)}
-                                className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
+                                onClick={() => void addPasted(true)}
+                                disabled={pasting}
+                                className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
                             >
                                 Replace collection
                             </button>
+                            {pasting && <span className="text-sm text-ink/70">Checking card names...</span>}
                         </div>
                     </div>
                 </details>
 
                 {notice && (
-                    <p className="text-sm text-ink/80" role="status">
+                    // Can quote a saved collection's name, which is the
+                    // user's own text — see the add box's problem line.
+                    <p className="text-sm text-ink/80 [overflow-wrap:anywhere]" role="status">
                         {notice}
                     </p>
+                )}
+
+                {rejected.length > 0 && (
+                    <div className="text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                            <p className="font-semibold text-red-800">
+                                Couldn&apos;t find {rejected.length} line{rejected.length === 1 ? "" : "s"}, so{" "}
+                                {rejected.length === 1 ? "it wasn't" : "they weren't"} added:
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setRejected([])}
+                                className="shrink-0 px-2 py-1 rounded text-ink/70 hover:bg-parchment"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                        <ul className="space-y-1.5">
+                            {rejected.slice(0, MAX_REJECTED_SHOWN).map((miss) => (
+                                <li key={miss.name} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span className="break-all">&ldquo;{miss.name}&rdquo;</span>
+                                    {miss.suggestions.length > 0 && (
+                                        <>
+                                            <span className="text-ink/70">did you mean</span>
+                                            {miss.suggestions.map((s) => (
+                                                <button
+                                                    key={s}
+                                                    type="button"
+                                                    onClick={() => addSuggestion(miss, s)}
+                                                    aria-label={`Add ${miss.qty} ${s} instead of ${miss.name}`}
+                                                    className="px-2 py-0.5 rounded bg-parchment text-ink shadow-inner-parchment hover:bg-brass/25"
+                                                >
+                                                    {s}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                        {rejected.length > MAX_REJECTED_SHOWN && (
+                            <p className="text-ink/70">
+                                ...and {rejected.length - MAX_REJECTED_SHOWN} more.
+                            </p>
+                        )}
+                    </div>
                 )}
             </section>
 
@@ -679,6 +1027,30 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                 ref={gridRef}
                 className="scroll-mt-4 bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4"
             >
+                {unknownHere.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2">
+                        {/* Quotes names from an old collection, which can be
+                            any text at all — a long unbroken one widened the
+                            page to 590px on a phone without overflow-wrap. */}
+                        <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
+                            {unknownHere.length} card{unknownHere.length === 1 ? " in this collection isn't" : "s in this collection aren't"}{" "}
+                            recognised:{" "}
+                            {unknownHere
+                                .slice(0, 5)
+                                .map((c) => `“${c.name}”`)
+                                .join(", ")}
+                            {unknownHere.length > 5 ? `, and ${unknownHere.length - 5} more` : ""}.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={removeUnknown}
+                            className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                        >
+                            Remove {unknownHere.length === 1 ? "it" : "them"}
+                        </button>
+                    </div>
+                )}
+
                 <div className="flex flex-wrap items-end gap-3">
                     <label className="flex-1 min-w-[12rem]">
                         <span className="text-sm text-ink/70">Find in collection</span>
@@ -726,6 +1098,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                                     // looked up (see MAX_IMAGE_NAME), so it
                                     // reads as "no picture", not as loading.
                                     img={c.name.length > MAX_IMAGE_NAME ? null : images[c.name]}
+                                    unrecognised={unknown.has(c.name)}
                                     onSetQty={(qty) => setQty(c.name, qty)}
                                 />
                             ))}
@@ -791,9 +1164,11 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                                 type="button"
                                 onClick={() => {
                                     setCards([]);
+                                    checkCollection([]);
                                     setOpen(null);
                                     setPage(0);
-                                    setNotice(null);
+                                    showNotice(null);
+                                    setRejected([]);
                                     setConfirmClear(false);
                                 }}
                                 className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
@@ -813,9 +1188,11 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                                     returnTo="/collection"
                                     onSaved={() => {
                                         setCards([]);
+                                        checkCollection([]);
                                         setOpen(null);
                                         setPage(0);
-                                        setNotice(null);
+                                        showNotice(null);
+                                        setRejected([]);
                                         setConfirmClear(false);
                                     }}
                                 />
