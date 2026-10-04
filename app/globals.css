@@ -283,12 +283,22 @@ body.no-scroll {
     --sb-size: 9px;
     box-sizing: border-box;
     width: 8.5in;
-    /* Phones enlarge text in wide blocks for on-screen reading (iOS text size
-       adjust, Android Chrome's font boosting). An 8.5in sheet on a 390px
+    /* Phones enlarge text in wide blocks for on-screen reading (iOS text
+       autosizing, Android Chrome's font boosting). An 8.5in sheet on a 390px
        screen is exactly the kind of block they target, and inflated text
-       would make the measured fit disagree with the printed one. */
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
+       makes the sheet measure too tall for one page at every size.
+
+       `none`, not `100%`. 100% is the usual advice, and it is what this said
+       when an iPhone printed a guide that fits one page as two pages of
+       text far larger than the size set, which is what autosizing does.
+       WebKit treats `none` as "never adjust"; whether it honours a
+       percentage in its newer autosizing mode is not something to bet a
+       printout on. The sheet is never shown on screen, so the usual cost of
+       `none` (it can block text zoom on desktop Safari) does not apply.
+       lib/printFit.ts also checks the text is drawn at the size set, and
+       reports it in the ?printdebug=1 panel if it isn't. */
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
     background: #fff;
     color: #111;
     font-family: Arial, Helvetica, sans-serif;
@@ -335,14 +345,24 @@ body.no-scroll {
 }
 
 /* Every page but the last of a guide too long for one (lib/printFit.ts only
-   builds more than one page when even the smallest size will not fit). A
-   forced break, and ALSO a box a hair under one page tall: an engine that
-   ignores breaks inside the absolutely positioned print sheet still lands
-   page two's content at the top of sheet two, because the box underneath
-   it is already a page tall. A hair under, not exactly 11in, so the two
-   together can never produce a blank page between them. */
+   builds more than one page when even the smallest size will not fit): a
+   forced break after it, and nothing else. Each page is as tall as its
+   content.
+
+   It used to ALSO be a box a hair under 11in tall, in case an engine ignored
+   the break. On an iPhone that box was the bug: iOS shrinks the 8.5in sheet
+   to fit its printable width, so one sheet of paper holds a little more than
+   11in of CSS. Page two's frame started just before the paper ran out, below
+   a blank band, and its first matchups were cut in half across the physical
+   break. A fixed height can only match the paper if the browser prints at
+   exactly 1:1 with no margins, which phones don't promise. A break works at
+   any scale.
+
+   The break is honoured because the sheet prints in normal flow, as a
+   direct child of <body> (SideboardPlanner portals it there), not inside a
+   positioned or flex box, where print engines are least reliable about
+   breaks. */
 .sb-page-full {
-    min-height: calc(11in - 2px);
     break-after: page;
     page-break-after: always;
 }
@@ -506,21 +526,20 @@ body.no-scroll {
        Export PDF on a desktop prints an isolated document holding only the
        sheet; this makes the planner page itself print the same way.
 
-       The sheet is pinned to the top-left corner of the first page, out of
-       the page's flow. Left in flow, it would inherit the spacing of every
-       wrapper around it — page padding that differs per breakpoint, and the
-       top margin Tailwind's space-y-* gives it as the editor's sibling — and
-       40px of that is enough to push a sheet fitted to exactly one page onto
-       a second. With the editor hidden, those wrappers are left holding
-       nothing but their own padding, well inside the first page.
+       The sheet prints in normal flow at the very top of the first page.
+       SideboardPlanner portals .sb-print to be a direct child of <body>, and
+       while the planner is mounted its own print style hides every other
+       child of <body> and makes <body> a plain block. So there is no wrapper
+       padding above the sheet to push a one-page fit onto a second page,
+       and nothing between it and the page for a forced break to fight.
 
-       Not done by resetting the wrappers with :has(): this project's CSS
-       pipeline drops :has() selectors from the built stylesheet. */
+       It used to be absolutely positioned at the top-left corner instead, to
+       escape that padding without the portal. That worked for one page, but
+       a positioned box is where print engines are least reliable about page
+       breaks, and a two-page guide depends on one. */
     .sb-print {
         display: block !important;
-        position: absolute;
-        top: 0;
-        left: 0;
+        position: static;
         margin: 0 !important;
     }
 }

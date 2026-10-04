@@ -35,8 +35,38 @@
  */
 
 /** US Letter. The sheet is laid out at exactly this size (see .sb-sheet). */
-const PAGE_HEIGHT_IN = 11;
+export const LETTER_HEIGHT_IN = 11;
 const CSS_PX_PER_IN = 96;
+
+/** .sb-sheet's width, 8.5in. A measured sheet of any other width is suspect. */
+const SHEET_WIDTH_PX = 8.5 * CSS_PX_PER_IN;
+
+/**
+ * How much of the page a phone's sheet is fitted to: half an inch short of
+ * the paper.
+ *
+ * A desktop's Export prints an isolated document whose `@page { margin: 0 }`
+ * is honoured, so it fits the full 11in. Phones make no such promise. iOS
+ * prints through the system print sheet, which lays the page out inside the
+ * printer's printable area — its own margins, whatever @page says — and
+ * scales content that is wider than that area down to fit. Shrink-to-width
+ * with even margins actually leaves MORE than 11in of CSS per sheet (the
+ * paper is taller than it is wide), which is why the fitted height was never
+ * the real problem on the iPhone. But a printer whose top and bottom margins
+ * are larger than its side margins, or a print path that adds margins without
+ * scaling, eats into the bottom of the page, and the only symptom is the last
+ * matchup in a column landing on a second sheet.
+ *
+ * Half an inch covers the ordinary 0.25in-a-side printable area outright at
+ * a cost of about 4.5% of text size, on phones only. Desktop output, which
+ * is verifiably margin-free, keeps the full page.
+ *
+ * It is a preference, not a limit. A guide that cannot fit 10.5in even at
+ * the minimum size, but can fit 11in, is fitted to 11in (fitSheet), so the
+ * headroom never costs anyone a second sheet of paper. A 30-matchup guide
+ * with full notes is exactly that case.
+ */
+export const PHONE_PAGE_HEIGHT_IN = 10.5;
 
 /**
  * A few px under the page. Landing exactly on the page height lets
@@ -74,6 +104,46 @@ export interface SheetFit {
     fits: boolean;
     /** The column layout measured at `px`. One page whenever `fits`. */
     pages: SheetPages;
+    /** What the fit saw, for the ?printdebug=1 panel. */
+    probe?: FitProbe;
+}
+
+/**
+ * The raw measurements behind a fit. Nothing in the app decides anything from
+ * this; it exists so a print that goes wrong on a real phone can be diagnosed
+ * from a screenshot of /sideboard?printdebug=1 rather than guessed at.
+ */
+export interface FitProbe {
+    /** "detached": an off-screen clone in the page. "sheet": fitted in place (the desktop's print iframe). */
+    source: "detached" | "sheet";
+    /** The page height fitted to, in CSS px (safety margin already taken off). */
+    limitPx: number;
+    /** Room for columns on page one (under the title) and on later pages. */
+    firstCapPx: number;
+    restCapPx: number;
+    /** Each matchup's measured height at the committed size, in order. */
+    itemHeights: number[];
+    /** Each column's height as dealt, page by page, measured after dealing. */
+    columnHeights: number[][];
+    /** The measured sheet's rendered width and its computed font-family. */
+    sheetWidthPx: number;
+    fontFamily: string;
+    /**
+     * Rendered text width over the width the font should have at `px`, and
+     * the first matchup's computed font-size over `px`. Both are 1 when the
+     * browser draws the text at the size it was given; well above 1 means
+     * text autosizing is enlarging it.
+     */
+    textScale: number;
+    computedScale: number;
+    /** Sizes tried by the search. */
+    tried: number;
+    /**
+     * Null when all is well. Otherwise why the measurement could not be
+     * trusted (the sheet fell back to the minimum size on one page), or a
+     * warning that text is drawn at a different size from the one set.
+     */
+    problem: string | null;
 }
 
 /** CSS px to printer's points, for telling the user what they'll get. */
@@ -250,17 +320,23 @@ export function fallbackPages(count: number, k: number = SHEET_COLUMNS): SheetPa
 }
 
 /**
- * The measured layout if it still describes `count` matchups, else the
- * fallback. A layout from before a matchup was added or removed would drop a
- * matchup from the printout or point past the end of the list, so it is
- * checked, not trusted.
+ * The size and the layout to render the sheet at, taken from ONE fit.
+ *
+ * A fit's pages are only used if they still describe `count` matchups: a
+ * layout from before a matchup was added or removed would drop one from the
+ * printout or point past the end of the list. When they don't, the size is
+ * dropped along with them. Pairing a size from one measurement with pages
+ * from another (or with the even-by-count fallback) is how a sheet ends up
+ * with large text dealt into columns that were sized for small text, so the
+ * two never come from different places: no usable fit means the minimum size
+ * and one evenly split page, the combination least likely to overflow.
  */
-export function pagesFor(fit: SheetFit | null, count: number): SheetPages {
+export function sheetLayoutFor(fit: SheetFit | null, count: number): { px: number; pages: SheetPages } {
     if (fit) {
         const flat = fit.pages.flat(2);
-        if (flat.length === count && flat.every((v, i) => v === i)) return fit.pages;
+        if (flat.length === count && flat.every((v, i) => v === i)) return { px: fit.px, pages: fit.pages };
     }
-    return fallbackPages(count);
+    return { px: MIN_SHEET_PX, pages: fallbackPages(count) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,6 +367,40 @@ function buildPage(doc: Document, head: HTMLElement | null) {
 }
 
 /**
+ * How tall a column's content is: from the column's top to the bottom of its
+ * last matchup, bottom margin included (the same span fitSheet sums). Not
+ * the column's own box, which stretches to the tallest column in its row.
+ */
+function columnContentHeight(col: HTMLElement): number {
+    const last = col.lastElementChild as HTMLElement | null;
+    if (!last) return 0;
+    const view = col.ownerDocument.defaultView;
+    const margin = view ? parseFloat(view.getComputedStyle(last).marginBottom) || 0 : 0;
+    return last.getBoundingClientRect().bottom + margin - col.getBoundingClientRect().top;
+}
+
+/**
+ * A line of ordinary sheet text for checking that the browser draws the text
+ * at the size it was given. Long enough that a few percent of scaling is
+ * whole pixels.
+ */
+const SCALE_SAMPLE = "Sideboard out: 2 Duress, 1 Negate. In: 3 Cut Down, 2 Go for the Throat";
+
+/**
+ * How far rendered text may be from its set size before a measurement is not
+ * trusted. Font hinting moves a line by well under 1%; text autosizing moves
+ * it by tens of percent. 8% sits far from both.
+ */
+const SCALE_TOLERANCE = 0.08;
+
+export interface FitOptions {
+    /** Page height to fit to, in inches. Defaults to the full Letter page. */
+    pageHeightIn?: number;
+    /** Recorded in the probe; fitDetached passes "detached". */
+    source?: FitProbe["source"];
+}
+
+/**
  * Finds the largest base size at which `sheet` fits on one page, rebuilds the
  * sheet's columns (and pages, if it cannot fit) to match, leaves that size
  * applied, and reports it.
@@ -306,16 +416,29 @@ function buildPage(doc: Document, head: HTMLElement | null) {
  * the balance can be scaled from a neighbouring size.
  *
  * A binary search, but one that only ever settles on a size it has actually
- * measured as fitting. Height against text size is *nearly* monotonic, not
- * quite — balancing three columns around matchups that must not split can make
- * a slightly larger size pack a little tighter — so the answer is never
- * interpolated or rounded after the fact. It is always a size that was seen to
- * fit.
+ * measured as fitting, and it commits the layout from THAT measurement. It
+ * used to re-measure the winning size at the end and deal the pages from the
+ * re-measurement; if the second look disagreed with the first, the sheet came
+ * out as two pages at a size already seen to fit on one. Height against text
+ * size is also only *nearly* monotonic (balancing three columns around
+ * matchups that must not split can make a slightly larger size pack a little
+ * tighter), so nothing is interpolated or rounded after the fact.
+ *
+ * Measurements are sanity-checked before they are believed (brokenWith,
+ * below). A measurement that fails cannot say whether the guide fits, so
+ * rather than paginate on bad numbers it falls back to the minimum size on a
+ * single balanced page: the one layout that is right whenever the guide can
+ * fit at all. Text drawn larger than the size set (autosizing) is checked
+ * too, but only reported; see scaleWarning for why it is not a fallback.
  */
-export function fitSheet(sheet: HTMLElement): SheetFit {
+export function fitSheet(sheet: HTMLElement, opts: FitOptions = {}): SheetFit {
     const doc = sheet.ownerDocument;
     const view = doc.defaultView;
-    const limit = PAGE_HEIGHT_IN * CSS_PX_PER_IN - SAFETY_PX;
+    const fullLimit = LETTER_HEIGHT_IN * CSS_PX_PER_IN - SAFETY_PX;
+    // The page height aimed for; see the end of this function for when the
+    // full page is used instead.
+    let limit = Math.min(fullLimit, (opts.pageHeightIn ?? LETTER_HEIGHT_IN) * CSS_PX_PER_IN - SAFETY_PX);
+    const source = opts.source ?? "sheet";
 
     const head = sheet.querySelector<HTMLElement>(".sb-sheet-head");
     const items = Array.from(sheet.querySelectorAll<HTMLElement>(".sb-item"));
@@ -324,14 +447,41 @@ export function fitSheet(sheet: HTMLElement): SheetFit {
     // column. All three columns are the same width, so a matchup's height here
     // is its height in whichever column it ends up in.
     const probe = buildPage(doc, head);
+    // One line of sheet text, below the columns so it cannot change their
+    // measurements, for checking the text is drawn at the size set.
+    const sample = doc.createElement("div");
+    const sampleText = doc.createElement("span");
+    sampleText.style.whiteSpace = "nowrap";
+    sampleText.textContent = SCALE_SAMPLE;
+    sample.appendChild(sampleText);
+    probe.page.appendChild(sample);
     sheet.replaceChildren(probe.page);
     for (const item of items) probe.cols[0].appendChild(item);
 
+    const fontFamily = view ? view.getComputedStyle(sheet).fontFamily : "";
     const pad = view ? view.getComputedStyle(probe.page) : null;
     const padTop = pad ? parseFloat(pad.paddingTop) || 0 : 0;
     const padBottom = pad ? parseFloat(pad.paddingBottom) || 0 : 0;
+    const sheetWidth = sheet.getBoundingClientRect().width;
 
+    // How wide the sample is per px of font size, asked of the font itself
+    // rather than of layout: a canvas draws text at exactly the size it is
+    // given, with no autosizing. Null where there is no canvas to ask.
+    let perPx: number | null = null;
+    try {
+        const ctx = doc.createElement("canvas").getContext("2d");
+        if (ctx && fontFamily) {
+            ctx.font = `100px ${fontFamily}`;
+            const w = ctx.measureText(SCALE_SAMPLE).width / 100;
+            if (Number.isFinite(w) && w > 0) perPx = w;
+        }
+    } catch {
+        perPx = null;
+    }
+
+    let tried = 0;
     const measure = (px: number) => {
+        tried++;
         sheet.style.setProperty("--sb-size", `${px}px`);
         const pageTop = probe.page.getBoundingClientRect().top;
         const colBox = probe.cols[0].getBoundingClientRect();
@@ -344,42 +494,157 @@ export function fitSheet(sheet: HTMLElement): SheetFit {
         const firstCap = limit - (colBox.top - pageTop) - padBottom;
         const restCap = limit - padTop - padBottom;
         const { columns, tallest } = balanceColumns(heights);
-        return { heights, firstCap, restCap, columns, fits: tallest <= firstCap };
+        const textScale = perPx ? sampleText.getBoundingClientRect().width / (perPx * px) : 1;
+        const itemPx = items.length > 0 && view ? parseFloat(view.getComputedStyle(items[0]).fontSize) : px;
+        return {
+            px,
+            limit,
+            heights,
+            firstCap,
+            restCap,
+            columns,
+            textScale,
+            computedScale: itemPx / px,
+            fits: tallest <= firstCap,
+        };
+    };
+    type Measured = ReturnType<typeof measure>;
+
+    /**
+     * Why a measurement can't be believed, or null if it can. Each check is a
+     * way the numbers could be wrong on a real device:
+     *  - non-finite or all-zero heights: measured before layout, or inside
+     *    something with no size (display: none anywhere above the sheet);
+     *  - a sheet that isn't 8.5in wide, or isn't in Arial: the stylesheet
+     *    isn't applied yet, or something constrains the measuring host, so
+     *    the text wraps differently from the printed sheet.
+     */
+    const brokenWith = (m: Measured): string | null => {
+        if (items.length === 0) return null;
+        if (!m.heights.every((h) => Number.isFinite(h) && h >= 0)) return "a matchup's height could not be measured";
+        if (m.heights.every((h) => h < 1)) return "every matchup measured 0px tall (not laid out)";
+        if (!(m.firstCap > 0)) return "the page area could not be measured";
+        if (!(Math.abs(sheetWidth - SHEET_WIDTH_PX) <= 2)) {
+            return `sheet measured ${Math.round(sheetWidth)}px wide, not ${SHEET_WIDTH_PX}px`;
+        }
+        if (!/arial|helvetica/i.test(fontFamily)) return `sheet font is "${fontFamily}", not Arial`;
+        return null;
     };
 
-    const finish = (px: number, m: ReturnType<typeof measure>): SheetFit => {
-        const pages = m.fits ? [m.columns] : flowPages(m.heights, m.firstCap, m.restCap);
+    /**
+     * Text drawn at a different size from the one set: text autosizing (iOS's,
+     * or Android Chrome's font boosting) enlarging small text in a wide block.
+     * With it, every height is inflated and even the smallest size looks too
+     * big for one page, which is the likeliest cause of the iPhone printing a
+     * one-page guide as two pages of large text. globals.css switches it off
+     * for the sheet (text-size-adjust: none); this checks that it worked.
+     *
+     * Reported, deliberately NOT treated as a broken measurement. The iPhone's
+     * printout was as inflated as its measurement, so inflated heights still
+     * describe what will print, and paginating from them gives two clean pages.
+     * Forcing one page from them instead gives a sheet whose columns overflow
+     * onto page two, each continuing at the top of the next sheet, which reads
+     * worse. The warning surfaces in the ?printdebug=1 panel.
+     */
+    const scaleWarning = (m: Measured): string | null => {
+        if (items.length === 0) return null;
+        if (Math.abs(m.textScale - 1) > SCALE_TOLERANCE) {
+            return `text renders at ${m.textScale.toFixed(2)}x its set size (text autosizing?)`;
+        }
+        if (Math.abs(m.computedScale - 1) > SCALE_TOLERANCE) {
+            return `text computes to ${m.computedScale.toFixed(2)}x its set size (text autosizing?)`;
+        }
+        return null;
+    };
+
+    const finish = (m: Measured, pages: SheetPages, fits: boolean, problem: string | null): SheetFit => {
+        sheet.style.setProperty("--sb-size", `${m.px}px`);
         sheet.replaceChildren();
+        const colEls: HTMLElement[][] = [];
         pages.forEach((cols, p) => {
-            const { page, cols: colEls } = buildPage(doc, p === 0 ? head : null);
-            if (p < pages.length - 1) page.classList.add("sb-page-full");
+            const built = buildPage(doc, p === 0 ? head : null);
+            if (p < pages.length - 1) built.page.classList.add("sb-page-full");
             cols.forEach((col, c) => {
-                for (const i of col) colEls[c].appendChild(items[i]);
+                for (const i of col) built.cols[c].appendChild(items[i]);
             });
-            sheet.appendChild(page);
+            sheet.appendChild(built.page);
+            colEls.push(built.cols);
         });
-        return { px, fits: m.fits, pages };
+        return {
+            px: m.px,
+            fits,
+            pages,
+            probe: {
+                source,
+                limitPx: m.limit,
+                firstCapPx: m.firstCap,
+                restCapPx: m.restCap,
+                itemHeights: m.heights,
+                // Measured on the dealt sheet, not summed from itemHeights, so
+                // the panel shows what the columns really came to.
+                columnHeights: colEls.map((cols) => cols.map(columnContentHeight)),
+                sheetWidthPx: sheetWidth,
+                fontFamily,
+                textScale: m.textScale,
+                computedScale: m.computedScale,
+                tried,
+                problem,
+            },
+        };
+    };
+
+    /**
+     * The layout for a measurement that can't be trusted: minimum size, one
+     * page, columns balanced from whatever heights are usable: the measured
+     * ones when they are finite, otherwise each matchup weighted by how much
+     * text it has. `fits` is reported from the heights where they exist, so
+     * the planner's "runs onto a second page" warning still has something to
+     * go on, but the sheet itself is never paginated from numbers already
+     * known to be wrong.
+     */
+    const fallback = (problem: string): SheetFit => {
+        const m = measure(MIN_SHEET_PX);
+        const usable = m.heights.every((h) => Number.isFinite(h) && h >= 0) && m.heights.some((h) => h >= 1);
+        const weights = usable ? m.heights : items.map((el) => 40 + (el.textContent ?? "").length);
+        const { columns, tallest } = balanceColumns(weights);
+        return finish(m, [columns], usable ? tallest <= m.firstCap : true, problem);
     };
 
     const atMax = measure(MAX_SHEET_PX);
-    if (atMax.fits) return finish(MAX_SHEET_PX, atMax);
+    const maxBroken = brokenWith(atMax);
+    if (maxBroken) return fallback(maxBroken);
+    if (atMax.fits) return finish(atMax, [atMax.columns], true, scaleWarning(atMax));
 
-    const atMin = measure(MIN_SHEET_PX);
+    let atMin = measure(MIN_SHEET_PX);
+    const minBroken = brokenWith(atMin);
+    if (minBroken) return fallback(minBroken);
+    // Autosizing enlarges small text the most, so the smallest size is where
+    // it shows; its warning goes with whatever layout is committed below.
+    const warning = scaleWarning(atMin) ?? scaleWarning(atMax);
+    if (!atMin.fits && limit < fullLimit) {
+        // A shortened page (a phone's headroom, PHONE_PAGE_HEIGHT_IN) is a
+        // preference, not a rule. A guide that only fits one page by using
+        // the whole of it gets the whole of it: one full page risks the last
+        // line of a column on a printer with unusually deep margins, while
+        // two pages is certain to waste a sheet for the sake of a few lines.
+        limit = fullLimit;
+        atMin = measure(MIN_SHEET_PX);
+    }
     if (!atMin.fits) {
         // Left at the minimum: it will print across two pages, but readably,
         // and filling column by column so page one is actually used.
-        return finish(MIN_SHEET_PX, atMin);
+        return finish(atMin, flowPages(atMin.heights, atMin.firstCap, atMin.restCap), false, warning);
     }
 
-    let lo = MIN_SHEET_PX; // known to fit
-    let hi = MAX_SHEET_PX; // known not to
-    for (let i = 0; i < 16 && hi - lo > 0.02; i++) {
-        const mid = (lo + hi) / 2;
-        if (measure(mid).fits) lo = mid;
-        else hi = mid;
+    let best = atMin; // measured to fit; its layout is the one committed
+    let hi = MAX_SHEET_PX; // measured not to
+    for (let i = 0; i < 16 && hi - best.px > 0.02; i++) {
+        const m = measure((best.px + hi) / 2);
+        if (m.fits && !brokenWith(m)) best = m;
+        else hi = m.px;
     }
 
-    return finish(lo, measure(lo));
+    return finish(best, [best.columns], true, warning);
 }
 
 /**
@@ -388,8 +653,13 @@ export function fitSheet(sheet: HTMLElement): SheetFit {
  * .sb-print on screen, which has no size). The copy goes into an invisible
  * off-screen host in the same document, so it is styled by the same
  * stylesheets, and is removed again before this returns.
+ *
+ * The host is a direct child of <body>, which is also where SideboardPlanner
+ * portals the real sheet, so the copy is measured in the context the printed
+ * sheet is laid out in: same parent, same inherited styles, and a width that
+ * nothing but the sheet's own 8.5in decides.
  */
-export function fitDetached(sheet: HTMLElement): SheetFit {
+export function fitDetached(sheet: HTMLElement, opts: Omit<FitOptions, "source"> = {}): SheetFit {
     const doc = sheet.ownerDocument;
     const host = doc.createElement("div");
     host.setAttribute("aria-hidden", "true");
@@ -399,10 +669,48 @@ export function fitDetached(sheet: HTMLElement): SheetFit {
     host.appendChild(clone);
     doc.body.appendChild(host);
     try {
-        return fitSheet(clone);
+        return fitSheet(clone, { ...opts, source: "detached" });
     } finally {
         host.remove();
     }
+}
+
+/**
+ * Measures the sheet React actually rendered (the one a phone prints) for the
+ * ?printdebug=1 panel, so it can show whether the committed layout matches
+ * the fit it came from. The sheet sits inside the display:none .sb-print on
+ * screen, so `container` is shown off-screen and invisible for the length of
+ * this call and put back exactly as it was. Nothing is moved.
+ */
+export function measureRendered(container: HTMLElement): {
+    px: string;
+    widthPx: number;
+    pages: { columnHeights: number[]; bottomPx: number }[];
+} {
+    const before = container.getAttribute("style");
+    container.style.cssText =
+        "display:block;position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;";
+    try {
+        const sheet = container.querySelector<HTMLElement>(".sb-sheet");
+        const top = sheet?.getBoundingClientRect().top ?? 0;
+        const pages = Array.from(container.querySelectorAll<HTMLElement>(".sb-page")).map((page) => ({
+            columnHeights: Array.from(page.querySelectorAll<HTMLElement>(".sb-col")).map(columnContentHeight),
+            bottomPx: page.getBoundingClientRect().bottom - top,
+        }));
+        return {
+            px: sheet?.style.getPropertyValue("--sb-size") ?? "",
+            widthPx: sheet?.getBoundingClientRect().width ?? 0,
+            pages,
+        };
+    } finally {
+        if (before === null) container.removeAttribute("style");
+        else container.setAttribute("style", before);
+    }
+}
+
+/** The page height to fit to on this device: see PHONE_PAGE_HEIGHT_IN. */
+export function printPageHeightIn(win: Window): number {
+    return printsTopLevelOnly(win) ? PHONE_PAGE_HEIGHT_IN : LETTER_HEIGHT_IN;
 }
 
 /**

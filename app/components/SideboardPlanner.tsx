@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import HelpTip from "./HelpTip";
 import FitText from "./FitText";
 import CardAutocomplete, { type CardRow } from "./CardAutocomplete";
@@ -24,7 +24,9 @@ import {
 import {
     fitSheet,
     fitDetached,
-    pagesFor,
+    measureRendered,
+    printPageHeightIn,
+    sheetLayoutFor,
     printsTopLevelOnly,
     pxToPt,
     MIN_SHEET_PX,
@@ -161,6 +163,94 @@ function SheetItem({ m }: { m: Matchup }) {
             )}
 
             {m.notes.trim() && <div className="sb-notes">{m.notes.trim()}</div>}
+        </div>
+    );
+}
+
+/**
+ * The print diagnostics panel, shown only at /sideboard?printdebug=1.
+ *
+ * Exists because the printed sheet is fitted by measuring layout, and the one
+ * device that got it wrong (an iPhone) can't be driven from here. Everything
+ * the fit decided from is listed as plain text, small enough to fit one phone
+ * screenshot, so a bad print can be diagnosed from a picture of this panel.
+ * .sb-noprint, so it never reaches the paper.
+ *
+ * Only rendered after hydration (usePrintDebug is false on the server), so it
+ * can read `window` directly.
+ *
+ * Fixed to the bottom-left corner, out of the page's flow, and deliberately
+ * so. In flow above the editor it appeared after hydration and then grew as
+ * the fit filled it in, shoving the whole planner down three times (a layout
+ * shift of about 0.5 on a phone). Out of flow it moves nothing. It starts
+ * collapsed to a 32px tab in the left gutter, narrower than the page's side
+ * padding, so on a phone it can't cover Export (or anything else full-width)
+ * at any scroll position; the corner is the left one because ScrollToTop owns
+ * the right. The tab never moves: the expanded text opens above it, capped at
+ * half the screen and scrollable, and the same tab closes it.
+ */
+function PrintDebugPanel({
+    fit,
+    count,
+    rendered,
+}: {
+    fit: (SheetFit & { count: number }) | null;
+    count: number;
+    rendered: ReturnType<typeof measureRendered> | null;
+}) {
+    const [open, setOpen] = useState(false);
+    const r = (n: number) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : String(n));
+    const probe = fit?.probe;
+    const vv = window.visualViewport;
+    const lines: string[] = [
+        `ua: ${navigator.userAgent}`,
+        `printsTopLevelOnly: ${printsTopLevelOnly(window)}  pageIn: ${printPageHeightIn(window)}`,
+        `viewport: ${window.innerWidth}x${window.innerHeight}  dpr: ${window.devicePixelRatio}` +
+            (vv ? `  visual: ${r(vv.width)}x${r(vv.height)} @${r(vv.scale)}` : ""),
+    ];
+    if (!fit || !probe) {
+        lines.push("fit: none yet");
+    } else {
+        lines.push(
+            `fit: px ${r(fit.px)} (${pxToPt(fit.px)}pt)  fits ${fit.fits}  pages ${fit.pages.length}` +
+                `  for ${fit.count}/${count} matchups  tried ${probe.tried}`,
+            `source: ${probe.source}  problem: ${probe.problem ?? "none"}`,
+            `host: width ${r(probe.sheetWidthPx)}px  font ${probe.fontFamily}`,
+            `text scale: rendered ${probe.textScale.toFixed(3)}  computed ${probe.computedScale.toFixed(3)}`,
+            `limit ${r(probe.limitPx)}  cap p1 ${r(probe.firstCapPx)}  cap p2+ ${r(probe.restCapPx)}`,
+            ...probe.columnHeights.map(
+                (cols, p) =>
+                    `fit p${p + 1} cols: ${cols.map(r).join(" / ")}  vs ${r(p === 0 ? probe.firstCapPx : probe.restCapPx)}` +
+                    `  items ${fit.pages[p].map((c) => c.length).join("/")}`
+            ),
+            `items: ${probe.itemHeights.map(r).join(" ")}`
+        );
+    }
+    if (rendered) {
+        lines.push(
+            `rendered: --sb-size ${rendered.px}  width ${r(rendered.widthPx)}px  pages ${rendered.pages.length}`,
+            ...rendered.pages.map(
+                (pg, p) => `rendered p${p + 1} cols: ${pg.columnHeights.map(r).join(" / ")}  bottom ${r(pg.bottomPx)}`
+            )
+        );
+    }
+    return (
+        <div className="sb-noprint fixed bottom-3 left-1 z-50">
+            {open && (
+                <pre className="absolute bottom-full left-0 mb-1 max-h-[50vh] w-[calc(100vw-0.5rem)] overflow-auto whitespace-pre-wrap break-words rounded border border-ink/30 bg-white p-2 font-mono text-[10px] leading-snug text-black shadow-card sm:w-[28rem]">
+                    {lines.join("\n")}
+                </pre>
+            )}
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-label={open ? "Hide print diagnostics" : "Show print diagnostics"}
+                title={open ? "Hide print diagnostics" : "Show print diagnostics"}
+                className="block h-8 w-8 rounded bg-black/80 font-mono text-[10px] font-bold text-white shadow-card"
+            >
+                {open ? "×" : "PD"}
+            </button>
         </div>
     );
 }
@@ -326,6 +416,24 @@ function useWide(): boolean {
         () => window.matchMedia(WIDE_QUERY).matches,
         // The server can't know the screen; render the narrow layout and let
         // the client switch after hydration.
+        () => false
+    );
+}
+
+const noSubscribe = () => () => {};
+
+/**
+ * Whether the page was opened with ?printdebug=1, which shows the print
+ * diagnostics panel. Read from window.location rather than useSearchParams:
+ * useSearchParams would opt the planner out of prerendering (or need its own
+ * Suspense boundary), and /sideboard is static. It's never read on the server
+ * and only matters to someone who typed the parameter in, so a plain read of
+ * the address after hydration is all it needs.
+ */
+function usePrintDebug(): boolean {
+    return useSyncExternalStore(
+        noSubscribe,
+        () => /(?:^|[?&])printdebug=1(?:&|$)/.test(window.location.search),
         () => false
     );
 }
@@ -717,18 +825,75 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      */
     const [fit, setFit] = useState<(SheetFit & { count: number }) | null>(null);
     const fitNow = fit && fit.count === matchups.length ? fit : null;
-    // Which matchups print in which column. pagesFor checks the layout still
-    // covers exactly this many matchups and falls back to an even split if
-    // not, so a matchup added a moment ago is never left off the sheet.
-    const sheetPages = pagesFor(fit, matchups.length);
+    // The size and the column layout the sheet renders with, both from the
+    // same fit. sheetLayoutFor checks the layout still covers exactly this
+    // many matchups; if not, it drops the size too and falls back to the
+    // minimum size on one even page, so a matchup added a moment ago is never
+    // left off the sheet and never printed at a size measured without it.
+    const sheetLayout = sheetLayoutFor(fit, matchups.length);
+
+    const printDebug = usePrintDebug();
+    // What the ?printdebug=1 panel shows about the sheet React rendered, as
+    // opposed to the clone that was fitted. Only ever set in debug mode.
+    const [rendered, setRendered] = useState<ReturnType<typeof measureRendered> | null>(null);
+    // When the sheet was last fitted, so a print that follows straight on
+    // from Export doesn't lay the whole sheet out a second time.
+    const lastFitAt = useRef(0);
+
+    /**
+     * Fits the sheet as it is right now and commits the result synchronously,
+     * so whatever happens next (a print) sees the layout that was just
+     * measured, not the one from before the last keystroke. Fitted to the
+     * page height this device can be trusted to print (printPageHeightIn).
+     */
+    const refitNow = useCallback(() => {
+        const sheet = printRef.current?.querySelector<HTMLElement>(".sb-sheet");
+        if (!sheet) return;
+        const next = fitDetached(sheet, { pageHeightIn: printPageHeightIn(window) });
+        lastFitAt.current = Date.now();
+        flushSync(() => setFit({ ...next, count: matchups.length }));
+    }, [matchups.length]);
+
     useEffect(() => {
         const timer = setTimeout(() => {
             const sheet = printRef.current?.querySelector<HTMLElement>(".sb-sheet");
             if (!sheet) return;
-            setFit({ ...fitDetached(sheet), count: matchups.length });
+            const next = fitDetached(sheet, { pageHeightIn: printPageHeightIn(window) });
+            lastFitAt.current = Date.now();
+            if (!printDebug) {
+                setFit({ ...next, count: matchups.length });
+                return;
+            }
+            // Debug only: commit, then measure what React actually drew from
+            // it, so the panel can show the two side by side.
+            flushSync(() => setFit({ ...next, count: matchups.length }));
+            if (printRef.current) setRendered(measureRendered(printRef.current));
         }, 250);
         return () => clearTimeout(timer);
-    }, [matchups, format, plan.savedName]);
+        // `hydrated`: the sheet is portalled in only once the planner has
+        // mounted (a portal needs a document), so the first run, before it
+        // exists, has to be followed by one that finds it.
+    }, [matchups, format, plan.savedName, hydrated, printDebug]);
+
+    /**
+     * Re-fit as printing starts, for Ctrl+P (and the browser's own Print menu)
+     * on this page, which never goes through Export. The fit is otherwise up
+     * to a quarter-second stale, and a sheet whose notes changed since then
+     * could print with columns sized for the old text.
+     *
+     * Skipped when Export fitted the sheet a moment ago — Export's phone path
+     * fits, commits, then calls print(), which fires this straight away.
+     * Browsers that don't fire beforeprint lose nothing: Export still fits
+     * before it prints.
+     */
+    useEffect(() => {
+        const onBeforePrint = () => {
+            if (Date.now() - lastFitAt.current < 1000) return;
+            refitNow();
+        };
+        window.addEventListener("beforeprint", onBeforePrint);
+        return () => window.removeEventListener("beforeprint", onBeforePrint);
+    }, [refitNow]);
 
     /**
      * Prints the guide from an isolated iframe rather than calling
@@ -759,7 +924,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * an iframe's load event is not. There the planner page prints itself —
      * its print styles already hide everything but the sheet — straight from
      * the click handler. The sheet it prints is the one React renders, so it
-     * is re-fitted first and the result committed synchronously (flushSync):
+     * is re-fitted first and the result committed synchronously (refitNow):
      * the page that prints has to be the page that was just measured, not the
      * one from before the last keystroke. The freeze described above is a
      * desktop-dialog problem; a phone hands printing to the OS.
@@ -777,8 +942,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
         }
 
         if (printsTopLevelOnly(window)) {
-            const next = fitDetached(src);
-            flushSync(() => setFit({ ...next, count: matchups.length }));
+            refitNow();
             window.print();
             return;
         }
@@ -801,9 +965,12 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
 
             try {
                 // Same stylesheets as the page, so the printed sheet is styled by
-                // globals.css and there is no duplicated CSS to drift.
+                // globals.css and there is no duplicated CSS to drift. Not the
+                // planner's own page-print style (data-sb-page-print): it hides
+                // everything in <body> but .sb-print, and this document's body
+                // holds the bare sheet.
                 const head = Array.from(
-                    document.querySelectorAll('link[rel="stylesheet"], style')
+                    document.querySelectorAll('link[rel="stylesheet"], style:not([data-sb-page-print])')
                 )
                     .map((n) => n.outerHTML)
                     .join("");
@@ -1033,6 +1200,8 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     }
                 />
             </Suspense>
+
+            {printDebug && <PrintDebugPanel fit={fit} count={matchups.length} rendered={rendered} />}
 
             {/* ===================== screen UI ===================== */}
             <div className="sb-noprint space-y-10">
@@ -1727,58 +1896,86 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 printed layout is deliberately separate markup rather than a
                 restyling of the editor, because fitting 30 matchups on one side
                 of one page needs inline card lists, not stacked input rows.
-                --sb-size is the measured text size from `fit`; until there is
-                one, the stylesheet's default applies. */}
-            {/* The page box for Ctrl+P on this page. margin: 0 leaves the browser
-                nowhere to stamp its date, title, web address and page number —
-                they are drawn in the page margin. Rendered here rather than in
-                globals.css so it applies only while the planner is mounted, not
-                to printing every page on the site. */}
-            <style>{"@media print { @page { size: letter portrait; margin: 0; } }"}</style>
+                --sb-size and the column layout both come from sheetLayout, i.e.
+                from one measured fit; until there is one, the minimum size. */}
+            {/* The page box for Ctrl+P and a phone's Export on this page, plus
+                what puts the sheet at the very top of page one. Rendered here
+                rather than in globals.css so it applies only while the planner
+                is mounted, not to printing every page on the site.
+
+                - margin: 0 leaves the browser nowhere to stamp its date, title,
+                  web address and page number; they are drawn in the page margin.
+                - Every child of <body> but the portalled .sb-print is hidden,
+                  and <body> is a plain block. That leaves the sheet in normal
+                  flow with nothing above it, which is where page breaks are
+                  most reliable (see .sb-page-full). <body> is a flex column on
+                  screen, and flex boxes are where print engines, WebKit's in
+                  particular, are worst at breaking pages.
+
+                Marked data-sb-page-print so the desktop's isolated print
+                document, which copies the page's styles, leaves it out: that
+                document's <body> holds the bare sheet, which this would hide. */}
+            <style data-sb-page-print="">
+                {"@media print { @page { size: letter portrait; margin: 0; } " +
+                    "body { display: block !important; min-height: 0 !important; } " +
+                    "body > :not(.sb-print) { display: none !important; } }"}
+            </style>
             {/* The page / column structure is the one lib/printFit.ts builds
                 (.sb-page > .sb-cols > .sb-col), dealt out from the measured
                 `fit`. The two must stay the same shape: a phone prints THIS
                 markup, and fitSheet re-deals a copy of it for the desktop's
-                isolated print document. */}
-            <div ref={printRef} className="sb-print" aria-hidden="true">
-                <div
-                    className="sb-sheet"
-                    style={fit ? ({ "--sb-size": `${fit.px}px` } as React.CSSProperties) : undefined}
-                >
-                    {sheetPages.map((cols, p) => (
+                isolated print document.
+
+                Portalled to be a direct child of <body>, for two reasons. In
+                print, it puts the sheet in normal flow at the top of the page
+                with no wrapper padding above it (see the style above). And
+                fitDetached measures its clone in a host that is also a child
+                of <body>, so what was measured and what prints sit in the same
+                context. Client-only, as a portal must be; nobody prints before
+                hydration, and the sheet is never shown on screen. */}
+            {hydrated &&
+                createPortal(
+                    <div ref={printRef} className="sb-print" aria-hidden="true">
                         <div
-                            key={p}
-                            className={p < sheetPages.length - 1 ? "sb-page sb-page-full" : "sb-page"}
+                            className="sb-sheet"
+                            style={{ "--sb-size": `${sheetLayout.px}px` } as React.CSSProperties}
                         >
-                            {p === 0 && (
-                                <div className="sb-sheet-head">
-                                    <span className="sb-sheet-title">
-                                        {plan.savedName ?? "Sideboard Guide"}
-                                    </span>
-                                    <span className="sb-sheet-format">
-                                        {formatLabel(format)}
-                                        {/* The percentages on the sheet only mean
-                                            something with the window they were
-                                            measured over. */}
-                                        {plan.availablePeriod && matchups.some((m) => m.pct !== null)
-                                            ? ` · meta % over ${plan.availablePeriod} days`
-                                            : ""}
-                                    </span>
-                                </div>
-                            )}
-                            <div className="sb-cols">
-                                {cols.map((col, c) => (
-                                    <div key={c} className="sb-col">
-                                        {col.map((i) => (
-                                            <SheetItem key={matchups[i].id} m={matchups[i]} />
+                            {sheetLayout.pages.map((cols, p) => (
+                                <div
+                                    key={p}
+                                    className={p < sheetLayout.pages.length - 1 ? "sb-page sb-page-full" : "sb-page"}
+                                >
+                                    {p === 0 && (
+                                        <div className="sb-sheet-head">
+                                            <span className="sb-sheet-title">
+                                                {plan.savedName ?? "Sideboard Guide"}
+                                            </span>
+                                            <span className="sb-sheet-format">
+                                                {formatLabel(format)}
+                                                {/* The percentages on the sheet only mean
+                                                    something with the window they were
+                                                    measured over. */}
+                                                {plan.availablePeriod && matchups.some((m) => m.pct !== null)
+                                                    ? ` · meta % over ${plan.availablePeriod} days`
+                                                    : ""}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="sb-cols">
+                                        {cols.map((col, c) => (
+                                            <div key={c} className="sb-col">
+                                                {col.map((i) => (
+                                                    <SheetItem key={matchups[i].id} m={matchups[i]} />
+                                                ))}
+                                            </div>
                                         ))}
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
-            </div>
+                    </div>,
+                    document.body
+                )}
         </div>
     );
 }
