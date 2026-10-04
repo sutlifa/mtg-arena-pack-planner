@@ -393,6 +393,44 @@ const SCALE_SAMPLE = "Sideboard out: 2 Duress, 1 Negate. In: 3 Cut Down, 2 Go fo
  */
 const SCALE_TOLERANCE = 0.08;
 
+/**
+ * Switches text autosizing off for the sheet, as an INLINE style. The same two
+ * declarations are in globals.css (.sb-sheet), but that copy cannot be relied
+ * on for the one that matters: the build drops `-webkit-text-size-adjust`.
+ * Next's CSS pipeline (Turbopack's Lightning CSS pass, after autoprefixer)
+ * merges a prefixed declaration into its unprefixed sibling and re-emits only
+ * the prefixes its browser targets call for, and by its data Safari does not
+ * need -webkit- here. The built stylesheet carries `-moz-text-size-adjust`
+ * and `text-size-adjust`, and no -webkit- form. iOS Safari is the browser
+ * that autosizes the sheet, and it has historically honoured only the
+ * -webkit- form, so that is the declaration that has to arrive.
+ *
+ * An inline style never goes through the CSS pipeline, so it arrives as
+ * written. Do not delete this as a duplicate of the stylesheet rule, and do
+ * not move it into CSS: it exists because the CSS copy gets stripped.
+ *
+ * The object is shaped for React's `style` prop (SideboardPlanner spreads it
+ * onto the rendered sheet, the one a phone prints); pinTextSize applies the
+ * same thing to a sheet in the DOM.
+ */
+export const SHEET_TEXT_SIZE_STYLE = {
+    WebkitTextSizeAdjust: "none",
+    textSizeAdjust: "none",
+} as const;
+
+/**
+ * SHEET_TEXT_SIZE_STYLE on a sheet already in the DOM. fitSheet calls it on
+ * whatever it measures (fitDetached's clone, the desktop print iframe's copy)
+ * so a sheet is measured with autosizing off even if it was copied from
+ * markup that somehow lost the inline style; measuring with it on and
+ * printing with it off is exactly the mismatch the sheet exists to avoid.
+ * setProperty with a property this browser does not know is a silent no-op.
+ */
+export function pinTextSize(el: HTMLElement): void {
+    el.style.setProperty("-webkit-text-size-adjust", "none");
+    el.style.setProperty("text-size-adjust", "none");
+}
+
 export interface FitOptions {
     /** Page height to fit to, in inches. Defaults to the full Letter page. */
     pageHeightIn?: number;
@@ -439,6 +477,7 @@ export function fitSheet(sheet: HTMLElement, opts: FitOptions = {}): SheetFit {
     // full page is used instead.
     let limit = Math.min(fullLimit, (opts.pageHeightIn ?? LETTER_HEIGHT_IN) * CSS_PX_PER_IN - SAFETY_PX);
     const source = opts.source ?? "sheet";
+    pinTextSize(sheet);
 
     const head = sheet.querySelector<HTMLElement>(".sb-sheet-head");
     const items = Array.from(sheet.querySelectorAll<HTMLElement>(".sb-item"));

@@ -296,7 +296,14 @@ body.no-scroll {
        printout on. The sheet is never shown on screen, so the usual cost of
        `none` (it can block text zoom on desktop Safari) does not apply.
        lib/printFit.ts also checks the text is drawn at the size set, and
-       reports it in the ?printdebug=1 panel if it isn't. */
+       reports it in the ?printdebug=1 panel if it isn't.
+
+       The build DROPS the -webkit- line below (Lightning CSS folds it into
+       the unprefixed one and re-prefixes for its targets, which it thinks
+       Safari does not need). The copy iOS actually receives is the inline
+       style SideboardPlanner and printFit put on the sheet; see
+       SHEET_TEXT_SIZE_STYLE in lib/printFit.ts. These two stay as a
+       fallback, and for any pipeline that keeps them. */
     -webkit-text-size-adjust: none;
     text-size-adjust: none;
     background: #fff;

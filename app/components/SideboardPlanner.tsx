@@ -28,6 +28,7 @@ import {
     printPageHeightIn,
     sheetLayoutFor,
     printsTopLevelOnly,
+    SHEET_TEXT_SIZE_STYLE,
     pxToPt,
     MIN_SHEET_PX,
     type SheetFit,
@@ -1938,7 +1939,15 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     <div ref={printRef} className="sb-print" aria-hidden="true">
                         <div
                             className="sb-sheet"
-                            style={{ "--sb-size": `${sheetLayout.px}px` } as React.CSSProperties}
+                            // SHEET_TEXT_SIZE_STYLE is inline on purpose: the
+                            // build strips -webkit-text-size-adjust from the
+                            // .sb-sheet rule in globals.css. See printFit.ts.
+                            style={
+                                {
+                                    "--sb-size": `${sheetLayout.px}px`,
+                                    ...SHEET_TEXT_SIZE_STYLE,
+                                } as React.CSSProperties
+                            }
                         >
                             {sheetLayout.pages.map((cols, p) => (
                                 <div
