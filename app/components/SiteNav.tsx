@@ -6,13 +6,15 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import AuthButton from "./AuthButton";
 
+// In the order you'd use them: your decks, what you own, what you're
+// missing, how to sideboard the deck, and finally what rotates out of it.
 const TABS = [
     { href: "/", label: "Home" },
     { href: "/decks", label: "Decks" },
-    { href: "/planner", label: "Pack Planner" },
     { href: "/collection", label: "Collection" },
-    { href: "/rotation", label: "Standard Rotation" },
+    { href: "/planner", label: "Pack Planner" },
     { href: "/sideboard", label: "Sideboard Planner" },
+    { href: "/rotation", label: "Standard Rotation" },
 ];
 
 /**
@@ -32,8 +34,11 @@ const TABS = [
  * Adding the Decks tab moved it again, to `xl`, and widened the bar to
  * max-w-6xl from there: the row grew by roughly the tab's 70px, which no
  * longer fit the 976px a max-w-5xl bar leaves inside its padding once the
- * account control is present. At 1280px and up a 6xl bar has ~1100px, which
- * does.
+ * account control is present. The thin brass dividers between tools added
+ * another ~70px, so from `xl` the bar drops its max width and spans the
+ * window: the brand sits at the far left and the tabs at the far right,
+ * leaving the most room between them. At 1280px that is ~1216px of row for
+ * the brand, all six tabs and the account control.
  */
 export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
     const pathname = usePathname();
@@ -68,7 +73,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
 
     return (
         <header ref={headerRef} className="bg-midnight border-b-2 border-brass">
-            <div className="max-w-5xl xl:max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+            <div className="max-w-5xl xl:max-w-none mx-auto px-6 xl:px-8 py-3 flex items-center justify-between gap-4">
                 {/* Site branding, not the page heading — each page supplies its
                     own <h1> via PageHeader, so this stays a plain link and the
                     document keeps exactly one h1. */}
@@ -89,28 +94,35 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
 
                 {/* ---------- inline row, large screens ---------- */}
                 <div className="hidden xl:flex items-center gap-4">
-                    <nav className="flex gap-1" aria-label="Primary">
+                    {/* A thin brass rule between tools, so the row reads as six
+                        separate destinations rather than one run of words. */}
+                    <nav className="flex items-center divide-x divide-brass/70" aria-label="Primary">
                         {TABS.map((tab) => {
                             const active = pathname === tab.href;
                             return (
-                                <Link
-                                    key={tab.href}
-                                    href={tab.href}
-                                    aria-current={active ? "page" : undefined}
-                                    className={
-                                        "px-3 py-2 rounded text-sm font-semibold tracking-wide whitespace-nowrap transition-colors " +
-                                        (active
-                                            ? "bg-brass text-brass-ink"
-                                            : "text-midnight-light hover:bg-white/10")
-                                    }
-                                >
-                                    {tab.label}
-                                </Link>
+                                <div key={tab.href} className="px-2.5">
+                                    <Link
+                                        href={tab.href}
+                                        aria-current={active ? "page" : undefined}
+                                        className={
+                                            "block px-3 py-2 rounded text-sm font-semibold tracking-wide whitespace-nowrap transition-colors " +
+                                            (active
+                                                ? "bg-brass text-brass-ink"
+                                                : "text-midnight-light hover:bg-white/10")
+                                        }
+                                    >
+                                        {tab.label}
+                                    </Link>
+                                </div>
                             );
                         })}
                     </nav>
 
-                    {authEnabled && <AuthButton />}
+                    {authEnabled && (
+                        <div className="pl-4 border-l border-brass/70">
+                            <AuthButton />
+                        </div>
+                    )}
                 </div>
 
                 {/* ---------- menu button, smaller screens ---------- */}
@@ -152,7 +164,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
             {open && (
                 <div id="site-menu" className="xl:hidden border-t border-brass/30">
                     <nav
-                        className="max-w-5xl mx-auto px-6 py-3 flex flex-col gap-1"
+                        className="max-w-5xl mx-auto px-6 py-3 flex flex-col divide-y divide-brass/20"
                         aria-label="Primary"
                     >
                         {TABS.map((tab) => {
@@ -163,7 +175,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
                                     href={tab.href}
                                     aria-current={active ? "page" : undefined}
                                     className={
-                                        "px-3 py-2.5 rounded text-base font-semibold tracking-wide transition-colors " +
+                                        "my-0.5 px-3 py-2.5 rounded text-base font-semibold tracking-wide transition-colors " +
                                         (active
                                             ? "bg-brass text-brass-ink"
                                             : "text-midnight-light hover:bg-white/10")
