@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listGuides, saveGuide } from "@/lib/guides";
 import { hasDatabase } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/savedRoutes";
 
 /** A plan is JSON the user typed; bound it so one account can't fill the table. */
 const MAX_PLAN_BYTES = 512_000;
@@ -42,8 +43,11 @@ export async function POST(req: Request) {
     const userId = session?.user?.id;
     if (!userId) return unauthorized();
 
+    let clashName = "";
+
     try {
-        const { name, format, plan } = await req.json();
+        const { name, format, plan, createOnly } = await req.json();
+        clashName = typeof name === "string" ? name.trim() : "";
 
         const trimmed = typeof name === "string" ? name.trim() : "";
         if (!trimmed) {
@@ -67,10 +71,18 @@ export async function POST(req: Request) {
             name: trimmed,
             format: typeof format === "string" ? format : "",
             plan,
+            // "Save as new": a clash is a 409, never an overwrite. See saveGuide.
+            createOnly: createOnly === true,
         });
 
         return NextResponse.json({ id, name: trimmed });
     } catch (err) {
+        if (isUniqueViolation(err)) {
+            return NextResponse.json(
+                { error: `You already have a guide called "${clashName}" — pick another name` },
+                { status: 409 }
+            );
+        }
         console.error("SAVE GUIDE ERROR:", err);
         return NextResponse.json({ error: "Could not save your guide" }, { status: 500 });
     }

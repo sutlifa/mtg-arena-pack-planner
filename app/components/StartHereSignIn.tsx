@@ -84,7 +84,7 @@ export default function StartHereSignIn() {
                     Go to your profile
                 </Link>
             }
-            caption="You're signed in. Your saved collections, comparisons and sideboard guides are on your profile."
+            caption="You're signed in. Your saved decks, collections, comparisons and sideboard guides are on your profile."
         />
     );
 }

@@ -41,13 +41,27 @@ export async function getGuide(userId: number, id: number) {
     return rows[0] ?? null;
 }
 
-/** Saving under a name that already exists updates that guide in place. */
+/**
+ * Saving under a name that already exists updates that guide in place —
+ * unless `createOnly` ("Save as new"), which promises a second guide and so
+ * inserts plainly; a name clash raises 23505 and the route answers 409
+ * instead of quietly overwriting a different guide.
+ */
 export async function saveGuide(args: {
     userId: number;
     name: string;
     format: string;
     plan: unknown;
+    createOnly?: boolean;
 }): Promise<number> {
+    if (args.createOnly) {
+        const created = await sql<{ id: number }[]>`
+            INSERT INTO sideboard_guides (user_id, name, format, plan)
+            VALUES (${args.userId}, ${args.name}, ${args.format}, ${sql.json(args.plan as never)})
+            RETURNING id
+        `;
+        return created[0].id;
+    }
     const rows = await sql<{ id: number }[]>`
         INSERT INTO sideboard_guides (user_id, name, format, plan)
         VALUES (${args.userId}, ${args.name}, ${args.format}, ${sql.json(args.plan as never)})

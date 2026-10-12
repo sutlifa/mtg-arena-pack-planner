@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { tidyCollection } from "@/lib/collectionText";
 import { listAnalyses, saveAnalysis } from "@/lib/saved";
-import { requireUser, isGuardFailure, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
+import { requireUser, isGuardFailure, isUniqueViolation, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
 
 const MAX_DECKS = 20;
 
@@ -21,8 +21,11 @@ export async function POST(req: Request) {
     const g = await requireUser();
     if (isGuardFailure(g)) return g.response;
 
+    let clashName = "";
+
     try {
-        const { name, decklists, collection, arenaMode } = await req.json();
+        const { name, decklists, collection, arenaMode, createOnly } = await req.json();
+        clashName = typeof name === "string" ? name.trim() : "";
 
         const nameError = checkName(name);
         if (nameError) return NextResponse.json({ error: nameError }, { status: 400 });
@@ -49,10 +52,18 @@ export async function POST(req: Request) {
             // Merged like a saved collection: one line per card.
             collection: tidyCollection(collectionText),
             arenaMode: Boolean(arenaMode),
+            // "Save as new": a clash is a 409, never an overwrite. See saveAnalysis.
+            createOnly: createOnly === true,
         });
 
         return NextResponse.json({ id, name: String(name).trim() });
     } catch (err) {
+        if (isUniqueViolation(err)) {
+            return NextResponse.json(
+                { error: `You already have a comparison called "${clashName}" — pick another name` },
+                { status: 409 }
+            );
+        }
         console.error("SAVE ANALYSIS ERROR:", err);
         return NextResponse.json({ error: "Could not save your comparison" }, { status: 500 });
     }

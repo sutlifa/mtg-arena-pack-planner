@@ -22,7 +22,7 @@ export default function AboutPage() {
             <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="About"
-                    subtitle="Four free tools for planning a Magic deck — what it costs to build, what you already own, what rotates out from under it, and how to sideboard against the field."
+                    subtitle="Free tools for planning a Magic deck — keep your lists, see what they cost to build and what you already own, what rotates out from under them, and how to sideboard against the field."
                     art="/art/banner-planner.svg"
                 />
 
@@ -40,15 +40,28 @@ export default function AboutPage() {
                             back is only the part you still need to acquire, priced and counted.
                         </p>
                         <p>
-                            Three more tools grew out of the same idea — answering a concrete question
+                            The other tools grew out of the same idea — answering a concrete question
                             about a real deck rather than showing you a card database.
                         </p>
                     </div>
                 </section>
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
-                    <h2 className="text-2xl font-title flex items-center">The four tools</h2>
+                    <h2 className="text-2xl font-title flex items-center">The tools</h2>
                     <div className="space-y-4 leading-relaxed">
+                        <div>
+                            <h3 className="font-title text-xl mb-1">Decks</h3>
+                            <p>
+                                Somewhere to keep your own decklists. Paste one — from Arena, MTGGoldfish
+                                or anywhere with one card per line — pick its format, and it&apos;s split
+                                into maindeck and sideboard. From there it goes straight to the other
+                                tools: checked against your collection on the Collection page, which
+                                lists exactly the cards and copies you&apos;re missing; costed in the Pack
+                                Planner, which runs the comparison as soon as it arrives; or loaded into
+                                the Sideboard Planner as the deck a guide is built from. All of that
+                                works signed out; signing in lets you save decks to come back to.
+                            </p>
+                        </div>
                         <div>
                             <h3 className="font-title text-xl mb-1">Pack Planner</h3>
                             <p>
@@ -70,7 +83,9 @@ export default function AboutPage() {
                                 card across different printings always merge into one line — here, in
                                 the Pack Planner, and in anything you save or load — so an Arena
                                 export&apos;s dozen lines for one card become one. It&apos;s the same collection,
-                                in the same Arena or Paper mode, that the Pack Planner uses.
+                                in the same Arena or Paper mode, that the Pack Planner uses. Its
+                                &quot;Compare with a deck&quot; panel shows what any deck — saved, pasted or
+                                sent from the Decks page — needs that the collection doesn&apos;t have.
                             </p>
                         </div>
                         <div>
@@ -190,7 +205,7 @@ export default function AboutPage() {
                             <>
                                 <p>
                                     Every tool works without an account, and always will. Signing in with
-                                    Google adds one thing: somewhere to save your work — collections,
+                                    Google adds one thing: somewhere to save your work — decks, collections,
                                     comparisons and sideboard guides — so it follows you to another device.
                                 </p>
                                 <p>
@@ -208,7 +223,7 @@ export default function AboutPage() {
                         ) : (
                             <p>
                                 Every tool works without an account, and there is nothing to sign up for.
-                                Your collection and sideboard plan are remembered in this browser between
+                                Your collection, the deck you&apos;re editing and your sideboard plan are remembered in this browser between
                                 visits, and the app keeps nothing you enter anywhere else. The{" "}
                                 <a
                                     href="/privacy"

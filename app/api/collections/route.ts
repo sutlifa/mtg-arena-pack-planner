@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { tidyCollection } from "@/lib/collectionText";
 import { listCollections, saveCollection } from "@/lib/saved";
-import { requireUser, isGuardFailure, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
+import { requireUser, isGuardFailure, isUniqueViolation, checkName, MAX_TEXT_BYTES } from "@/lib/savedRoutes";
 
 export async function GET() {
     const g = await requireUser();
@@ -19,8 +19,11 @@ export async function POST(req: Request) {
     const g = await requireUser();
     if (isGuardFailure(g)) return g.response;
 
+    let clashName = "";
+
     try {
-        const { name, rawText, arenaMode } = await req.json();
+        const { name, rawText, arenaMode, createOnly } = await req.json();
+        clashName = typeof name === "string" ? name.trim() : "";
 
         const nameError = checkName(name);
         if (nameError) return NextResponse.json({ error: nameError }, { status: 400 });
@@ -39,10 +42,18 @@ export async function POST(req: Request) {
             name: String(name).trim(),
             rawText: tidyCollection(rawText),
             arenaMode: Boolean(arenaMode),
+            // "Save as new": a clash is a 409, never an overwrite. See saveCollection.
+            createOnly: createOnly === true,
         });
 
         return NextResponse.json({ id, name: String(name).trim() });
     } catch (err) {
+        if (isUniqueViolation(err)) {
+            return NextResponse.json(
+                { error: `You already have a collection called "${clashName}" in that mode — pick another name` },
+                { status: 409 }
+            );
+        }
         console.error("SAVE COLLECTION ERROR:", err);
         return NextResponse.json({ error: "Could not save your collection" }, { status: 500 });
     }

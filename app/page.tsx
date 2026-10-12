@@ -6,7 +6,7 @@ import { isAuthConfigured } from "@/lib/authConfig";
 export const metadata = {
     title: "MTG Planning App",
     description:
-        "Four free tools for planning a Magic deck: what it costs you to build, what you already own, what rotates out of Standard, and how to sideboard against the field.",
+        "Free tools for planning a Magic deck: keep your decklists, see what they cost you to build and what you already own, what rotates out of Standard, and how to sideboard against the field.",
 };
 
 /**
@@ -38,6 +38,20 @@ interface Tool {
 
 const TOOLS: Tool[] = [
     {
+        href: "/decks",
+        name: "Decks",
+        art: "/art/banner-rotation.svg",
+        tagline: "Where do I keep my lists?",
+        body: "Paste a decklist from Arena, MTGGoldfish or anywhere else, pick its format and see it split into maindeck and sideboard. From there one click sends it to the other tools: check it against your collection to see exactly which cards you're missing, cost it in the Pack Planner, or load it into the Sideboard Planner to start a guide.",
+        points: [
+            "Paste a list or an MTGGoldfish link; maindeck and sideboard split automatically",
+            "See what you're missing from your collection, card by card, with a copyable list",
+            "Send it to the Pack Planner, which runs the comparison straight away",
+            "Start a sideboard guide from it, with the format already set",
+        ],
+        saves: "Save decks to your profile, then rename, duplicate or reopen them from any device",
+    },
+    {
         href: "/planner",
         name: "Pack Planner",
         art: "/art/banner-planner.svg",
@@ -50,7 +64,7 @@ const TOOLS: Tool[] = [
             "Pick the exact printing and art for each card",
             "Copies of a card in your collection merge into one line",
         ],
-        saves: "Save collections and comparisons to your profile, then reopen, update or duplicate them",
+        saves: "Save collections and comparisons to your profile; opening a comparison re-runs it",
     },
     {
         href: "/collection",
@@ -104,7 +118,7 @@ export default function HomePage() {
             <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="MTG Planning App"
-                    subtitle="Four tools for planning a Magic deck — what it costs you to build, what you already own, what rotates out from under it, and how to sideboard against the field."
+                    subtitle="Tools for planning a Magic deck — keep your lists, see what they cost you to build and what you already own, what rotates out from under them, and how to sideboard against the field."
                     art="/art/banner-planner.svg"
                 />
 
@@ -115,7 +129,7 @@ export default function HomePage() {
                             <p className="leading-relaxed">
                                 Everything works without an account — no sign-up wall, nothing behind a
                                 paywall. Signing in with Google only adds a profile that saves your
-                                collections, comparisons and sideboard guides, so they follow you to
+                                decks, collections, comparisons and sideboard guides, so they follow you to
                                 another device.
                             </p>
                             <StartHereSignIn />
@@ -125,7 +139,7 @@ export default function HomePage() {
                         // nowhere to save to, so the copy promises neither.
                         <p className="leading-relaxed">
                             Everything works without an account — nothing to sign up for, nothing
-                            behind a paywall. Your collection and sideboard plan are remembered in this
+                            behind a paywall. Your collection, the deck you&apos;re editing and your sideboard plan are remembered in this
                             browser between visits.
                         </p>
                     )}

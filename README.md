@@ -1,6 +1,6 @@
 # **MTG Planning App**
 
-*Four tools for planning a Magic: The Gathering deck — what it costs you to build, what you already own, what rotates out from under it, and how to sideboard against the field.*
+*Tools for planning a Magic: The Gathering deck — keep your decklists, see what they cost you to build and what you already own, what rotates out from under them, and how to sideboard against the field.*
 
 Live at **[mtg-card-acquiring-tool.vercel.app](https://mtg-card-acquiring-tool.vercel.app)**.
 
@@ -28,6 +28,28 @@ design — nothing may ever gate a tool behind it.
 
 ## The tools
 
+### Decks — `/decks`
+
+Keep your own decklists and send them to the other tools.
+
+- Paste a list (Arena, MTGGoldfish or any "4 Card Name" list) or import an
+  MTGGoldfish link; it splits into maindeck and sideboard as you type, with
+  card pictures on hover. Pick a format (the Sideboard Planner's five, plus
+  Historic, Explorer, Timeless, Alchemy, Brawl, Commander) or none.
+- **Check against my collection** → `/collection`, whose "Compare with a deck"
+  panel lists what you're missing. **Open in Pack Planner** → `/planner`, which
+  runs the analysis straight away. **Build a sideboard guide** → `/sideboard`,
+  which loads it as the decklist and sets the format; if a guide is already
+  there it asks first (keep the matchups, start fresh, or save then start
+  fresh).
+- A saved, unchanged deck travels as `?deck=<id>`; anything else (signed out,
+  or unsaved edits) is handed over in `sessionStorage`, never in the URL
+  (`lib/deckHandoff.ts`).
+- Every action but saving works signed out. Signed in: save, save as new,
+  rename, duplicate and delete (confirmed in the page), with unsaved-changes
+  checks before opening another deck. Decks are stored normalised — a `Deck`
+  and a `Sideboard` section, one line per card (`lib/deckText.ts`).
+
 ### Pack Planner — `/planner`
 
 Paste one or more decklists (or MTGGoldfish deck/archetype links) plus the
@@ -44,7 +66,14 @@ what you still need.
   pictures.
 - Signed in: save the collection (as Arena or Paper) or the whole comparison to
   your profile, then reopen it, update it in place, save it as new, or
-  duplicate it.
+  duplicate it. A **collection** is just your cards; a **comparison** is the
+  decklists, the collection and the mode together.
+- Opening a comparison (from the planner or `?analysis=` from the profile)
+  puts back its decklists, its collection if it has one — otherwise the one
+  already in the box is kept — and its mode, then **runs the analysis
+  automatically**. A deck arriving from the Decks page runs the same way. A
+  summary above the deck boxes says what was opened and which collection is
+  being compared against.
 - **Start Over** clears the decklists, the collection, printing picks and the
   last breakdown, but keeps Arena/Paper mode. If there is work to lose it asks first, and where
   sign-in is configured it offers to save before clearing.
@@ -63,6 +92,12 @@ card.
   localStorage, including which saved collection is open (`lib/openCollection.ts`).
 - Signed in: save to your profile as Arena or Paper; a saved collection's
   **Edit** button on the profile opens it here.
+- **Compare with a deck**: pick a saved deck, paste one, or arrive with
+  `?deck=<id>` / a hand-off from the Decks page. The deck's names are resolved
+  through `/api/card-resolve` so spellings match the collection; it shows deck
+  qty vs owned and the shortfall per card, pictures of what's missing, and a
+  copyable missing list. Basic lands are not counted. Read-only: it never
+  changes the collection.
 
 ### Standard Rotation — `/rotation`
 
@@ -103,10 +138,14 @@ Build a matchup-by-matchup sideboard guide, then print it on one page.
   archetypes you pulled. It asks first if there is work to lose, and where
   sign-in is configured it offers to save before clearing.
 - Signed in: save to your profile, rename the open guide in place, duplicate it.
+- Accepts a deck from the Decks page (`?deck=<id>` or a hand-off): loads it as
+  the decklist, splits it and sets the format if supported. With a guide
+  already in progress it asks first rather than replacing anything.
 
 ### Profile — `/profile`
 
-Only exists when auth is configured. Lists saved sideboard guides, collections
+Only exists when auth is configured. Lists saved decks (with Open, the three
+send-to links, Duplicate and Delete), sideboard guides, collections
 (grouped Arena / Paper) and comparisons, each of which can be opened, edited,
 duplicated or deleted; and deletes the whole account on request.
 
@@ -138,10 +177,11 @@ daily — **estimates, not live quotes**.
 app/
   page.tsx              landing page describing each tool
   planner/              Pack Planner
+  decks/                Decks
   collection/           Collection
   rotation/             Standard Rotation
   sideboard/            Sideboard Planner
-  profile/              saved guides, collections, comparisons (auth only)
+  profile/              saved decks, guides, collections, comparisons (auth only)
   signin/               Google sign-in (auth only)
   about/ privacy/ report/
   components/           shared client components
@@ -152,16 +192,20 @@ app/
     archetypes/         live metagame: { format, limit, period } -> name, share, url
     card-search/        card-name suggestions for the Collection page
     card-images/        card pictures by name, from the bundled data
-    guides/ collections/ analyses/
+    decks/ guides/ collections/ analyses/
                         saved items: list, create, get, update, delete, [id]/copy
     account/            delete account
     auth/               Auth.js
 lib/
   db.ts                 Neon client
-  db/schema.sql         schema, idempotent and re-runnable
+  db/schema.sql         schema, idempotent and re-runnable: users,
+                        sideboard_guides, collections, saved_analyses, decks
   scryfall.ts           card lookup
   deckParser.ts         decklist parsing
   deckSections.ts       maindeck / sideboard split
+  deckText.ts           saved-deck normal form, formats, validation
+  decks.ts              saved-deck queries (decks table)
+  deckHandoff.ts        passing an unsaved deck between pages via sessionStorage
   collectionText.ts     merges copies of a card across printings into one line
   openCollection.ts     the collection shared by Pack Planner and Collection page
   formats.ts            supported formats, metagame periods, archetype limits

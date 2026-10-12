@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { listGuides } from "@/lib/guides";
 import { listCollections, listAnalyses } from "@/lib/saved";
+import { listDecks } from "@/lib/decks";
+import { deckFormatLabel } from "@/lib/deckText";
 import { hasDatabase } from "@/lib/db";
 import { isAuthConfigured } from "@/lib/authConfig";
 import PageHeader from "../components/PageHeader";
@@ -15,7 +17,7 @@ import {
 
 export const metadata = {
     title: "Your Profile — MTG Planning App",
-    description: "Sideboard guides, collections and comparisons you've saved.",
+    description: "Decks, sideboard guides, collections and comparisons you've saved.",
 };
 
 function formatDate(value: string | Date): string {
@@ -38,10 +40,10 @@ export default async function ProfilePage() {
     const uid = session.user.id;
     const ready = hasDatabase && uid;
 
-    // One round trip rather than three sequential ones.
-    const [guides, collections, analyses] = ready
-        ? await Promise.all([listGuides(uid), listCollections(uid), listAnalyses(uid)])
-        : [[], [], []];
+    // One round trip rather than four sequential ones.
+    const [decks, guides, collections, analyses] = ready
+        ? await Promise.all([listDecks(uid), listGuides(uid), listCollections(uid), listAnalyses(uid)])
+        : [[], [], [], []];
 
     return (
         <div className="px-3 sm:px-6 pt-8">
@@ -51,6 +53,80 @@ export default async function ProfilePage() {
                     subtitle={`Signed in as ${session.user.email ?? session.user.name ?? "you"}.`}
                     art="/art/banner-planner.svg"
                 />
+
+                <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex items-center">Saved Decks</h2>
+
+                    {decks.length === 0 ? (
+                        <p className="text-ink/75 leading-relaxed">
+                            Nothing saved yet. Paste a list on the{" "}
+                            <Link
+                                href="/decks"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                            >
+                                Decks
+                            </Link>{" "}
+                            page and press <strong>Save deck</strong>.
+                        </p>
+                    ) : (
+                        <>
+                            <ul className="space-y-2">
+                                {decks.map((d) => (
+                                    <li
+                                        key={d.id}
+                                        className="flex flex-wrap items-center justify-between gap-3 bg-parchment rounded shadow-inner-parchment p-4"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-title text-lg truncate">{d.name}</p>
+                                            <p className="text-sm text-ink/60">
+                                                {d.format ? `${deckFormatLabel(d.format)} · ` : ""}
+                                                {d.main} main{d.side ? ` + ${d.side} sideboard` : ""} ·
+                                                updated {formatDate(d.updated_at)}
+                                            </p>
+                                        </div>
+                                        {/* Six actions: wraps onto further lines on a
+                                            phone rather than widening the row, like
+                                            the lists below. */}
+                                        <div className="flex flex-wrap items-center gap-1">
+                                            <Link
+                                                href={`/decks?deck=${d.id}`}
+                                                className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
+                                            >
+                                                Open
+                                            </Link>
+                                            <Link
+                                                href={`/collection?deck=${d.id}`}
+                                                className="px-3 py-2 rounded text-sm font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
+                                            >
+                                                Check collection
+                                            </Link>
+                                            <Link
+                                                href={`/planner?deck=${d.id}`}
+                                                className="px-3 py-2 rounded text-sm font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
+                                            >
+                                                Pack Planner
+                                            </Link>
+                                            <Link
+                                                href={`/sideboard?deck=${d.id}`}
+                                                className="px-3 py-2 rounded text-sm font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
+                                            >
+                                                Sideboard guide
+                                            </Link>
+                                            <DuplicateSavedButton kind="decks" id={d.id} />
+                                            <DeleteSavedButton kind="decks" id={d.id} name={d.name} />
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-xs text-ink/55 leading-relaxed">
+                                Open edits the deck on the Decks page. Check collection shows what
+                                you&apos;re missing on the Collection page; Pack Planner costs it against
+                                your collection straight away; Sideboard guide loads it into the
+                                Sideboard Planner, asking first if a guide is already there.
+                            </p>
+                        </>
+                    )}
+                </section>
 
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-4">
                     <h2 className="text-2xl font-title flex items-center">Saved Sideboard Guides</h2>
@@ -255,7 +331,7 @@ export default async function ProfilePage() {
                 <section className="bg-parchment-dark shadow-card rounded-lg p-6 space-y-3">
                     <h2 className="text-2xl font-title flex items-center">Your Data</h2>
                     <p className="text-ink/75 leading-relaxed">
-                        Deleting your account removes your saved guides, collections and comparisons,
+                        Deleting your account removes your saved decks, guides, collections and comparisons,
                         and your account record: the account ID, name, email and avatar taken from your
                         Google account, and the date it was created. It happens immediately and cannot be
                         undone. Signing out alone does not delete anything.

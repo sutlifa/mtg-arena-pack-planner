@@ -14,16 +14,26 @@ import { useState } from "react";
  * Only rendered while a saved guide is open. No useSession here: the planner
  * only has a savedId after a signed-in save or load, and if the session has
  * since lapsed the server's 401 says so.
+ *
+ * The Decks page uses it too, for the open deck: same rename-only PATCH, same
+ * reason. `kind` is the API segment, constrained to the two literals so a
+ * caller can't aim it at an arbitrary endpoint; `actions` are that page's
+ * Duplicate and Delete, shown beside Rename.
  */
 export default function GuideNameBar({
     id,
     name,
     onRenamed,
+    kind = "guides",
+    actions,
 }: {
     id: number;
     name: string;
     onRenamed: (name: string) => void;
+    kind?: "guides" | "decks";
+    actions?: React.ReactNode;
 }) {
+    const noun = kind === "decks" ? "deck" : "guide";
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(name);
     const [saving, setSaving] = useState(false);
@@ -49,7 +59,7 @@ export default function GuideNameBar({
         setSaving(true);
         setError(null);
         try {
-            const res = await fetch(`/api/guides/${id}`, {
+            const res = await fetch(`/api/${kind}/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: next }),
@@ -57,17 +67,17 @@ export default function GuideNameBar({
             const data = await res.json().catch(() => ({}));
 
             if (res.status === 401) {
-                setError("Sign in again to rename this guide.");
+                setError(`Sign in again to rename this ${noun}.`);
             } else if (res.status === 404) {
-                setError("That guide no longer exists.");
+                setError(`That ${noun} no longer exists.`);
             } else if (!res.ok) {
-                setError(data.error ?? "Could not rename that guide.");
+                setError(data.error ?? `Could not rename that ${noun}.`);
             } else {
                 onRenamed(data.name);
                 setEditing(false);
             }
         } catch {
-            setError("Could not rename that guide.");
+            setError(`Could not rename that ${noun}.`);
         }
         setSaving(false);
     };
@@ -79,7 +89,7 @@ export default function GuideNameBar({
                     <input
                         type="text"
                         autoFocus
-                        aria-label="Guide name"
+                        aria-label={`${noun[0].toUpperCase()}${noun.slice(1)} name`}
                         value={draft}
                         maxLength={120}
                         onChange={(e) => setDraft(e.target.value)}
@@ -116,8 +126,11 @@ export default function GuideNameBar({
                     </div>
                 </div>
             ) : (
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="min-w-0 flex-1">
+                // Wraps only when there are extra actions: Rename, Duplicate
+                // and Delete beside a name don't fit one 375px row, and the
+                // guide bar's single button always did.
+                <div className={"flex items-center gap-3 min-w-0" + (actions ? " flex-wrap" : "")}>
+                    <div className={"min-w-0 flex-1" + (actions ? " basis-48" : "")}>
                         <p className="text-xs font-semibold uppercase tracking-wider text-ink/55">
                             Editing
                         </p>
@@ -125,13 +138,16 @@ export default function GuideNameBar({
                             {name}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={start}
-                        className="shrink-0 px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70"
-                    >
-                        Rename
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={start}
+                            className="shrink-0 px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70"
+                        >
+                            Rename
+                        </button>
+                        {actions}
+                    </div>
                 </div>
             )}
 

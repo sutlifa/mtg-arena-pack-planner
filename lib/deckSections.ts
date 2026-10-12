@@ -35,7 +35,17 @@ export interface DeckSections {
  */
 
 const MAIN_MARKERS = /^(deck|maindeck|main deck|main|commander)\s*:?\s*$/i;
-const SIDE_MARKERS = /^(sideboard|side board|sb|companion)\s*:?\s*$/i;
+const SIDE_MARKERS = /^(sideboard|side board|sb)\s*:?\s*$/i;
+/**
+ * Arena's export puts the companion in its own "Companion" section AND lists
+ * it again under "Sideboard", where it really lives. Reading "Companion" as
+ * just another sideboard marker counted it twice (2 Lurrus in a 15-card
+ * sideboard that holds one). So companion lines are held apart and folded in
+ * at the end: a companion the sideboard already lists adds nothing, and one
+ * it doesn't (a list with a Companion section but no Sideboard entry for it)
+ * still lands in the sideboard, as before.
+ */
+const COMPANION_MARKERS = /^companion\s*:?\s*$/i;
 
 /**
  * Strips printing information that Arena and some exporters append, so
@@ -60,6 +70,7 @@ function push(list: DeckCard[], qty: number, name: string) {
 export function splitDeckSections(text: string): DeckSections {
     const maindeck: DeckCard[] = [];
     const sideboard: DeckCard[] = [];
+    const companions: DeckCard[] = [];
 
     if (!text || !text.trim()) return { maindeck, sideboard };
 
@@ -67,6 +78,7 @@ export function splitDeckSections(text: string): DeckSections {
     const rawLines = text.replace(/\r\n?/g, "\n").split("\n");
 
     let inSideboard = false;
+    let inCompanion = false;
     let sawExplicitMarker = false;
     let sawCardYet = false;
     let blankRun = false;
@@ -86,6 +98,7 @@ export function splitDeckSections(text: string): DeckSections {
         if (MAIN_MARKERS.test(line)) {
             sawExplicitMarker = true;
             inSideboard = false;
+            inCompanion = false;
             blankRun = false;
             continue;
         }
@@ -93,6 +106,14 @@ export function splitDeckSections(text: string): DeckSections {
         if (SIDE_MARKERS.test(line)) {
             sawExplicitMarker = true;
             inSideboard = true;
+            inCompanion = false;
+            blankRun = false;
+            continue;
+        }
+
+        if (COMPANION_MARKERS.test(line)) {
+            sawExplicitMarker = true;
+            inCompanion = true;
             blankRun = false;
             continue;
         }
@@ -111,7 +132,14 @@ export function splitDeckSections(text: string): DeckSections {
         const name = cleanCardName(parsed.rawName);
         if (!name) continue;
 
-        push(inSideboard ? sideboard : maindeck, parsed.qty, name);
+        push(inCompanion ? companions : inSideboard ? sideboard : maindeck, parsed.qty, name);
+    }
+
+    // See COMPANION_MARKERS: only a companion the sideboard doesn't already
+    // list is added to it.
+    for (const c of companions) {
+        const listed = sideboard.some((s) => s.name.toLowerCase() === c.name.toLowerCase());
+        if (!listed) push(sideboard, c.qty, c.name);
     }
 
     return { maindeck, sideboard };

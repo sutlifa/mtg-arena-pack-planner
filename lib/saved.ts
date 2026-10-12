@@ -51,12 +51,26 @@ export async function getCollection(userId: number, id: number) {
     return rows[0] ?? null;
 }
 
+/**
+ * Saving under a name (and mode) already used updates that collection —
+ * unless `createOnly` ("Save as new"), which inserts plainly so a clash
+ * raises 23505 (a 409) instead of overwriting a different collection.
+ */
 export async function saveCollection(args: {
     userId: number;
     name: string;
     rawText: string;
     arenaMode: boolean;
+    createOnly?: boolean;
 }): Promise<number> {
+    if (args.createOnly) {
+        const created = await sql<{ id: number }[]>`
+            INSERT INTO collections (user_id, name, raw_text, arena_mode)
+            VALUES (${args.userId}, ${args.name}, ${args.rawText}, ${args.arenaMode})
+            RETURNING id
+        `;
+        return created[0].id;
+    }
     const rows = await sql<{ id: number }[]>`
         INSERT INTO collections (user_id, name, raw_text, arena_mode)
         VALUES (${args.userId}, ${args.name}, ${args.rawText}, ${args.arenaMode})
@@ -173,13 +187,29 @@ export async function getAnalysis(userId: number, id: number) {
     return rows[0] ?? null;
 }
 
+/** Same upsert, and the same `createOnly` escape, as saveCollection. */
 export async function saveAnalysis(args: {
     userId: number;
     name: string;
     decklists: string[];
     collection: string;
     arenaMode: boolean;
+    createOnly?: boolean;
 }): Promise<number> {
+    if (args.createOnly) {
+        const created = await sql<{ id: number }[]>`
+            INSERT INTO saved_analyses (user_id, name, decklists, collection, arena_mode)
+            VALUES (
+              ${args.userId},
+              ${args.name},
+              ${sql.json(args.decklists as never)},
+              ${args.collection},
+              ${args.arenaMode}
+            )
+            RETURNING id
+        `;
+        return created[0].id;
+    }
     const rows = await sql<{ id: number }[]>`
         INSERT INTO saved_analyses (user_id, name, decklists, collection, arena_mode)
         VALUES (

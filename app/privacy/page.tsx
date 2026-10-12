@@ -15,7 +15,7 @@ export const metadata = {
  * deploy and claim the policy changed when it didn't, which makes the date
  * meaningless to anyone checking whether something is new.
  */
-const LAST_UPDATED = "September 24, 2026";
+const LAST_UPDATED = "October 11, 2026";
 
 /**
  * A cookie name that wraps only where a reader would expect it to.
@@ -154,16 +154,32 @@ export default function PrivacyPage() {
                                     ),
                                 </>
                             ) : null}{" "}
-                            and the decklist, format and matchup plans you build in the Sideboard Planner
-                            (under <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
+                            the deck you&apos;re editing on the Decks page — its list, name and format
+                            {accounts ? ", and which saved deck it is, if any" : ""} (
+                            <code className="px-1 rounded bg-parchment">mtgpp:decks-draft</code>), and the
+                            decklist, format and matchup plans you build in the Sideboard Planner (under{" "}
+                            <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
+                        </p>
+                        {/* Written against lib/deckHandoff: sessionStorage, taken
+                            (read and removed) by the receiving page, ignored after
+                            five minutes. If that changes, change this. */}
+                        <p>
+                            When you send a deck from the Decks page to another tool, the list is passed
+                            to that page through your browser&apos;s{" "}
+                            <code className="px-1 rounded bg-parchment">sessionStorage</code> (under a key
+                            starting <code className="px-1 rounded bg-parchment">mtgpp:deck-handoff:</code>
+                            ), never in the page&apos;s web address. The receiving page removes it as soon
+                            as it reads it, it is ignored if it&apos;s more than a few minutes old, and the
+                            browser discards it when the tab closes.
                         </p>
                         <p>
                             That data stays on your device. It is not tied to any identifier, and this site
                             cannot read it on any other device. Clearing it is immediate: the{" "}
-                            <strong>Clear</strong> button next to the Pack Planner&apos;s collection box, or{" "}
-                            <strong>Start Over</strong> in the Pack Planner, Collection page or Sideboard
-                            Planner, empties what you entered. Clearing site data in your browser removes
-                            all of it, including which mode and format you last used.
+                            <strong>Clear</strong> button next to the Pack Planner&apos;s collection box,{" "}
+                            <strong>New deck</strong> on the Decks page, or <strong>Start Over</strong> in
+                            the Pack Planner, Collection page or Sideboard Planner, empties what you
+                            entered. Clearing site data in your browser removes all of it, including which
+                            mode and format you last used.
                         </p>
                     </div>
                 </section>
@@ -246,14 +262,17 @@ export default function PrivacyPage() {
                                     you; the rest is so the site can show who is signed in.
                                 </li>
                                 <li>
-                                    <strong>Whatever you explicitly save.</strong> That means sideboard guides
-                                    (the decklist, format and matchup plans), collections, and comparisons (the
+                                    <strong>Whatever you explicitly save.</strong> That means decks (the
+                                    decklist and the format you picked, if any), sideboard guides (the
+                                    decklist, format and matchup plans), collections, and comparisons (the
                                     decklists, collection and mode you ran), each with the name you gave it and
                                     when it was created and last changed. A collection — saved on its own or
                                     as part of a comparison — is stored tidied rather than exactly as you pasted
                                     it: one line per card with its count, copies across printings added
                                     together, set codes, collector numbers and foil markers removed, and the
-                                    lines sorted alphabetically. Nothing is saved automatically — something is
+                                    lines sorted alphabetically. A deck is tidied too: split into a maindeck and
+                                    a sideboard section, one line per card with its count, with set codes and
+                                    collector numbers removed. Nothing is saved automatically — something is
                                     stored only when you press Save, or rename or duplicate something you
                                     already saved.
                                 </li>
@@ -270,7 +289,7 @@ export default function PrivacyPage() {
                                 Your profile page has a <strong>Delete my account and saved data</strong>{" "}
                                 button. It removes everything you have saved and your stored account details
                                 from the site&apos;s database straight away — no request, no waiting, no email
-                                to write. You can also delete any individual guide, collection or comparison.
+                                to write. You can also delete any individual deck, guide, collection or comparison.
                                 Signing out on its own does not delete anything.
                             </p>
                             {/* No retention figures on purpose: they depend on the Neon
@@ -302,7 +321,9 @@ export default function PrivacyPage() {
                             To compare a deck against your collection, the text you&apos;ve entered has to reach
                             the server that does the matching. When you press Analyze or Check Rotation, your
                             decklists — and, in the Pack Planner, your collection text — are sent to this
-                            site&apos;s own API so the comparison can be computed.
+                            site&apos;s own API so the comparison can be computed. Opening a saved comparison,
+                            or sending a deck to the Pack Planner, does the same straight away, without
+                            the click.
                         </p>
                         <p>
                             That text is used to build the response and then discarded. Running a comparison
@@ -333,7 +354,19 @@ export default function PrivacyPage() {
                             Those requests carry only what you typed or the card names, and the app
                             keeps none of it — though a suggestion request puts what you typed in its web
                             address, so it appears in Vercel&apos;s standard request logs like any other
-                            address.
+                            address. Its &quot;Compare with a deck&quot; panel sends the deck&apos;s card names
+                            the same way, to match their spelling to your collection&apos;s, and asks for
+                            pictures of the cards you&apos;re missing; the comparison itself happens in
+                            your browser.
+                        </p>
+                        {/* DeckBuilder: deckSections runs client-side; the only
+                            requests are card-images (debounced, names only),
+                            import-deck on the Import button, and the saved-deck
+                            calls covered in the signed-in paragraph below. */}
+                        <p>
+                            The Decks page splits your list in your browser. It sends the server the
+                            card names in it, to show their pictures, and an MTGGoldfish link when you
+                            press Import — not the list itself, unless you&apos;re signed in and press Save.
                         </p>
                         {/*
                           * Written against SideboardPlanner's `reference` effect and
@@ -356,9 +389,11 @@ export default function PrivacyPage() {
                             <p>
                                 While you&apos;re signed in, a few requests read or change your own saved
                                 work: the Pack Planner fetches the list of your saved collections and
-                                comparisons when it opens, so they&apos;re ready to load; opening a saved
-                                guide, collection or comparison fetches it; and pressing Save, renaming a
-                                guide, duplicating or deleting anything sends that change.
+                                comparisons when it opens, and the Decks page and the Collection
+                                page&apos;s &quot;Compare with a deck&quot; panel fetch the list of your saved
+                                decks, so they&apos;re ready to load; opening a saved deck, guide,
+                                collection or comparison fetches it; and pressing Save, renaming a deck
+                                or guide, duplicating or deleting anything sends that change.
                             </p>
                         )}
                     </div>
@@ -378,7 +413,7 @@ export default function PrivacyPage() {
                             </li>
                             {/* What @vercel/analytics records per view, per Vercel's docs.
                                 The query strings on this site's pages are only saved-item
-                                ids (?guide=, ?collection=, ?analysis=) and /signin's
+                                ids (?guide=, ?collection=, ?analysis=, ?deck=) and /signin's
                                 ?callbackUrl= path — never anything typed. With auth off
                                 none of those links exist (/profile and /signin 404), so
                                 that branch says only what is true either way. */}
@@ -424,7 +459,7 @@ export default function PrivacyPage() {
                                     </li>
                                     <li>
                                         <strong>Neon</strong> — the hosted Postgres database where accounts and
-                                        saved guides, collections and comparisons live. Used from your first
+                                        saved decks, guides, collections and comparisons live. Used from your first
                                         sign-in, when your account details are recorded, and for anything you
                                         save.
                                     </li>

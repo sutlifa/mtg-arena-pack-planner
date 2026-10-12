@@ -5,7 +5,7 @@ import { isAuthConfigured } from "@/lib/authConfig";
 
 export const metadata = {
     title: "Sign in — MTG Planning App",
-    description: "Sign in with Google to save your sideboard guides, collections and comparisons.",
+    description: "Sign in with Google to save your decks, sideboard guides, collections and comparisons.",
 };
 
 export default async function SignInPage({
@@ -45,7 +45,7 @@ export default async function SignInPage({
                     <div className="space-y-2">
                         <h1 className="font-title text-3xl">Sign in</h1>
                         <p className="text-sm text-ink/75 leading-relaxed">
-                            Save your sideboard guides, collections and comparisons so you can pick
+                            Save your decks, sideboard guides, collections and comparisons so you can pick
                             them up on another device. Every tool on this site works without an
                             account — signing in only adds somewhere to keep your work.
                         </p>

@@ -8,7 +8,7 @@ import FitText from "./FitText";
 import PageHeader from "./PageHeader";
 import Link from "next/link";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
-import { tidyCollection } from "@/lib/collectionText";
+import { mergeCollection, tidyCollection } from "@/lib/collectionText";
 import {
     COLLECTION_KEY,
     MODE_KEY,
@@ -16,8 +16,11 @@ import {
     decodeOpen,
     encodeOpen,
 } from "@/lib/openCollection";
-import PackPlannerSaves from "./PackPlannerSaves";
+import { deckCounts, plannerDeckText } from "@/lib/deckText";
+import type { HandoffDeck } from "@/lib/deckHandoff";
+import PackPlannerSaves, { type OpenedAnalysis, type OpenedCollection } from "./PackPlannerSaves";
 import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
+import { DeckHandoffLoader } from "./DeckHandoff";
 
 type Wildcards = {
     common: number;
@@ -39,6 +42,31 @@ interface AnalyzeResponse {
     wildcards?: Wildcards | null;
     missingCards?: string[];
     error?: string;
+}
+
+/**
+ * What was just opened into the planner, spelled out.
+ *
+ * Opening a comparison used to load its decklists and leave the user to
+ * work out the rest — whether a collection came with it, which one was now
+ * in the box, and that nothing would happen until they pressed Analyze. This
+ * is the answer to all three, kept on screen (not a toast) until the next
+ * open or Start Over, so it is still there after scrolling down to the
+ * results and back.
+ */
+interface OpenedSummary {
+    headline: string;
+    parts: string[];
+    note: string | null;
+}
+
+/** Copies, not lines — "1,204 cards" is what someone recognises as their collection. */
+function collectionSize(text: string): number {
+    return mergeCollection(text).reduce((n, c) => n + c.qty, 0);
+}
+
+function plural(n: number, one: string, many = `${one}s`): string {
+    return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
 export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
@@ -66,6 +94,25 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
      */
     const [openCollection, setOpenCollection] = useState<SavedRef>(null);
     const [openAnalysis, setOpenAnalysis] = useState<SavedRef>(null);
+    const [opened, setOpened] = useState<OpenedSummary | null>(null);
+
+    /**
+     * Run the analysis once whatever was just opened has landed in state.
+     *
+     * Opening a comparison or a deck sets the decks, the collection and the
+     * mode in one batch, but processAll reads them from the render it was
+     * created in — calling it from the same handler would analyze what was on
+     * screen *before* the open. So the opener bumps this token instead, and
+     * the effect below runs processAll from the next render, where all three
+     * are in place.
+     *
+     * lastRunToken is the double-run guard: an effect that runs twice for one
+     * token (React StrictMode does that in development, and the Arena/Paper
+     * effect can fire in the same commit) analyzes once.
+     */
+    const [runToken, setRunToken] = useState(0);
+    const lastRunToken = useRef(0);
+    const requestRun = () => setRunToken((t) => t + 1);
 
     const [breakdown, setBreakdown] = useState<any[]>([]);
     const [shoppingList, setShoppingList] = useState<any[]>([]);
@@ -209,6 +256,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         setCollection("");
         setOpenCollection(null);
         setOpenAnalysis(null);
+        setOpened(null);
         setPrintingOverrides({});
         setOpenSets({});
         setImportError(null);
@@ -349,13 +397,150 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     // Arena-only data like wildcards/recommendations) are computed, so a
     // stale result from the previous mode would otherwise stick around
     // until the user manually clicks Analyze again.
+    //
+    // Skipped while an open is waiting to run (runToken ahead of
+    // lastRunToken): opening a Paper comparison over Arena results changes
+    // the mode in the same commit, and the run below already covers it.
+    // This effect is declared first, so it sees the token before the run
+    // effect marks it handled.
     /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
     useEffect(() => {
+        if (runToken !== lastRunToken.current) return;
         if (breakdown.length > 0 || shoppingList.length > 0) {
             processAll();
         }
     }, [disableArena, mergePaperCounts]);
+
+    // The run an open asked for — see runToken.
+    useEffect(() => {
+        if (runToken === 0 || runToken === lastRunToken.current) return;
+        lastRunToken.current = runToken;
+        processAll();
+    }, [runToken]);
     /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
+
+    /**
+     * The "collection:" part of an opened summary, for an open that keeps
+     * whatever collection is already in the box (a comparison saved without
+     * one, or a deck from the Decks page). Says which collection that is,
+     * because "no collection" and "the one you had open" give very different
+     * answers.
+     */
+    const currentCollectionPart = (): string => {
+        if (!collection.trim()) {
+            return "the collection box is empty, so every card counts as missing";
+        }
+        const size = plural(collectionSize(collection), "card");
+        return openCollection
+            ? `using your open ${openCollection.arena ? "Arena" : "Paper"} collection "${openCollection.name}" (${size})`
+            : `using the collection already in the box (${size})`;
+    };
+
+    /**
+     * A saved comparison: its decklists, its collection if it has one, and
+     * its mode — then the analysis, without a click. Only inputs were ever
+     * saved (see lib/db/schema.sql), so this is the comparison re-run
+     * against today's prices and card data, which is the only honest way to
+     * "open" one.
+     *
+     * A comparison saved with no collection keeps the collection already in
+     * the box rather than emptying it. Emptying it would make every card
+     * "missing", and would wipe the collection the Collection page shares
+     * with this one, for a comparison that never had an opinion about it.
+     */
+    const openComparison = (a: OpenedAnalysis) => {
+        const decklists = (Array.isArray(a.decklists) ? a.decklists : []).filter(
+            (d): d is string => typeof d === "string" && Boolean(d.trim())
+        );
+        const savedCollection = tidyCollection(a.collection ?? "");
+        const mode = a.arena_mode ? "Arena" : "Paper";
+
+        let collectionPart: string;
+        if (savedCollection) {
+            setCollection(savedCollection);
+            // Its own text, not a saved collection row, so any open
+            // collection stops applying (Save Collection would otherwise
+            // overwrite that row with this comparison's cards).
+            setOpenCollection(null);
+            collectionPart = `collection: ${plural(collectionSize(savedCollection), "card")} (${mode}), saved with this comparison`;
+        } else {
+            collectionPart = `no collection saved with it — ${currentCollectionPart()}`;
+        }
+
+        setDecks(decklists.length ? decklists : [""]);
+        setDisableArena(!a.arena_mode);
+        setOpenAnalysis({ id: a.id, name: a.name, arena: a.arena_mode });
+        // Printing picks belong to the decks they were made for.
+        setPrintingOverrides({});
+        setOpenSets({});
+        setOpened({
+            headline: `Opened comparison "${a.name}"`,
+            parts: [plural(decklists.length, "decklist"), collectionPart, `${mode} mode`],
+            note: decklists.length
+                ? "Re-run against today's card data — the results are below."
+                : "It has no decklists, so there is nothing to compare yet.",
+        });
+        if (decklists.length) requestRun();
+    };
+
+    /**
+     * A saved collection, into the collection box only. The decklists stay,
+     * and the planner switches to the collection's mode — comparing an Arena
+     * collection in Paper Mode silently gives the wrong answer.
+     *
+     * Results already on screen are re-run, because they were worked out
+     * against the collection that was just replaced; otherwise nothing runs
+     * until Analyze, since there may not be a deck to compare yet.
+     */
+    const openSavedCollection = (c: OpenedCollection) => {
+        const text = tidyCollection(c.raw_text ?? "");
+        const mode = c.arena_mode ? "Arena" : "Paper";
+        const hadResults = breakdown.length > 0 || shoppingList.length > 0;
+        const hasDecks = decks.some((d) => d.trim());
+
+        setCollection(text);
+        setDisableArena(!c.arena_mode);
+        // The open comparison is left alone: its decklists are still on
+        // screen, so it is still the comparison being edited.
+        setOpenCollection({ id: c.id, name: c.name, arena: c.arena_mode });
+        setOpened({
+            headline: `Opened ${mode} collection "${c.name}"`,
+            parts: [plural(collectionSize(text), "card"), `${mode} mode`],
+            note: hadResults
+                ? "Your decklists are unchanged; the comparison below has been re-run against this collection."
+                : hasDecks
+                    ? "Your decklists are unchanged. Press Analyze to compare them against it."
+                    : "Only the collection box changed. Add a decklist and press Analyze to compare.",
+        });
+        if (hadResults && hasDecks) requestRun();
+    };
+
+    /**
+     * A deck sent from the Decks page (or the profile), analyzed against
+     * whatever collection is already here, in whatever mode is already on.
+     *
+     * It replaces the deck boxes outright. Those aren't persisted, so on
+     * arrival from another page they hold nothing to lose — and leaving an
+     * open comparison set would aim Save Comparison at a row whose decklists
+     * are no longer on screen.
+     */
+    const openDeck = (d: HandoffDeck) => {
+        const { main, side } = deckCounts(d.decklist);
+        setDecks([plannerDeckText(d.decklist)]);
+        setOpenAnalysis(null);
+        setPrintingOverrides({});
+        setOpenSets({});
+        setOpened({
+            headline: d.name ? `Opened deck "${d.name}"` : "Opened your deck from the Decks page",
+            parts: [
+                `${plural(main, "maindeck card")} + ${plural(side, "sideboard card")}`,
+                `collection: ${currentCollectionPart()}`,
+                `${disableArena ? "Paper" : "Arena"} mode`,
+            ],
+            note: "Compared automatically — the results are below. Switch Arena/Paper to re-run it in the other mode.",
+        });
+        requestRun();
+    };
 
     const rarityColor = (rarity: string) => {
         switch (rarity) {
@@ -478,6 +663,45 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         art="/art/banner-planner.svg"
                     />
 
+                    {/* A deck sent from the Decks page or the profile. Outside the
+                        authEnabled block on purpose: an unsaved deck arrives by
+                        hand-off and needs no account. Suspense because it reads
+                        ?deck= with useSearchParams; see DeckHandoff. */}
+                    <Suspense fallback={null}>
+                        <DeckHandoffLoader
+                            target="planner"
+                            ready={hydrated}
+                            authEnabled={authEnabled}
+                            onDeck={openDeck}
+                        />
+                    </Suspense>
+
+                    {opened && (
+                        <section
+                            role="status"
+                            className="bg-parchment-dark shadow-card rounded-lg px-4 py-3 sm:px-6 border-l-4 border-brass"
+                        >
+                            <div className="flex items-start gap-3">
+                                {/* overflow-wrap:anywhere — the headline quotes a
+                                    saved name, which is the user's own text and
+                                    can be one long unbroken token. */}
+                                <div className="min-w-0 flex-1 space-y-1 [overflow-wrap:anywhere]">
+                                    <p className="font-title text-lg leading-snug">{opened.headline}</p>
+                                    <p className="text-sm text-ink/80">{opened.parts.join(" · ")}</p>
+                                    {opened.note && <p className="text-sm text-ink/65">{opened.note}</p>}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpened(null)}
+                                    aria-label="Dismiss"
+                                    className="shrink-0 w-8 h-8 rounded text-ink/60 hover:bg-parchment"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </section>
+                    )}
+
                     {/* DECK INPUTS */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-6">
                         {/* gap-3 + wrap rather than a bare justify-between: on a
@@ -524,6 +748,16 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         {importError && (
                             <p className="text-red-700 text-sm">{importError}</p>
                         )}
+
+                        <div className="text-sm">
+                            <Link
+                                href="/decks"
+                                className="text-brand hover:text-brand-dark underline underline-offset-2"
+                            >
+                                Keep your decklists on the Decks page
+                            </Link>
+                            <span className="text-ink/60"> — &quot;Open in Pack Planner&quot; there runs it here.</span>
+                        </div>
                     </section>
                     {/* Missing Cards Panel */}
                     {missingCards.length > 0 && (
@@ -729,12 +963,13 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     arenaMode={!disableArena}
                                     openCollection={openCollection}
                                     openAnalysis={openAnalysis}
-                                    onLoad={(next) => {
-                                        if (next.decks) setDecks(next.decks);
-                                        if (next.collection !== undefined) setCollection(next.collection);
-                                        // disableArena is the inverse of arenaMode.
-                                        if (next.arenaMode !== undefined) setDisableArena(!next.arenaMode);
-                                    }}
+                                    // Held back until the stored collection has
+                                    // been restored: a ?analysis= open that
+                                    // landed first would have its collection
+                                    // overwritten by the restore a moment later.
+                                    ready={hydrated}
+                                    onOpenCollection={openSavedCollection}
+                                    onOpenComparison={openComparison}
                                     onOpenChange={(next) => {
                                         // Only the keys actually present move:
                                         // loading a collection must not silently

@@ -99,7 +99,11 @@ export default function SaveToProfileButton({
                 // The whole plan goes up as-is: it is the same object already
                 // kept in localStorage, so a saved guide and a local one are
                 // the same shape and load into the editor identically.
-                body: JSON.stringify({ name: name.trim(), format, plan }),
+                //
+                // createOnly when a guide is open: that is "Save as new", which
+                // promised a second guide, so a name clash must come back as a
+                // 409 rather than overwrite a different guide by name.
+                body: JSON.stringify({ name: name.trim(), format, plan, createOnly: savedId !== null }),
             });
             const data = await res.json().catch(() => ({}));
 

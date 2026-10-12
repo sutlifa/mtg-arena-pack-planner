@@ -8,6 +8,7 @@ import AuthButton from "./AuthButton";
 
 const TABS = [
     { href: "/", label: "Home" },
+    { href: "/decks", label: "Decks" },
     { href: "/planner", label: "Pack Planner" },
     { href: "/collection", label: "Collection" },
     { href: "/rotation", label: "Standard Rotation" },
@@ -27,6 +28,12 @@ const TABS = [
  * tabs alone fit a tablet, but not alongside an avatar and a name, and a
  * header that reflows the moment someone signs in is worse than one that is
  * consistently compact.
+ *
+ * Adding the Decks tab moved it again, to `xl`, and widened the bar to
+ * max-w-6xl from there: the row grew by roughly the tab's 70px, which no
+ * longer fit the 976px a max-w-5xl bar leaves inside its padding once the
+ * account control is present. At 1280px and up a 6xl bar has ~1100px, which
+ * does.
  */
 export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
     const pathname = usePathname();
@@ -61,7 +68,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
 
     return (
         <header ref={headerRef} className="bg-midnight border-b-2 border-brass">
-            <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+            <div className="max-w-5xl xl:max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
                 {/* Site branding, not the page heading — each page supplies its
                     own <h1> via PageHeader, so this stays a plain link and the
                     document keeps exactly one h1. */}
@@ -81,7 +88,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
                 </Link>
 
                 {/* ---------- inline row, large screens ---------- */}
-                <div className="hidden lg:flex items-center gap-4">
+                <div className="hidden xl:flex items-center gap-4">
                     <nav className="flex gap-1" aria-label="Primary">
                         {TABS.map((tab) => {
                             const active = pathname === tab.href;
@@ -113,7 +120,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
                     aria-expanded={open}
                     aria-controls="site-menu"
                     aria-label={open ? "Close menu" : "Open menu"}
-                    className="lg:hidden shrink-0 w-10 h-10 flex items-center justify-center rounded text-midnight-light hover:bg-white/10 transition-colors"
+                    className="xl:hidden shrink-0 w-10 h-10 flex items-center justify-center rounded text-midnight-light hover:bg-white/10 transition-colors"
                 >
                     <svg
                         width="22"
@@ -143,7 +150,7 @@ export default function SiteNav({ authEnabled }: { authEnabled: boolean }) {
 
             {/* ---------- dropdown panel ---------- */}
             {open && (
-                <div id="site-menu" className="lg:hidden border-t border-brass/30">
+                <div id="site-menu" className="xl:hidden border-t border-brass/30">
                     <nav
                         className="max-w-5xl mx-auto px-6 py-3 flex flex-col gap-1"
                         aria-label="Primary"

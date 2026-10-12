@@ -6,6 +6,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "./HelpTip";
 import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
+import DeckCompare from "./DeckCompare";
+// Shared with DeckCompare; see there for what a verdict is.
+import { resolveNames } from "./resolveNames";
 import {
     applyVerdicts,
     cardKey,
@@ -38,9 +41,6 @@ const PAGE_SIZE = 48;
  */
 const MAX_IMAGE_NAME = 150;
 
-/** /api/card-resolve's per-request limit; longer lists go in chunks of it. */
-const RESOLVE_CHUNK = 500;
-
 /** Rejected paste lines listed with their suggestions; the rest are counted. */
 const MAX_REJECTED_SHOWN = 10;
 
@@ -57,50 +57,6 @@ interface Rejected {
 interface AddProblem {
     message: string;
     suggestions: string[];
-}
-
-/**
- * What the server makes of each name: its official spelling, or null and a
- * few close real names. Throws when the server can't be asked, so a caller
- * never mistakes "couldn't check" for "not a card".
- *
- * Every card in the collection is a real card stored under its real name —
- * the add box, a paste and an Arena export all go through here first, and
- * nothing that comes back null is added. That's what lets every tile have a
- * picture and every name match the Pack Planner's card data exactly.
- *
- * `suggest: false` when only the verdict matters (checking a collection that
- * was already saved), which spares the server its "did you mean" search.
- */
-async function resolveNames(names: string[], suggest: boolean): Promise<Map<string, NameVerdict>> {
-    const out = new Map<string, NameVerdict>();
-    const unique = [...new Set(names)];
-    for (let i = 0; i < unique.length; i += RESOLVE_CHUNK) {
-        const res = await fetch("/api/card-resolve", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ names: unique.slice(i, i + RESOLVE_CHUNK), suggest }),
-        });
-        if (!res.ok) throw new Error(`card-resolve ${res.status}`);
-        const data = await res.json();
-        // Object.entries rather than data.results[name]: a "__proto__" key
-        // is an own property after JSON.parse, but indexing it reads the
-        // prototype instead.
-        const results: Record<string, { name?: unknown; suggestions?: unknown } | null> =
-            data && typeof data.results === "object" && data.results ? data.results : {};
-        for (const [asked, v] of Object.entries(results)) {
-            if (typeof v?.name === "string") out.set(asked, { name: v.name });
-            else if (v?.name === null) {
-                out.set(asked, {
-                    name: null,
-                    suggestions: Array.isArray(v.suggestions)
-                        ? v.suggestions.filter((s: unknown): s is string => typeof s === "string")
-                        : [],
-                });
-            }
-        }
-    }
-    return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1130,6 +1086,11 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                     </>
                 )}
             </section>
+
+            {/* ---- what a deck needs that this collection doesn't have ----
+                Last, and in its own panel, because it only reads the
+                collection: nothing in it adds, removes or saves cards. */}
+            <DeckCompare cards={cards} arena={arena} authEnabled={authEnabled} ready={hydrated} />
 
             {/* ---- start over, with a chance to save first ---- */}
             {confirmClear && (

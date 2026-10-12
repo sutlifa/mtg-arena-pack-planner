@@ -9,7 +9,10 @@ import SaveToProfileButton from "./SaveToProfileButton";
 import GuideLoader from "./GuideLoader";
 import GuideNameBar from "./GuideNameBar";
 import OpponentDeck from "./OpponentDeck";
+import { DeckHandoffLoader } from "./DeckHandoff";
 import { matchArchetype } from "@/lib/archetypeMatch";
+import { deckFormatLabel, normalizeDecklist } from "@/lib/deckText";
+import type { HandoffDeck } from "@/lib/deckHandoff";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import {
@@ -19,6 +22,7 @@ import {
     META_PERIODS,
     DEFAULT_META_PERIOD,
     isMetaPeriod,
+    isSupportedFormat,
     formatLabel,
 } from "@/lib/formats";
 import {
@@ -800,6 +804,95 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             savedName: null,
         }));
 
+    /* ---- a deck sent from the Decks page ---- */
+
+    /**
+     * A deck waiting on the user's answer, because the planner already holds
+     * work that loading it would disturb. Never applied silently over a
+     * guide: matchup plans are written against one decklist, and swapping
+     * the list out from under them — or wiping them — is the user's call.
+     */
+    const [pendingDeck, setPendingDeck] = useState<HandoffDeck | null>(null);
+    /** What the last arrival did, until the next one or a dismiss. */
+    const [deckNotice, setDeckNotice] = useState<string | null>(null);
+
+    /**
+     * Put a deck into the planner exactly as Load Deck would: the list in the
+     * textarea and as the loaded text the maindeck/sideboard split derives
+     * from. A saved deck is already plain text (never a link), so there is
+     * nothing to import first.
+     *
+     * - "fresh" starts a new guide — matchups, stash and the open guide all
+     *   go, the same reset as Start Over — and the format follows the deck.
+     * - "keep" swaps the list only: the matchup plans and the open guide stay,
+     *   as they do when the list is cleared by hand, and so does the FORMAT.
+     *   Those matchups were pulled from one format's metagame; switching the
+     *   format under them (Modern matchups in a "Standard" guide) would make
+     *   the guide wrong without saying so. The dialog says this up front.
+     * - "load" is an empty planner: nothing to keep, format follows the deck.
+     *
+     * Following the deck only ever means a format the planner pulls
+     * metagames for; any other label leaves the format alone.
+     */
+    const applyDeck = (d: HandoffDeck, mode: "fresh" | "keep" | "load") => {
+        const text = normalizeDecklist(d.decklist);
+        const split = splitDeckSections(text);
+        if (split.maindeck.length === 0 && split.sideboard.length === 0) {
+            setDeckError("That deck has no cards in it, so there was nothing to load.");
+            return;
+        }
+
+        const follows = mode !== "keep" && isSupportedFormat(d.format);
+        const nextFormat = follows && d.format ? d.format : format;
+        setPlan((prev) => ({
+            ...(mode === "fresh"
+                ? { ...prev, matchups: [], stash: {}, savedId: null, savedName: null }
+                : prev),
+            decklist: text,
+            loadedText: text,
+            format: nextFormat,
+        }));
+        setDeckError(null);
+        setPendingDeck(null);
+
+        const parts = [
+            `Loaded ${d.name ? `"${d.name}"` : "your deck"} from the Decks page: ${totalCards(split.maindeck)} maindeck and ${totalCards(split.sideboard)} sideboard cards.`,
+        ];
+        if (isSupportedFormat(d.format)) {
+            if (d.format !== format) {
+                parts.push(
+                    follows
+                        ? `Format set to ${formatLabel(d.format)}.`
+                        : `It's marked ${formatLabel(d.format)}; the format stays ${formatLabel(format)} to match your matchups.`
+                );
+            }
+        } else if (d.format) {
+            parts.push(
+                `It's marked ${deckFormatLabel(d.format)}, which the planner can't pull a metagame for, so the format stays ${formatLabel(format)}.`
+            );
+        }
+        if (mode === "fresh") parts.push("Started a fresh guide.");
+        else if (matchups.length > 0) parts.push("Your matchup plans were kept.");
+        setDeckNotice(parts.join(" "));
+    };
+
+    /** A deck arriving by ?deck=<id> or hand-off. See pendingDeck. */
+    const receiveDeck = (d: HandoffDeck) => {
+        const text = normalizeDecklist(d.decklist);
+        // The very list already loaded: nothing is disturbed, so no question —
+        // but any matchups stay, so the format does too.
+        if (plan.loadedText === text) {
+            applyDeck(d, plan.matchups.length > 0 ? "keep" : "load");
+            return;
+        }
+        const holdsOtherList =
+            (plan.loadedText.trim() !== "" && plan.loadedText !== text) ||
+            (plan.decklist.trim() !== "" && plan.decklist !== text);
+        const hasWork = plan.matchups.length > 0 || plan.savedId !== null || holdsOtherList;
+        if (hasWork) setPendingDeck(d);
+        else applyDeck(d, "load");
+    };
+
     const printRef = useRef<HTMLDivElement>(null);
     const [exporting, setExporting] = useState(false);
 
@@ -1202,6 +1295,19 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 />
             </Suspense>
 
+            {/* A deck sent from the Decks page or the profile: ?deck=<id>, or a
+                hand-off for an unsaved one. Waits for the localStorage restore
+                (hydrated), so it is judged against the guide that's really
+                here and isn't overwritten by the restore a moment later. */}
+            <Suspense fallback={null}>
+                <DeckHandoffLoader
+                    target="sideboard"
+                    ready={hydrated}
+                    authEnabled={authEnabled}
+                    onDeck={receiveDeck}
+                />
+            </Suspense>
+
             {printDebug && <PrintDebugPanel fit={fit} count={matchups.length} rendered={rendered} />}
 
             {/* ===================== screen UI ===================== */}
@@ -1270,6 +1376,23 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                     </div>
 
                     {deckError && <p className="text-red-700 text-sm">{deckError}</p>}
+
+                    {deckNotice && (
+                        <div
+                            role="status"
+                            className="flex items-start gap-2 text-sm rounded border border-brass/40 bg-parchment px-3 py-2"
+                        >
+                            <p className="flex-1 min-w-0 [overflow-wrap:anywhere]">{deckNotice}</p>
+                            <button
+                                type="button"
+                                onClick={() => setDeckNotice(null)}
+                                aria-label="Dismiss"
+                                className="shrink-0 px-2 rounded text-ink/60 hover:bg-parchment-dark"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    )}
 
                     <div className="flex justify-center">
                         <button
@@ -1885,6 +2008,100 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                         resetEverything();
                                         setConfirmClear(false);
                                     }}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ---- a deck has arrived, and there's already a guide here ----
+                The same shape as Start Over's dialog (keep / go ahead / save
+                first), because it is the same question: something is about to
+                replace work, and saving it first should be one click. */}
+            {pendingDeck && (
+                <div
+                    className="sb-noprint fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="incoming-deck-title"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setPendingDeck(null);
+                    }}
+                >
+                    {/* overflow-wrap:anywhere on the whole dialog: it quotes the
+                        guide's and the deck's names, which are user text and can
+                        be one long unbroken token. At 375px that pushed the
+                        bullets wider than the screen. */}
+                    <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink max-h-[90vh] overflow-y-auto [overflow-wrap:anywhere]">
+                        <h3 id="incoming-deck-title" className="font-title text-2xl [overflow-wrap:anywhere]">
+                            Load {pendingDeck.name ? `“${pendingDeck.name}”` : "this deck"}?
+                        </h3>
+
+                        <p className="leading-relaxed [overflow-wrap:anywhere]">
+                            The planner already has
+                            {plan.savedName ? ` the guide “${plan.savedName}”` : " a guide in progress"}
+                            {matchups.length > 0
+                                ? ` with ${matchups.length} matchup${matchups.length === 1 ? "" : "s"}${planned > 0 ? `, ${planned} written up` : ""}`
+                                : ""}
+                            .
+                        </p>
+
+                        <ul className="text-sm text-ink/75 list-disc list-outside pl-5 space-y-1">
+                            <li>
+                                <strong>Use this list, keep my matchups</strong> swaps the decklist only
+                                {plan.savedName
+                                    ? ` — “${plan.savedName}” stays open, so Save would update it with the new list`
+                                    : ""}
+                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                    ? `. The format stays ${formatLabel(format)} to match your matchups, though the deck is marked ${formatLabel(pendingDeck.format)}.`
+                                    : "."}
+                            </li>
+                            <li>
+                                <strong>Start a fresh guide</strong> clears the matchups, like Start Over,
+                                then loads the deck
+                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                    ? ` and switches the format to ${formatLabel(pendingDeck.format)}.`
+                                    : "."}
+                            </li>
+                        </ul>
+
+                        <div className="flex flex-wrap gap-2 justify-end pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setPendingDeck(null)}
+                                className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                            >
+                                Keep what I have
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => applyDeck(pendingDeck, "keep")}
+                                className="px-4 py-2 rounded font-title text-sm bg-parchment-dark text-ink hover:bg-brass/20"
+                            >
+                                Use this list, keep my matchups
+                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                    ? ` (stays ${formatLabel(format)})`
+                                    : ""}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => applyDeck(pendingDeck, "fresh")}
+                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                            >
+                                Start a fresh guide{authEnabled ? " without saving" : ""}
+                            </button>
+                            {authEnabled && (
+                                <SaveToProfileButton
+                                    plan={plan}
+                                    format={format}
+                                    formatLabel={formatLabel(format)}
+                                    savedId={plan.savedId}
+                                    savedName={plan.savedName}
+                                    allowSaveAsNew={false}
+                                    label="Save, then start fresh"
+                                    buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
+                                    onSaved={() => applyDeck(pendingDeck, "fresh")}
                                 />
                             )}
                         </div>

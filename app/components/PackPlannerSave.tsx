@@ -116,7 +116,11 @@ export default function PackPlannerSave({
             const res = await fetch(`/api/${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body(name.trim(), arena)),
+                // With something open this is "Save as new", which promised a
+                // second save: createOnly makes a name clash a 409 instead of
+                // an overwrite of whatever already has that name. With nothing
+                // open it stays the name upsert the form describes.
+                body: JSON.stringify({ ...body(name.trim(), arena), createOnly: open !== null }),
             });
             const data = await res.json().catch(() => ({}));
 

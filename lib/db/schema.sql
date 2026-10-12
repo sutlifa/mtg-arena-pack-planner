@@ -91,3 +91,36 @@ CREATE TABLE IF NOT EXISTS saved_analyses (
 
 CREATE INDEX IF NOT EXISTS saved_analyses_user_idx
   ON saved_analyses (user_id, updated_at DESC);
+
+-- A saved deck: one decklist, maindeck and sideboard together, with the
+-- format it is for.
+--
+-- Stored as normalised text rather than card rows, for the same reason as
+-- collections: every tool that reads a deck (the Pack Planner, the Sideboard
+-- Planner's split, the Collection page's "what am I missing") already parses
+-- text, and a deck is only ever read and written whole by its one owner.
+-- "Normalised" means lib/deckText's form -- a "Deck" section and an optional
+-- "Sideboard" section, one "qty name" line per card, set codes removed -- so
+-- the profile can count cards in SQL without downloading every list.
+--
+-- `format` is nullable and free text: a deck can be for a format the
+-- Sideboard Planner doesn't pull metagames for (Historic, Commander...), or
+-- for none in particular. Only the Sideboard Planner cares, and it ignores a
+-- format it doesn't support.
+--
+-- Unique on (user_id, name), like guides and comparisons: saving under a name
+-- already used updates that deck rather than creating a second one with the
+-- same label.
+CREATE TABLE IF NOT EXISTS decks (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  format      TEXT,
+  decklist    TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS decks_user_idx
+  ON decks (user_id, updated_at DESC);

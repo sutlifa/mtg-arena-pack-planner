@@ -43,9 +43,9 @@ export function DeleteGuideButton({ id, name }: { id: number; name: string }) {
 }
 
 /**
- * Delete one saved collection or comparison.
+ * Delete one saved collection, comparison or deck.
  *
- * `kind` is the API segment, constrained to the two literals rather than an
+ * `kind` is the API segment, constrained to these literals rather than an
  * open string so a caller cannot aim this at an arbitrary endpoint.
  */
 export function DeleteSavedButton({
@@ -53,7 +53,7 @@ export function DeleteSavedButton({
     id,
     name,
 }: {
-    kind: "collections" | "analyses";
+    kind: "collections" | "analyses" | "decks";
     id: number;
     name: string;
 }) {
@@ -90,7 +90,7 @@ export function DeleteSavedButton({
 }
 
 /**
- * Duplicate one saved guide, collection or comparison.
+ * Duplicate one saved guide, collection, comparison or deck.
  *
  * The copy is made entirely server-side (POST to .../copy with no body): the
  * saved plan or collection text never travels to the browser and back, so a
@@ -99,14 +99,14 @@ export function DeleteSavedButton({
  * too, which is the only place that can see every name the account already
  * uses.
  *
- * `kind` is the API segment, constrained to the three literals rather than an
+ * `kind` is the API segment, constrained to these literals rather than an
  * open string so a caller cannot aim this at an arbitrary endpoint.
  */
 export function DuplicateSavedButton({
     kind,
     id,
 }: {
-    kind: "guides" | "collections" | "analyses";
+    kind: "guides" | "collections" | "analyses" | "decks";
     id: number;
 }) {
     const router = useRouter();
@@ -153,7 +153,7 @@ export function DeleteAccountButton() {
         if (
             !confirm(
                 "Delete your account and everything saved to it?\n\n" +
-                "This removes your saved guides, collections and comparisons and your account details permanently. It cannot be undone."
+                "This removes your saved guides, collections, comparisons and decks and your account details permanently. It cannot be undone."
             )
         ) {
             return;
