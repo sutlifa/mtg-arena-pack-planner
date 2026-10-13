@@ -2,25 +2,38 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import HelpTip from "./HelpTip";
 import { activate } from "./activate";
 import FitText from "./FitText";
 import PageHeader from "./PageHeader";
-import Link from "next/link";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { mergeCollection, tidyCollection } from "@/lib/collectionText";
+import { COLLECTION_KEY, MODE_KEY, OPEN_KEY, decodeOpen, type OpenRef } from "@/lib/openCollection";
 import {
-    COLLECTION_KEY,
-    MODE_KEY,
-    OPEN_KEY,
-    decodeOpen,
-    encodeOpen,
-} from "@/lib/openCollection";
-import { deckCounts, plannerDeckText } from "@/lib/deckText";
+    DECK_CHECK_COLLECTION_KEY,
+    decodeDeckCheckCollection,
+    encodeDeckCheckCollection,
+    type DeckCheckCollection,
+} from "@/lib/deckCheckCollection";
+import { deckCounts, deckFormatLabel, plannerDeckText } from "@/lib/deckText";
+import {
+    DECK_CHECK_SLOTS_KEY,
+    decodeSlots,
+    encodeSlots,
+    isEdited,
+    slotFromSaved,
+    type DeckSlot,
+    type LinkedDeck,
+} from "@/lib/deckSlots";
 import type { HandoffDeck } from "@/lib/deckHandoff";
-import PackPlannerSaves, { type OpenedAnalysis, type OpenedCollection } from "./PackPlannerSaves";
-import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
-import { DeckHandoffLoader } from "./DeckHandoff";
+import DeckCheckSaves, { type OpenedAnalysis } from "./DeckCheckSaves";
+import SaveWorkButton, { type SavedRef } from "./SaveWorkButton";
+import SavedDeckPicker, { type PickedDeck } from "./SavedDeckPicker";
+import SavedCollectionPicker, { type OpenedCollection } from "./SavedCollectionPicker";
+import DeckSlotSave from "./DeckSlotSave";
+import DeckShortfall from "./DeckShortfall";
+import { DeckHandoffLoader, type Arrival } from "./DeckHandoff";
 
 type Wildcards = {
     common: number;
@@ -45,19 +58,34 @@ interface AnalyzeResponse {
 }
 
 /**
- * What was just opened into the planner, spelled out.
+ * What was just opened into Deck Check, spelled out.
  *
  * Opening a comparison used to load its decklists and leave the user to
  * work out the rest — whether a collection came with it, which one was now
- * in the box, and that nothing would happen until they pressed Analyze. This
- * is the answer to all three, kept on screen (not a toast) until the next
- * open or Start Over, so it is still there after scrolling down to the
- * results and back.
+ * in use, and that nothing would happen until they pressed Analyze. This is
+ * the answer to all three, kept on screen (not a toast) until the next open
+ * or Start Over, so it is still there after scrolling down to the results
+ * and back.
  */
 interface OpenedSummary {
     headline: string;
     parts: string[];
     note: string | null;
+}
+
+/**
+ * The inputs the results on screen were worked out from, captured when
+ * Analyze succeeded. The per-deck "what's missing" view reads these rather
+ * than the live boxes, so it always describes the same run as the breakdown
+ * beside it — typing in a slot afterwards changes neither until the next
+ * Analyze.
+ */
+interface Checked {
+    decks: { key: number; title: string; savedId: number | null; text: string }[];
+    collection: string;
+    /** Which collection that was, in words, for the heading. */
+    against: string;
+    arena: boolean;
 }
 
 /** Copies, not lines — "1,204 cards" is what someone recognises as their collection. */
@@ -69,30 +97,98 @@ function plural(n: number, one: string, many = `${one}s`): string {
     return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
-export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
-    const [decks, setDecks] = useState<string[]>([""]);
-    const [collection, setCollection] = useState("");
-    // Set by the collection box's paste event, read by the change it causes.
+/**
+ * The Collection page's collection, as it is in storage right now: its text,
+ * which saved row it was opened from (if the fingerprint still matches — see
+ * lib/openCollection), and its Arena/Paper type.
+ */
+function readLocalCollection(): { text: string; open: OpenRef | null; paper: boolean | null } {
+    const raw = localStorage.getItem(COLLECTION_KEY);
+    const mode = localStorage.getItem(MODE_KEY);
+    return {
+        // Merged on the way in, so a collection stored before merging existed
+        // reads as one line per card too.
+        text: raw ? tidyCollection(raw) : "",
+        open: decodeOpen(localStorage.getItem(OPEN_KEY), raw),
+        paper: mode ? mode === "paper" : null,
+    };
+}
+
+const BADGE = "px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide";
+
+/**
+ * Slot keys. They only ever go up, so a removed slot's key is never reused
+ * and React never hands one slot's half-typed save form to another.
+ *
+ * A module-level counter rather than a useRef: slots are created from
+ * handlers passed through activate(), which the React Compiler can't see
+ * into, so it treats any ref those handlers touch as read during render.
+ * Uniqueness within one page's list is all a key needs, and a counter shared
+ * by every instance still gives that. The first slot is created in initial
+ * state with key 0, below anything this hands out.
+ */
+let lastSlotKey = 0;
+const nextSlotKey = () => ++lastSlotKey;
+
+/**
+ * Deck Check: decks against a collection — what's missing, and what it costs
+ * to get.
+ *
+ * This was the Pack Planner. It became the one place that compares decks
+ * with a collection when the Collection page's "Compare with a deck" panel and
+ * the Decks page's "Check against my collection" were folded into it: the
+ * Collection page now only edits the collection, the Decks page only edits
+ * decks, and both send here. The per-deck missing-cards view that panel gave
+ * is part of the results below (DeckShortfall).
+ *
+ * Two boxes feed it:
+ *
+ * - Deck slots (lib/deckSlots). Each is a saved deck added with "Add existing
+ *   deck", or a pasted list / MTGGoldfish link, and says which. A pasted one
+ *   can be saved to the Decks tab; a saved one that's been edited here says
+ *   so and offers to save the changes or save a copy, never silently.
+ * - The collection (lib/deckCheckCollection): your Collection page
+ *   collection by default, a saved collection picked with "Load collection",
+ *   or one pasted with "New". Whichever it is is always named on screen.
+ *   Loading or pasting one here doesn't touch the Collection page's.
+ *
+ * Signed out everything works except saving and the two pickers, which show a
+ * sign-in prompt; on a deployment without sign-in those don't render at all
+ * (authEnabled comes from isAuthConfigured(), a plain env read, so the page
+ * stays statically prerendered).
+ */
+export default function DeckCheck({ authEnabled }: { authEnabled: boolean }) {
+    /* ---- deck slots ---- */
+
+    const [slots, setSlots] = useState<DeckSlot[]>([{ key: 0, text: "", saved: null }]);
+    const makeSlot = (text = "", saved: LinkedDeck | null = null): DeckSlot => ({
+        key: nextSlotKey(),
+        text,
+        saved,
+    });
+    // What /api/analyze and a saved comparison take: the text of every slot.
+    const decks = slots.map((s) => s.text);
+
+    /* ---- the collection ---- */
+
+    // The Collection page's collection, read from its storage (never written
+    // from here — that page owns it).
+    const [localText, setLocalText] = useState("");
+    const [localOpen, setLocalOpen] = useState<OpenRef | null>(null);
+    // Anything other than that one; null means "the Collection page's".
+    const [chosen, setChosen] = useState<DeckCheckCollection | null>(null);
+    const collection = chosen ? chosen.text : localText;
+    // Set by the pasted collection box's paste event, read by the change it causes.
     const pastedRef = useRef(false);
+    /** A collection switch waiting on "the pasted collection isn't saved — switch anyway?" */
+    const [pendingSwitch, setPendingSwitch] = useState<{ label: string; run: () => void } | null>(null);
 
     /**
-     * Which saved rows are open, if any.
-     *
-     * Held here rather than inside PackPlannerSaves because Start Over has to
-     * clear them alongside the decks and the collection — a reset that left
-     * an id behind would aim the next Save at the work just abandoned. They
-     * are two separate refs because a collection and a comparison are saved
-     * independently and either can be open without the other.
-     *
-     * The open collection is also shared with the Collection page through
-     * localStorage (lib/openCollection), next to the collection text itself:
-     * open "My Arena collection" here and the Collection page knows it's
-     * editing that row, and the other way round. Every write of the text
-     * rewrites the ref with it, so loading a different collection, a
-     * comparison or Start Over here can never leave the other page pointing
-     * Save at a row whose cards are no longer on screen.
+     * Which saved comparison is open, if any — what Save Comparison updates.
+     * Held here rather than in DeckCheckSaves because Start Over has to clear
+     * it with everything else: a reset that left an id behind would aim the
+     * next Save at the work just abandoned.
      */
-    const [openCollection, setOpenCollection] = useState<SavedRef>(null);
     const [openAnalysis, setOpenAnalysis] = useState<SavedRef>(null);
     const [opened, setOpened] = useState<OpenedSummary | null>(null);
 
@@ -119,12 +215,13 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     const [recommendations, setRecommendations] = useState<any[]>([]);
     const [wildcards, setWildcards] = useState<Wildcards | null>(null);
     const [missingCards, setMissingCards] = useState<string[]>([]);
+    const [checked, setChecked] = useState<Checked | null>(null);
     // Two error surfaces, because they are two different things. importError
-    // is a *warning* about the deck boxes — a link that would not import —
+    // is a *warning* about the deck slots — a link that would not import —
     // and the analysis still runs on whatever did import, so it belongs under
-    // the deck textareas next to the input it is about. analyzeError is
-    // terminal: the analysis produced nothing, so it sits at the Analyze
-    // button, the same place /rotation puts its failures.
+    // the slots next to the input it is about. analyzeError is terminal: the
+    // analysis produced nothing, so it sits at the Analyze button, the same
+    // place /rotation puts its failures.
     const [importError, setImportError] = useState<string | null>(null);
     const [analyzeError, setAnalyzeError] = useState<string | null>(null);
     const [mergePaperCounts, setMergePaperCounts] = useState(false);
@@ -161,68 +258,115 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     }, []);
 
     // Nothing is written back to storage until the saved values have been
-    // read. The write effects below also run on the very first render, with
-    // an empty collection and Arena mode, and would otherwise wipe the
-    // stored ones before the restore landed — it only worked before because
-    // the read effect happened to be declared first.
+    // read: the write effect below also runs on the very first render, with
+    // nothing chosen, and would otherwise wipe a stored choice before the
+    // restore landed.
     const [hydrated, setHydrated] = useState(false);
 
-    // Load any previously-saved collection once, after mount (not during the
-    // initial render, so the server-rendered and first client render both
-    // start empty and hydration stays consistent). The Arena/Paper mode and
-    // the open saved collection are shared with the Collection page too.
+    // Restore once, after mount (not during the initial render, so the
+    // server-rendered and first client render both start empty and hydration
+    // stays consistent): the deck slots this tab had, the Collection page's
+    // collection, and whichever other collection this tab had chosen.
+    //
+    // The slots restored here are only a starting point. A deck arriving by
+    // ?deck= or hand-off joins them (openDeck); a comparison by ?analysis=
+    // replaces them. Neither can be overwritten by this restore, because both
+    // loaders wait for `hydrated`, which is set at the end of this same
+    // effect. So the order is always: restore, then whatever the link asked
+    // for, once.
+    //
+    // ?source=collection is the Collection page's "Check decks against this
+    // collection" link. It asks for that page's collection specifically, so
+    // it wins over a choice this tab remembered; a link that said "this
+    // collection" and then compared against another would be a lie. Read from
+    // window.location rather than useSearchParams so this component doesn't
+    // need a Suspense boundary of its own.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         try {
-            const saved = localStorage.getItem(COLLECTION_KEY);
-            // Merged on the way in, so a collection pasted before merging
-            // existed reads as one line per card too.
-            if (saved) setCollection(tidyCollection(saved));
-            // Only if it still belongs to that exact text — see
-            // lib/openCollection.
-            setOpenCollection(decodeOpen(localStorage.getItem(OPEN_KEY), saved));
-            const mode = localStorage.getItem(MODE_KEY);
-            if (mode) setDisableArena(mode === "paper");
+            const storedSlots = decodeSlots(sessionStorage.getItem(DECK_CHECK_SLOTS_KEY));
+            if (storedSlots) setSlots(storedSlots.map((s) => ({ ...s, key: nextSlotKey() })));
         } catch {
-            // localStorage unavailable (private browsing, etc.) — ignore
+            // Unreadable — start with the one empty slot.
+        }
+        try {
+            const local = readLocalCollection();
+            setLocalText(local.text);
+            setLocalOpen(local.open);
+
+            let restored: DeckCheckCollection | null = null;
+            const here = new URL(window.location.href);
+            if (here.searchParams.get("source") === "collection") {
+                sessionStorage.removeItem(DECK_CHECK_COLLECTION_KEY);
+                here.searchParams.delete("source");
+                window.history.replaceState(null, "", here.pathname + here.search + here.hash);
+            } else {
+                restored = decodeDeckCheckCollection(sessionStorage.getItem(DECK_CHECK_COLLECTION_KEY));
+            }
+
+            if (restored) {
+                setChosen(restored);
+                setDisableArena(!restored.arena);
+            } else if (local.paper !== null) {
+                setDisableArena(local.paper);
+            }
+        } catch {
+            // Storage unavailable (private browsing, etc.) — start empty.
         }
         setHydrated(true);
     }, []);
     /* eslint-enable react-hooks/set-state-in-effect */
 
-    // Keep the saved collection in sync as the user edits it, and the open
-    // collection's fingerprint with it: an edit here is still an edit of the
-    // collection that's open, and clearing the text drops the ref.
+    // A collection chosen here (saved or pasted) survives a reload and the
+    // trip through sign-in, in this tab only — lib/deckCheckCollection.
     useEffect(() => {
         if (!hydrated) return;
         try {
-            if (collection) {
-                localStorage.setItem(COLLECTION_KEY, collection);
-            } else {
-                localStorage.removeItem(COLLECTION_KEY);
+            const value = chosen ? encodeDeckCheckCollection({ ...chosen, arena: !disableArena }) : null;
+            if (value) sessionStorage.setItem(DECK_CHECK_COLLECTION_KEY, value);
+            else sessionStorage.removeItem(DECK_CHECK_COLLECTION_KEY);
+        } catch {
+            // Storage unavailable or full — the choice just won't outlive the page.
+        }
+    }, [hydrated, chosen, disableArena]);
+
+    // The slots, kept for this tab — see lib/deckSlots for why (signing in
+    // is a full-page trip). Start Over leaves one empty slot, which encodes
+    // to nothing, so it clears this too.
+    useEffect(() => {
+        if (!hydrated) return;
+        try {
+            const value = encodeSlots(slots);
+            if (value) sessionStorage.setItem(DECK_CHECK_SLOTS_KEY, value);
+            else sessionStorage.removeItem(DECK_CHECK_SLOTS_KEY);
+        } catch {
+            // Full or unavailable: drop the stale copy rather than restore
+            // an older version of the slots later.
+            try {
+                sessionStorage.removeItem(DECK_CHECK_SLOTS_KEY);
+            } catch {
+                /* nothing more to do */
             }
-            const openValue = encodeOpen(openCollection, collection);
-            if (openValue) localStorage.setItem(OPEN_KEY, openValue);
-            else localStorage.removeItem(OPEN_KEY);
-        } catch {
-            // localStorage unavailable — ignore
         }
-    }, [hydrated, collection, openCollection]);
+    }, [hydrated, slots]);
 
-    // Arena/Paper is shared with the Collection page, so choosing Paper there
-    // opens the planner in Paper Mode and the other way round. Written on
-    // every change, which covers the toggle and loading a saved collection or
-    // comparison (both set disableArena).
+    // The Collection page edited in another tab: keep "your Collection page
+    // collection" true to its name. (The same tab needs nothing — moving
+    // between the pages remounts this one, which reads storage afresh.)
     useEffect(() => {
-        if (!hydrated) return;
-        try {
-            localStorage.setItem(MODE_KEY, disableArena ? "paper" : "arena");
-        } catch {
-            // localStorage unavailable — ignore
-        }
-    }, [hydrated, disableArena]);
-
-    const clearCollection = () => setCollection("");
+        const onStorage = (e: StorageEvent) => {
+            if (e.key !== null && e.key !== COLLECTION_KEY && e.key !== OPEN_KEY) return;
+            try {
+                const local = readLocalCollection();
+                setLocalText(local.text);
+                setLocalOpen(local.open);
+            } catch {
+                /* nothing readable; keep what's shown */
+            }
+        };
+        window.addEventListener("storage", onStorage);
+        return () => window.removeEventListener("storage", onStorage);
+    }, []);
 
     const [confirmClear, setConfirmClear] = useState(false);
 
@@ -241,20 +385,124 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         setRecommendations([]);
         setWildcards(null);
         setMissingCards([]);
+        setChecked(null);
+    };
+
+    const hasResults = breakdown.length > 0 || shoppingList.length > 0 || checked !== null;
+    const hasDecks = slots.some((s) => s.text.trim());
+
+    /* ---- describing the collection in use ---- */
+
+    const pastedText = chosen?.source.kind === "pasted" ? chosen.text : "";
+
+    /** Which collection is in use, in words — for headings and summaries. */
+    const sourceName = (): string => {
+        if (!chosen) return "your Collection page collection";
+        if (chosen.source.kind === "saved") {
+            return `saved ${chosen.source.arena ? "Arena" : "Paper"} collection "${chosen.source.name}"`;
+        }
+        return chosen.source.from
+            ? `the collection saved with "${chosen.source.from}"`
+            : "the collection pasted here";
     };
 
     /**
-     * Full reset: every decklist, the collection, the last analysis, and the
-     * saved rows those came from.
+     * The "collection:" part of an opened summary, for an open that keeps
+     * whatever collection is already in use (a comparison saved without one,
+     * or a deck from the Decks page). Says which collection that is, because
+     * "no collection" and "the one you had open" give very different answers.
+     */
+    const currentCollectionPart = (): string => {
+        if (!collection.trim()) {
+            return `${sourceName()} is empty, so every card counts as missing`;
+        }
+        return `using ${sourceName()} (${plural(collectionSize(collection), "card")})`;
+    };
+
+    /**
+     * After the collection changes: results already on screen were worked out
+     * against the old one, so they're re-run, and the banner says so. With no
+     * results there is nothing to correct, and the collection box itself
+     * already names what's in use.
+     */
+    const afterCollectionChange = (headline: string, parts: string[]) => {
+        if (hasResults && hasDecks) {
+            setOpened({
+                headline,
+                parts,
+                note: "Your decks are unchanged; the results below have been re-run against it.",
+            });
+            requestRun();
+        }
+    };
+
+    /**
+     * Guard for the collection box's own switches: a collection pasted here
+     * exists nowhere else until it's saved, so moving away from it asks
+     * first. (Opening a comparison or a deck from elsewhere doesn't ask —
+     * those are deliberate opens, and a comparison without a collection keeps
+     * the one in use anyway.)
+     */
+    const guardPasted = (label: string, run: () => void) => {
+        if (pastedText.trim()) setPendingSwitch({ label, run });
+        else run();
+    };
+
+    /** Back to the Collection page's collection, in that collection's own mode. */
+    const switchToLocal = (quiet = false) => {
+        let paper: boolean | null = null;
+        try {
+            const local = readLocalCollection();
+            setLocalText(local.text);
+            setLocalOpen(local.open);
+            paper = local.paper;
+        } catch {
+            /* keep what was read on arrival */
+        }
+        setChosen(null);
+        if (paper !== null) setDisableArena(paper);
+        if (!quiet) afterCollectionChange("Now checking against your Collection page collection", []);
+    };
+
+    /**
+     * A saved collection — from "Load collection", or ?collection= from the
+     * profile. Deck Check switches to its mode: comparing an Arena collection
+     * in Paper Mode silently gives the wrong answer.
+     */
+    const loadSavedCollection = (c: OpenedCollection) => {
+        const text = tidyCollection(c.raw_text ?? "");
+        const mode = c.arena_mode ? "Arena" : "Paper";
+        setChosen({ source: { kind: "saved", id: c.id, name: c.name, arena: c.arena_mode }, text, arena: c.arena_mode });
+        setDisableArena(!c.arena_mode);
+        afterCollectionChange(`Now checking against ${mode} collection "${c.name}"`, [
+            plural(collectionSize(text), "card"),
+            `${mode} mode`,
+        ]);
+    };
+
+    const startPastedCollection = () => {
+        setChosen({ source: { kind: "pasted", from: null }, text: "", arena: !disableArena });
+    };
+
+    const setPastedText = (text: string) =>
+        setChosen((prev) => (prev && prev.source.kind === "pasted" ? { ...prev, text } : prev));
+
+    /**
+     * Full reset: every deck slot, a collection chosen here, the last
+     * analysis, and the open comparison.
      *
-     * Arena/Paper mode and the merge-counts checkbox survive, the same way
-     * the Sideboard Planner keeps the format through its Start Over: they are
-     * how you work, not what you typed.
+     * It goes back to the Collection page's collection rather than to an
+     * empty one: that collection was never Deck Check's to clear (it used to
+     * be — Start Over here wiped the Collection page too). Arena/Paper goes
+     * back to that collection's type with it, since the mode follows the
+     * collection; the merge-counts checkbox survives, the way the Sideboard
+     * Planner keeps the format through its Start Over — it is how you work,
+     * not what you typed.
      */
     const resetEverything = () => {
-        setDecks([""]);
-        setCollection("");
-        setOpenCollection(null);
+        setSlots([makeSlot()]);
+        switchToLocal(true);
+        setPendingSwitch(null);
         setOpenAnalysis(null);
         setOpened(null);
         setPrintingOverrides({});
@@ -264,15 +512,35 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         clearResults();
     };
 
+    // The empty-Analyze message, and the way it goes away: as soon as a slot
+    // has something in it, it is no longer true. Only this message — a real
+    // failure from the server stays until the next Analyze, since it
+    // describes a run that did happen.
+    const noDecksMessage = authEnabled
+        ? "Paste a decklist or add a saved deck first."
+        : "Paste a decklist first.";
+    const clearNoDecksError = () =>
+        setAnalyzeError((current) => (current === noDecksMessage ? null : current));
+
     const processAll = async (
         printingOverridesArg?: Record<string, { set: string; collector_number: string }>
     ) => {
+        // Nothing to check: say so at the button instead of asking the server
+        // to analyze nothing and showing "No breakdown yet", which reads as
+        // if the click did nothing. Results already on screen stay — they
+        // describe the last decks checked, and the message says why no new
+        // ones came.
+        if (!decks.some((d) => d.trim())) {
+            setAnalyzeError(noDecksMessage);
+            return;
+        }
+
         setAnalyzeError(null);
         setLoading(true);
 
         try {
-            // Resolve any deck box that's just a pasted MTGGoldfish link into
-            // its real decklist text before analyzing.
+            // Resolve any slot that's just a pasted MTGGoldfish link into its
+            // real decklist text before analyzing.
             let currentDecks = decks;
 
             if (decks.some((d) => isGoldfishDeckUrl(d.trim()))) {
@@ -303,7 +571,16 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                     })
                 );
 
-                setDecks(currentDecks);
+                // Only the slots that were imported change, matched by key:
+                // anything typed into another slot while the import was in
+                // flight is kept.
+                const imported = new Map<number, string>();
+                slots.forEach((s, i) => {
+                    if (currentDecks[i] !== s.text) imported.set(s.key, currentDecks[i]);
+                });
+                setSlots((prev) =>
+                    prev.map((s) => (imported.has(s.key) ? { ...s, text: imported.get(s.key) ?? s.text } : s))
+                );
                 setImportError(
                     anyFailed
                         ? "Couldn't import one or more MTGGoldfish links — check the URL and try again."
@@ -354,8 +631,21 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
             setWildcards(data.wildcards ?? null);
             setMissingCards(data.missingCards ?? []);
 
-
-
+            setChecked({
+                decks: slots
+                    .map((s, i) => ({
+                        key: s.key,
+                        title: s.saved ? (isEdited(s) ? `${s.saved.name} (edited here)` : s.saved.name) : `Deck ${i + 1}`,
+                        savedId: s.saved?.id ?? null,
+                        text: currentDecks[i] ?? "",
+                    }))
+                    .filter((d) => d.text.trim()),
+                collection,
+                against: collection.trim()
+                    ? `${sourceName()} (${plural(collectionSize(collection), "card")})`
+                    : `${sourceName()}, which is empty`,
+                arena: !disableArena,
+            });
         } catch (err) {
             console.error("Request failed:", err);
             clearResults();
@@ -406,7 +696,9 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
     useEffect(() => {
         if (runToken !== lastRunToken.current) return;
-        if (breakdown.length > 0 || shoppingList.length > 0) {
+        // checked too: a deck you already own every card of has an empty
+        // breakdown, but its per-deck view still names the mode it ran in.
+        if (breakdown.length > 0 || shoppingList.length > 0 || checked) {
             processAll();
         }
     }, [disableArena, mergePaperCounts]);
@@ -420,33 +712,19 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
     /**
-     * The "collection:" part of an opened summary, for an open that keeps
-     * whatever collection is already in the box (a comparison saved without
-     * one, or a deck from the Decks page). Says which collection that is,
-     * because "no collection" and "the one you had open" give very different
-     * answers.
-     */
-    const currentCollectionPart = (): string => {
-        if (!collection.trim()) {
-            return "the collection box is empty, so every card counts as missing";
-        }
-        const size = plural(collectionSize(collection), "card");
-        return openCollection
-            ? `using your open ${openCollection.arena ? "Arena" : "Paper"} collection "${openCollection.name}" (${size})`
-            : `using the collection already in the box (${size})`;
-    };
-
-    /**
      * A saved comparison: its decklists, its collection if it has one, and
      * its mode — then the analysis, without a click. Only inputs were ever
      * saved (see lib/db/schema.sql), so this is the comparison re-run
      * against today's prices and card data, which is the only honest way to
      * "open" one.
      *
+     * Its decks come back as pasted slots: a comparison stores deck text, not
+     * links to saved decks, so it still opens after those decks are edited or
+     * deleted.
+     *
      * A comparison saved with no collection keeps the collection already in
-     * the box rather than emptying it. Emptying it would make every card
-     * "missing", and would wipe the collection the Collection page shares
-     * with this one, for a comparison that never had an opinion about it.
+     * use rather than emptying it: emptying it would make every card
+     * "missing", for a comparison that never had an opinion about it.
      */
     const openComparison = (a: OpenedAnalysis) => {
         const decklists = (Array.isArray(a.decklists) ? a.decklists : []).filter(
@@ -457,25 +735,22 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
 
         let collectionPart: string;
         if (savedCollection) {
-            setCollection(savedCollection);
-            // Its own text, not a saved collection row, so any open
-            // collection stops applying (Save Collection would otherwise
-            // overwrite that row with this comparison's cards).
-            setOpenCollection(null);
-            collectionPart = `collection: ${plural(collectionSize(savedCollection), "card")} (${mode}), saved with this comparison`;
+            setChosen({ source: { kind: "pasted", from: a.name }, text: savedCollection, arena: a.arena_mode });
+            collectionPart = `collection: ${plural(collectionSize(savedCollection), "card")}, saved with this comparison`;
         } else {
             collectionPart = `no collection saved with it — ${currentCollectionPart()}`;
         }
 
-        setDecks(decklists.length ? decklists : [""]);
+        setSlots(decklists.length ? decklists.map((d) => makeSlot(d)) : [makeSlot()]);
         setDisableArena(!a.arena_mode);
         setOpenAnalysis({ id: a.id, name: a.name, arena: a.arena_mode });
+        setPendingSwitch(null);
         // Printing picks belong to the decks they were made for.
         setPrintingOverrides({});
         setOpenSets({});
         setOpened({
             headline: `Opened comparison "${a.name}"`,
-            parts: [plural(decklists.length, "decklist"), collectionPart, `${mode} mode`],
+            parts: [plural(decklists.length, "deck"), collectionPart, `${mode} mode`],
             note: decklists.length
                 ? "Re-run against today's card data — the results are below."
                 : "It has no decklists, so there is nothing to compare yet.",
@@ -484,62 +759,97 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
     };
 
     /**
-     * A saved collection, into the collection box only. The decklists stay,
-     * and the planner switches to the collection's mode — comparing an Arena
-     * collection in Paper Mode silently gives the wrong answer.
-     *
-     * Results already on screen are re-run, because they were worked out
-     * against the collection that was just replaced; otherwise nothing runs
-     * until Analyze, since there may not be a deck to compare yet.
+     * Where a deck joining the slots goes, as "Add existing deck" and an
+     * arriving deck both place it: the first empty pasted slot, else a new
+     * one at the end. Pure over `prev`, so it can run inside a state updater.
      */
-    const openSavedCollection = (c: OpenedCollection) => {
-        const text = tidyCollection(c.raw_text ?? "");
-        const mode = c.arena_mode ? "Arena" : "Paper";
-        const hadResults = breakdown.length > 0 || shoppingList.length > 0;
-        const hasDecks = decks.some((d) => d.trim());
-
-        setCollection(text);
-        setDisableArena(!c.arena_mode);
-        // The open comparison is left alone: its decklists are still on
-        // screen, so it is still the comparison being edited.
-        setOpenCollection({ id: c.id, name: c.name, arena: c.arena_mode });
-        setOpened({
-            headline: `Opened ${mode} collection "${c.name}"`,
-            parts: [plural(collectionSize(text), "card"), `${mode} mode`],
-            note: hadResults
-                ? "Your decklists are unchanged; the comparison below has been re-run against this collection."
-                : hasDecks
-                    ? "Your decklists are unchanged. Press Analyze to compare them against it."
-                    : "Only the collection box changed. Add a decklist and press Analyze to compare.",
-        });
-        if (hadResults && hasDecks) requestRun();
+    const placeSlot = (prev: DeckSlot[], slot: DeckSlot): DeckSlot[] => {
+        const empty = prev.findIndex((s) => !s.saved && !s.text.trim());
+        if (empty < 0) return [...prev, slot];
+        const next = [...prev];
+        next[empty] = slot;
+        return next;
     };
 
     /**
-     * A deck sent from the Decks page (or the profile), analyzed against
-     * whatever collection is already here, in whatever mode is already on.
+     * A deck sent from the Decks page (or the profile's ?deck=), checked
+     * against whatever collection is in use, in whatever mode is on.
      *
-     * It replaces the deck boxes outright. Those aren't persisted, so on
-     * arrival from another page they hold nothing to lose — and leaving an
-     * open comparison set would aim Save Comparison at a row whose decklists
-     * are no longer on screen.
+     * It joins the slots rather than replacing them. It used to replace them,
+     * when slots lived only in component state and arriving from another page
+     * meant there was nothing to lose; now they are kept for the tab
+     * (lib/deckSlots), so the decks already here are real work, and sending a
+     * second deck from the Decks page to check beside the first is exactly
+     * what someone would do. A saved comparison (?analysis=) still replaces
+     * everything — that is the comparison's contents — but a single deck
+     * doesn't get to.
+     *
+     * The same saved deck (same id) is never added twice: the slot already
+     * holding it is brought up to date with what was sent instead, and the
+     * banner says which slot that was. A pasted deck identical to a pasted
+     * slot is treated the same way, for the same reason.
+     *
+     * A deck with an id lands as that saved deck. If it came by hand-off it
+     * carried edits the Decks page hadn't saved, so it is marked edited from
+     * the start rather than claiming to be the stored deck.
+     *
+     * The open comparison, if any, stays open: its decks are all still on
+     * screen, so adding one is an edit of it, as typing in a new slot would be.
      */
-    const openDeck = (d: HandoffDeck) => {
+    const openDeck = (d: HandoffDeck, arrival: Arrival) => {
         const { main, side } = deckCounts(d.decklist);
-        setDecks([plannerDeckText(d.decklist)]);
-        setOpenAnalysis(null);
-        setPrintingOverrides({});
-        setOpenSets({});
+        const text = plannerDeckText(d.decklist);
+        const linked: LinkedDeck | null =
+            d.id === null
+                ? null
+                : {
+                      id: d.id,
+                      name: d.name ?? "Saved deck",
+                      format: d.format,
+                      baseline: arrival.stored ? text : null,
+                  };
+
+        // `slots` is this render's — the loader calls the newest openDeck
+        // through a ref, after hydration, so the restored slots are in it.
+        const existing = slots.findIndex((s) =>
+            linked ? s.saved?.id === linked.id : !s.saved && plannerDeckText(s.text) === text
+        );
+        const others = slots.filter((s, i) => i !== existing && (s.text.trim() || s.saved)).length;
+        const name = d.name ? `"${d.name}"` : "your deck";
+
+        let headline: string;
+        if (existing >= 0) {
+            const key = slots[existing].key;
+            setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, text, saved: linked } : s)));
+            headline =
+                plannerDeckText(slots[existing].text) === text
+                    ? `${d.name ? `"${d.name}"` : "That deck"} is already in Deck ${existing + 1}`
+                    : `Updated Deck ${existing + 1} with the version of ${name} you sent`;
+        } else {
+            const slot: DeckSlot = { key: nextSlotKey(), text, saved: linked };
+            setSlots((prev) => placeSlot(prev, slot));
+            headline = d.name ? `Added deck "${d.name}"` : "Added your deck from the Decks page";
+        }
+
+        setAnalyzeError(null);
         setOpened({
-            headline: d.name ? `Opened deck "${d.name}"` : "Opened your deck from the Decks page",
+            headline,
             parts: [
                 `${plural(main, "maindeck card")} + ${plural(side, "sideboard card")}`,
+                ...(others > 0 ? [`alongside ${plural(others, "other deck")}`] : []),
                 `collection: ${currentCollectionPart()}`,
                 `${disableArena ? "Paper" : "Arena"} mode`,
             ],
-            note: "Compared automatically — the results are below. Switch Arena/Paper to re-run it in the other mode.",
+            note: "Checked automatically — the results are below. Switch Arena/Paper to re-run it in the other mode.",
         });
         requestRun();
+    };
+
+    /** "Add existing deck": into the first empty pasted slot, or a new one. */
+    const addExistingDeck = (deck: PickedDeck) => {
+        const slot = slotFromSaved(nextSlotKey(), deck);
+        setSlots((prev) => placeSlot(prev, slot));
+        clearNoDecksError();
     };
 
     const rarityColor = (rarity: string) => {
@@ -558,15 +868,19 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         }
     };
 
-    const updateDeck = (index: number, value: string) => {
-        const updated = [...decks];
-        updated[index] = value;
-        setDecks(updated);
+    const updateSlotText = (key: number, text: string) => {
+        setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, text } : s)));
+        if (text.trim()) clearNoDecksError();
     };
 
-    const addDeck = () => setDecks([...decks, ""]);
-    const removeDeck = (index: number) =>
-        setDecks(decks.filter((_, i) => i !== index));
+    const addSlot = () => setSlots((prev) => [...prev, makeSlot()]);
+    const removeSlot = (key: number) => setSlots((prev) => prev.filter((s) => s.key !== key));
+    // The last slot is emptied rather than removed: the box always has one
+    // to paste into. Same key, so React keeps the textarea (and its focus).
+    const clearSlot = (key: number) =>
+        setSlots((prev) => prev.map((s) => (s.key === key ? { key, text: "", saved: null } : s)));
+    const linkSlot = (key: number, linked: LinkedDeck, text: string) =>
+        setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, text, saved: linked } : s)));
 
     const copyShoppingList = () => {
         const text = shoppingList
@@ -618,14 +932,16 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         };
     };
 
-    // Is there anything a reset would actually destroy? Nothing typed means
-    // the confirmation is pure friction, so Start Over just clears.
-    const hasWork = decks.some((d) => d.trim()) || Boolean(collection.trim());
+    // Is there anything a reset would actually destroy? Saved decks and the
+    // Collection page's collection live elsewhere and survive it, so only
+    // the slots' text and a collection pasted here count. Nothing at risk
+    // means the confirmation is pure friction, so Start Over just clears.
+    const hasWork = hasDecks || Boolean(pastedText.trim());
 
     // A comparison stores the decklists AND the collection, so it is the save
     // that preserves everything on screen. With no decks there is no
-    // comparison to make, and the only thing at risk is the collection.
-    const rescueKind = decks.some((d) => d.trim()) ? "comparison" : "collection";
+    // comparison to make, and the only thing at risk is a pasted collection.
+    const rescueKind = hasDecks ? "comparison" : "collection";
 
     // One element rendered in two places: the desktop and mobile analyze
     // blocks sit at different points in the page and only one is ever
@@ -653,13 +969,21 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
         </button>
     );
 
+    const sourceButton = (active: boolean) =>
+        "px-4 py-2 rounded font-title text-sm " +
+        (active ? "bg-brass text-brass-ink" : "bg-parchment text-ink shadow-card hover:bg-parchment/70");
+
+    const savedDeckIds = slots.flatMap((s) => (s.saved ? [s.saved.id] : []));
+    const collectionCopies = collectionSize(collection);
+    const collectionCards = mergeCollection(collection).length;
+
     return (
         <div className="px-6 pt-8">
             <main className="max-w-5xl mx-auto py-10 px-6 space-y-10 text-ink">
 
                     <PageHeader
-                        title="Pack Planner"
-                        subtitle="Compare your decklists against the cards you already own, then see exactly what's missing — wildcard costs and pack recommendations for Arena, or a priced shopping list for paper."
+                        title="Deck Check"
+                        subtitle="Check your decks against the cards you own: what each deck is missing, the wildcards and packs it would take on Arena, or a priced shopping list for paper."
                         art="/art/banner-planner.svg"
                     />
 
@@ -669,7 +993,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         ?deck= with useSearchParams; see DeckHandoff. */}
                     <Suspense fallback={null}>
                         <DeckHandoffLoader
-                            target="planner"
+                            target="deckCheck"
                             ready={hydrated}
                             authEnabled={authEnabled}
                             onDeck={openDeck}
@@ -687,7 +1011,9 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     can be one long unbroken token. */}
                                 <div className="min-w-0 flex-1 space-y-1 [overflow-wrap:anywhere]">
                                     <p className="font-title text-lg leading-snug">{opened.headline}</p>
-                                    <p className="text-sm text-ink/80">{opened.parts.join(" · ")}</p>
+                                    {opened.parts.length > 0 && (
+                                        <p className="text-sm text-ink/80">{opened.parts.join(" · ")}</p>
+                                    )}
                                     {opened.note && <p className="text-sm text-ink/65">{opened.note}</p>}
                                 </div>
                                 <button
@@ -702,48 +1028,136 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         </section>
                     )}
 
-                    {/* DECK INPUTS */}
-                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-6">
-                        {/* gap-3 + wrap rather than a bare justify-between: on a
-                            phone the heading and the button were each squeezed
-                            onto two lines fighting for the same row. */}
-                        <div className="flex flex-wrap justify-between items-center gap-3">
-                            <h2 className="text-xl sm:text-2xl font-title flex flex-wrap items-center whitespace-nowrap">
-                                Deck Lists
-                                <HelpTip text="Paste one or more decklists — plain text like '4 Lightning Bolt', or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you. Add more decks with '+ Add Deck' if you're comparing needs across several." />
+                    {/* DECKS */}
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-5">
+                        {/* One wrapping row: heading, the picker's button, + New
+                            deck — and the picker's panel, which is order-last
+                            and full-width so it drops below the buttons instead
+                            of splitting them. */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h2 className="mr-auto text-xl sm:text-2xl font-title flex flex-wrap items-center whitespace-nowrap">
+                                Decks
+                                <HelpTip
+                                    text={
+                                        (authEnabled
+                                            ? "Add decks you've saved on the Decks tab with 'Add existing deck', or paste a new one"
+                                            : "Paste a deck, or send one here from the Decks tab") +
+                                        " — plain text like '4 Lightning Bolt', or a link to an MTGGoldfish deck or archetype page and we'll pull the list for you. Add more slots with '+ New deck' to check several decks at once."
+                                    }
+                                />
                             </h2>
+                            {authEnabled && <SavedDeckPicker addedIds={savedDeckIds} onPick={addExistingDeck} />}
                             <button
                                 type="button"
-                                {...activate(addDeck)}
+                                {...activate(addSlot)}
                                 className="shrink-0 whitespace-nowrap px-4 py-2 bg-parchment rounded shadow-inner-parchment text-ink font-title hover:bg-parchment-dark"
                             >
-                                + Add Deck
+                                + New deck
                             </button>
                         </div>
 
-                        {decks.map((deck, index) => (
-                            <div key={index} className="space-y-2">
-                                <div className="flex flex-wrap justify-between items-center gap-2">
-                                    <h3 className="font-title text-xl">Deck {index + 1}</h3>
-                                    {index > 0 && (
-                                        <button
-                                            type="button"
-                                            {...activate(() => removeDeck(index))}
-                                            className="text-red-800 font-title hover:underline"
-                                        >
-                                            Remove
-                                        </button>
+                        {slots.map((slot, index) => {
+                            const edited = isEdited(slot);
+                            const isLink = isGoldfishDeckUrl(slot.text.trim());
+                            return (
+                                <div
+                                    key={slot.key}
+                                    className={
+                                        "space-y-2 rounded-lg p-3 sm:p-4 " +
+                                        (slot.saved
+                                            ? "bg-brass/10 ring-1 ring-brass/40"
+                                            : "bg-parchment/40 ring-1 ring-ink/10")
+                                    }
+                                >
+                                    <div className="flex flex-wrap justify-between items-start gap-2">
+                                        <div className="min-w-0 space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="font-title text-xl">Deck {index + 1}</h3>
+                                                {/* Which kind of slot this is, always: a saved
+                                                    deck from the Decks tab, or a list that only
+                                                    exists here. */}
+                                                <span
+                                                    className={
+                                                        BADGE +
+                                                        (slot.saved
+                                                            ? " bg-brass text-brass-ink"
+                                                            : " bg-parchment-dark text-ink/70")
+                                                    }
+                                                >
+                                                    {slot.saved ? "Saved deck" : "Pasted"}
+                                                </span>
+                                                {edited && (
+                                                    <span className={BADGE + " bg-amber-700/15 text-amber-800"}>
+                                                        Edited
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {slot.saved && (
+                                                <p className="text-sm text-ink/80 [overflow-wrap:anywhere]">
+                                                    <strong>{slot.saved.name}</strong>
+                                                    {slot.saved.format ? ` · ${deckFormatLabel(slot.saved.format)}` : ""}
+                                                    {" · "}
+                                                    <Link
+                                                        href={`/decks?deck=${slot.saved.id}`}
+                                                        className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                                                    >
+                                                        Open in Decks
+                                                    </Link>
+                                                </p>
+                                            )}
+                                            {edited && (
+                                                <p className="text-xs text-amber-800">
+                                                    Changed here since it was loaded. The saved deck stays as it
+                                                    was unless you save these changes.
+                                                </p>
+                                            )}
+                                        </div>
+                                        {slots.length > 1 ? (
+                                            <button
+                                                type="button"
+                                                {...activate(() => removeSlot(slot.key))}
+                                                aria-label={`Remove deck ${index + 1} from this check`}
+                                                className="text-red-800 font-title hover:underline"
+                                            >
+                                                Remove
+                                            </button>
+                                        ) : (
+                                            (slot.text || slot.saved) && (
+                                                <button
+                                                    type="button"
+                                                    {...activate(() => clearSlot(slot.key))}
+                                                    className="text-red-800 font-title hover:underline"
+                                                >
+                                                    Clear
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+
+                                    <textarea
+                                        className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
+                                        placeholder="Paste a decklist here, or an MTGGoldfish deck link..."
+                                        aria-label={`Deck ${index + 1}`}
+                                        value={slot.text}
+                                        onChange={(e) => updateSlotText(slot.key, e.target.value)}
+                                    />
+
+                                    {isLink && (
+                                        <p className="text-xs text-ink/60">
+                                            Analyze imports this MTGGoldfish link and puts the list in its place
+                                            {authEnabled ? ", ready to save to Decks." : "."}
+                                        </p>
+                                    )}
+
+                                    {authEnabled && (
+                                        <DeckSlotSave
+                                            slot={slot}
+                                            onSaved={(linked, text) => linkSlot(slot.key, linked, text)}
+                                        />
                                     )}
                                 </div>
-
-                                <textarea
-                                    className="w-full h-40 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                                    placeholder="Paste deck list here, or paste an MTGGoldfish deck link..."
-                                    value={deck}
-                                    onChange={(e) => updateDeck(index, e.target.value)}
-                                />
-                            </div>
-                        ))}
+                            );
+                        })}
 
                         {importError && (
                             <p className="text-red-700 text-sm">{importError}</p>
@@ -752,11 +1166,11 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         <div className="text-sm">
                             <Link
                                 href="/decks"
-                                className="text-brand hover:text-brand-dark underline underline-offset-2"
+                                className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
-                                Keep your decklists on the Decks page
+                                Edit and keep your decklists on the Decks tab
                             </Link>
-                            <span className="text-ink/60"> — &quot;Open in Pack Planner&quot; there runs it here.</span>
+                            <span className="text-ink/60"> — &quot;Check in Deck Check&quot; there sends a deck here.</span>
                         </div>
                     </section>
                     {/* Missing Cards Panel */}
@@ -779,56 +1193,215 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                     )}
 
 
-                    {/* COLLECTION INPUT */}
+                    {/* COLLECTION */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-title flex flex-wrap items-center">
-                                MTG Collection (Paper OR Arena)
-                                <HelpTip text="Paste what you already own — an Arena collection export, a CSV, or any list with quantities. We'll subtract this from what your decks need so you only see what's missing. Saved automatically in this browser, so you won't need to paste it again next time." />
-                            </h2>
-                            {collection && (
-                                <button
-                                    type="button"
-                                    {...activate(clearCollection)}
-                                    className="text-red-800 font-title hover:underline"
-                                >
-                                    Clear
-                                </button>
+                        <h2 className="text-2xl font-title flex flex-wrap items-center">
+                            Collection
+                            <HelpTip
+                                text={
+                                    authEnabled
+                                        ? "What your decks are checked against. By default it's the collection on your Collection page. Load one of your saved collections, or paste a different one with New — neither changes your Collection page. Arena/Paper mode switches to match the collection you load."
+                                        : "What your decks are checked against. By default it's the collection on your Collection page. Paste a different one with New to check against that instead — it doesn't change your Collection page."
+                                }
+                            />
+                        </h2>
+
+                        {/* What's in use, always on screen: comparing against the
+                            wrong collection, or an empty one, gives a confident
+                            wrong answer, so it's never left to be guessed. */}
+                        <div role="status" className="rounded bg-parchment shadow-inner-parchment border-l-4 border-brass px-3 py-2 sm:px-4">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-ink/55">
+                                Checking against
+                            </p>
+                            <p className="font-title text-lg leading-snug [overflow-wrap:anywhere]">
+                                {!chosen
+                                    ? "Your Collection page collection"
+                                    : chosen.source.kind === "saved"
+                                        ? `Saved ${chosen.source.arena ? "Arena" : "Paper"} collection "${chosen.source.name}"`
+                                        : chosen.source.from
+                                            ? `The collection saved with "${chosen.source.from}"`
+                                            : "A collection pasted here (not saved)"}
+                            </p>
+                            <p className="text-sm text-ink/70">
+                                {plural(collectionCopies, "card")}
+                                {collectionCards > 0 ? ` (${plural(collectionCards, "different card")})` : ""} ·{" "}
+                                {disableArena ? "Paper" : "Arena"} mode
+                            </p>
+                            {!chosen && localOpen && (
+                                <p className="text-xs text-ink/60 [overflow-wrap:anywhere]">
+                                    Opened there from your saved {localOpen.arena ? "Arena" : "Paper"} collection
+                                    &quot;{localOpen.name}&quot;.
+                                </p>
+                            )}
+                            {chosen?.source.kind === "saved" && (
+                                <p className="text-xs text-ink/60">
+                                    Loaded for Deck Check only — your Collection page is unchanged.
+                                </p>
+                            )}
+                            {hydrated && !collection.trim() && chosen?.source.kind !== "pasted" && (
+                                <p className="text-sm text-amber-700 mt-1">
+                                    {chosen
+                                        ? "This collection is empty, so every card will count as missing."
+                                        : authEnabled
+                                            ? "Your Collection page collection is empty, so every card will count as missing. Add cards there, load a saved collection, or paste one with New."
+                                            : "Your Collection page collection is empty, so every card will count as missing. Add cards there, or paste one with New."}
+                                </p>
                             )}
                         </div>
-                        <textarea
-                            className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
-                            placeholder="Paste your MTG collection here..."
-                            value={collection}
-                            // Copies of the same card are merged automatically — an
-                            // Arena export lists every printing on its own line. On
-                            // paste and on leaving the box, not on every keystroke:
-                            // merging re-sorts the list, which would jump around
-                            // under someone typing a card in by hand.
-                            onPaste={() => {
-                                pastedRef.current = true;
-                            }}
-                            onChange={(e) => {
-                                const next = e.target.value;
-                                if (pastedRef.current) {
-                                    pastedRef.current = false;
-                                    setCollection(tidyCollection(next));
-                                } else {
-                                    setCollection(next);
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                aria-pressed={!chosen}
+                                onClick={() =>
+                                    chosen && guardPasted("your Collection page collection", () => switchToLocal())
                                 }
-                            }}
-                            onBlur={() => {
-                                const merged = tidyCollection(collection);
-                                if (merged !== collection) setCollection(merged);
-                            }}
-                        />
-                        <div className="text-sm">
-                            <Link
-                                href="/collection"
-                                className="text-brand hover:text-brand-dark underline underline-offset-2"
+                                className={sourceButton(!chosen)}
                             >
-                                Edit on the Collection page, with pictures
-                            </Link>
+                                Use my Collection page collection
+                            </button>
+                            {authEnabled && (
+                                <SavedCollectionPicker
+                                    activeId={chosen?.source.kind === "saved" ? chosen.source.id : null}
+                                    onPick={(c) => guardPasted(`"${c.name}"`, () => loadSavedCollection(c))}
+                                />
+                            )}
+                            <button
+                                type="button"
+                                aria-pressed={chosen?.source.kind === "pasted"}
+                                onClick={() =>
+                                    chosen?.source.kind === "pasted" ? undefined : startPastedCollection()
+                                }
+                                className={sourceButton(chosen?.source.kind === "pasted")}
+                            >
+                                New (paste)
+                            </button>
+                        </div>
+
+                        {pendingSwitch && (
+                            <div
+                                role="alert"
+                                className="flex flex-wrap items-center gap-2 rounded border border-amber-700/40 bg-amber-700/10 px-3 py-2 text-sm"
+                            >
+                                <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
+                                    The collection pasted here isn&apos;t saved anywhere. Switch to{" "}
+                                    {pendingSwitch.label} and lose it?
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingSwitch(null)}
+                                    className="px-3 py-1.5 rounded text-ink/70 hover:bg-parchment"
+                                >
+                                    Keep it
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const run = pendingSwitch.run;
+                                        setPendingSwitch(null);
+                                        run();
+                                    }}
+                                    className="px-3 py-1.5 rounded font-title border border-amber-700/50 text-amber-800 hover:bg-amber-700/10"
+                                >
+                                    Switch
+                                </button>
+                            </div>
+                        )}
+
+                        {chosen?.source.kind === "pasted" && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center gap-2">
+                                    <label htmlFor="deck-check-collection" className="text-sm text-ink/70">
+                                        Paste a collection — an Arena export, a CSV, or any list with quantities
+                                    </label>
+                                    {pastedText && (
+                                        <button
+                                            type="button"
+                                            {...activate(() => setPastedText(""))}
+                                            className="shrink-0 text-red-800 font-title hover:underline"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                                <textarea
+                                    id="deck-check-collection"
+                                    className="w-full h-48 p-4 bg-parchment shadow-inner-parchment rounded resize-none text-ink"
+                                    placeholder="Paste your MTG collection here..."
+                                    value={pastedText}
+                                    // Copies of the same card are merged automatically — an
+                                    // Arena export lists every printing on its own line. On
+                                    // paste and on leaving the box, not on every keystroke:
+                                    // merging re-sorts the list, which would jump around
+                                    // under someone typing a card in by hand.
+                                    onPaste={() => {
+                                        pastedRef.current = true;
+                                    }}
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        if (pastedRef.current) {
+                                            pastedRef.current = false;
+                                            setPastedText(tidyCollection(next));
+                                        } else {
+                                            setPastedText(next);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        const merged = tidyCollection(pastedText);
+                                        if (merged !== pastedText) setPastedText(merged);
+                                    }}
+                                />
+                                {authEnabled && pastedText.trim() && (
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <SaveWorkButton
+                                            kind="collection"
+                                            decks={[]}
+                                            collection={pastedText}
+                                            arenaMode={!disableArena}
+                                            open={null}
+                                            createOnly
+                                            label="Save to Collection..."
+                                            onSaved={(saved) => {
+                                                // Now one of your saved collections:
+                                                // shown, and kept, as that.
+                                                setChosen((prev) =>
+                                                    prev
+                                                        ? {
+                                                              source: {
+                                                                  kind: "saved",
+                                                                  id: saved.id,
+                                                                  name: saved.name,
+                                                                  arena: saved.arena,
+                                                              },
+                                                              text: prev.text,
+                                                              arena: saved.arena,
+                                                          }
+                                                        : prev
+                                                );
+                                                setDisableArena(!saved.arena);
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="text-sm">
+                            {chosen?.source.kind === "saved" ? (
+                                <Link
+                                    href={`/collection?collection=${chosen.source.id}`}
+                                    className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                                >
+                                    Edit this collection on the Collection page
+                                </Link>
+                            ) : (
+                                <Link
+                                    href="/collection"
+                                    className="text-brand underline underline-offset-2 hover:text-brand-dark"
+                                >
+                                    Edit your collection on the Collection page, with pictures
+                                </Link>
+                            )}
                         </div>
                     </section>
 
@@ -894,7 +1467,14 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                 Paper Mode
                             </button>
 
-                            <HelpTip text="Arena Mode looks up Arena printings, caps most cards at 4 copies (basics and a few special cards are unlimited), and shows wildcard costs. Paper Mode looks up paper printings and shows real-world prices instead." />
+                            <HelpTip
+                                text={
+                                    "Arena Mode looks up Arena printings, caps most cards at 4 copies (basics and a few special cards are unlimited), and shows wildcard costs. Paper Mode looks up paper printings and shows real-world prices instead. " +
+                                    (authEnabled
+                                        ? "It switches to match a collection you load; switching it here doesn't change the collection."
+                                        : "It starts in your Collection page collection's mode; switching it here doesn't change the collection.")
+                                }
+                            />
                         </div>
 
                         {/* Checkbox for merge card counts in paper only */}
@@ -910,7 +1490,7 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             </label>
                         )}
 
-                        
+
                         <div className="hidden md:flex w-full flex-col items-center mt-10 mb-16 relative z-20">
                             {/* Rendered once per breakpoint block rather than
                                 once above both: the desktop and mobile buttons
@@ -951,32 +1531,25 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                     </div>
                     {authEnabled && (
                         <div className="mt-6">
-                            {/* PackPlannerSaves reads ?collection= / ?analysis= with
+                            {/* DeckCheckSaves reads ?collection= / ?analysis= with
                                 useSearchParams, which opts a component out of
                                 prerendering. Without this boundary the whole page
                                 fails to build rather than just this panel deferring
                                 to the client. */}
                             <Suspense fallback={null}>
-                                <PackPlannerSaves
+                                <DeckCheckSaves
                                     decks={decks}
                                     collection={collection}
                                     arenaMode={!disableArena}
-                                    openCollection={openCollection}
                                     openAnalysis={openAnalysis}
                                     // Held back until the stored collection has
-                                    // been restored: a ?analysis= open that
-                                    // landed first would have its collection
-                                    // overwritten by the restore a moment later.
+                                    // been restored: a ?collection= open that
+                                    // landed first would be overwritten by the
+                                    // restore a moment later.
                                     ready={hydrated}
-                                    onOpenCollection={openSavedCollection}
+                                    onOpenCollection={loadSavedCollection}
                                     onOpenComparison={openComparison}
-                                    onOpenChange={(next) => {
-                                        // Only the keys actually present move:
-                                        // loading a collection must not silently
-                                        // close the comparison being edited.
-                                        if (next.collection !== undefined) setOpenCollection(next.collection);
-                                        if (next.analysis !== undefined) setOpenAnalysis(next.analysis);
-                                    }}
+                                    onSaved={setOpenAnalysis}
                                 />
                             </Suspense>
                         </div>
@@ -1010,9 +1583,38 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                         )}
                     </div>
 
-
-
-
+                    {/* WHAT EACH DECK IS MISSING
+                        The Collection page's old "Compare with a deck" view,
+                        one per deck, from the inputs of the run on screen.
+                        First among the results because "what don't I have?"
+                        is the question most people arrive with; the combined
+                        breakdown, costs and packs follow. */}
+                    {checked && checked.decks.length > 0 && (
+                        <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                            <div className="space-y-1">
+                                <h2 className="text-2xl font-title flex flex-wrap items-center">
+                                    What each deck is missing
+                                    <HelpTip text="Each deck on its own against your collection: the cards you don't have and how many copies you're short. Maindeck and sideboard count together, basic lands are left out, and nothing is capped at 4 — it's the deck exactly as written. The breakdown below combines every deck and works out the cost." />
+                                </h2>
+                                <p className="text-sm text-ink/70 [overflow-wrap:anywhere]">
+                                    Against {checked.against}.
+                                </p>
+                            </div>
+                            <div className="space-y-3">
+                                {checked.decks.map((d, i) => (
+                                    <DeckShortfall
+                                        key={d.key}
+                                        title={d.title}
+                                        savedId={d.savedId}
+                                        text={d.text}
+                                        collection={checked.collection}
+                                        arena={checked.arena}
+                                        defaultOpen={i === 0}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     {/* BREAKDOWN */}
                     <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
@@ -1653,27 +2255,27 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
                             role="dialog"
                             aria-modal="true"
-                            aria-labelledby="clear-planner-title"
+                            aria-labelledby="clear-deck-check-title"
                             onClick={(e) => {
                                 if (e.target === e.currentTarget) setConfirmClear(false);
                             }}
                         >
                             <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
-                                <h3 id="clear-planner-title" className="font-title text-2xl">
+                                <h3 id="clear-deck-check-title" className="font-title text-2xl">
                                     Start over?
                                 </h3>
 
                                 <p className="leading-relaxed">
-                                    This wipes every decklist, the collection you pasted and the last
-                                    breakdown. Arena/Paper mode stays as it is, so you can paste a new
-                                    list straight in.
+                                    This clears every deck slot, any collection pasted here and the last
+                                    results, and goes back to your Collection page collection. Your saved
+                                    decks and your Collection page aren&apos;t touched.
                                 </p>
 
                                 {authEnabled ? (
                                     <p className="text-sm text-ink/70">
                                         {rescueKind === "comparison"
-                                            ? "Saving keeps the decklists, the collection and the mode as a comparison you can reopen."
-                                            : "Saving keeps the collection you pasted so you don't have to find it again."}
+                                            ? "Saving keeps the decks, the collection and the mode as a comparison you can reopen."
+                                            : "Saving keeps the collection you pasted as one of your saved collections."}
                                     </p>
                                 ) : (
                                     <p className="text-sm text-amber-700">
@@ -1703,14 +2305,16 @@ export default function PackPlanner({ authEnabled }: { authEnabled: boolean }) {
                                     </button>
 
                                     {authEnabled && (
-                                        <PackPlannerSave
+                                        <SaveWorkButton
                                             kind={rescueKind}
                                             decks={decks}
-                                            collection={collection}
+                                            collection={rescueKind === "comparison" ? collection : pastedText}
                                             arenaMode={!disableArena}
-                                            open={
-                                                rescueKind === "comparison" ? openAnalysis : openCollection
-                                            }
+                                            open={rescueKind === "comparison" ? openAnalysis : null}
+                                            // A pasted collection is saved alongside
+                                            // the ones you have, as "Save to
+                                            // Collection" does — never over one.
+                                            createOnly={rescueKind === "collection"}
                                             // Branching a copy in the middle of a
                                             // reset is a different intent from
                                             // "keep this before I wipe it".

@@ -593,7 +593,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     // stays consistent. A lazy useState initializer would read storage during
     // render and produce markup the server never emitted, which is a worse
     // problem than the lint rule this suppresses. Matches the same deliberate
-    // exception in the Pack Planner.
+    // exception in Deck Check.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         try {

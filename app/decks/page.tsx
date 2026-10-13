@@ -5,7 +5,7 @@ import { isAuthConfigured } from "@/lib/authConfig";
 export const metadata = {
     title: "Decks — MTG Planning App",
     description:
-        "Keep your own decklists, then check them against your collection, cost them in the Pack Planner or build a sideboard guide from them.",
+        "Keep your own decklists — paste, split into maindeck and sideboard, save and edit them — then check them in Deck Check or build a sideboard guide from them.",
 };
 
 /**
@@ -19,7 +19,7 @@ export default function DecksPage() {
             <main className="max-w-5xl mx-auto py-10 px-3 sm:px-6 space-y-10 text-ink">
                 <PageHeader
                     title="Decks"
-                    subtitle="Paste a decklist, keep it, and send it to the other tools — see what you're missing from your collection, cost it in the Pack Planner, or build a sideboard guide from it."
+                    subtitle="Paste a decklist, keep it and edit it. When it's ready, check it in Deck Check — what you're missing and what it costs — or build a sideboard guide from it."
                     art="/art/banner-planner.svg"
                 />
                 <DeckBuilder authEnabled={isAuthConfigured()} />

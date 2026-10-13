@@ -28,17 +28,20 @@ design — nothing may ever gate a tool behind it.
 
 ## The tools
 
+Three of the tools are about your decks and your cards, and each has one
+job: **Decks** holds your decklists, **Collection** holds your cards, and
+**Deck Check** is the only place that compares the two.
+
 ### Decks — `/decks`
 
-Keep your own decklists and send them to the other tools.
+Keep and edit your own decklists.
 
 - Paste a list (Arena, MTGGoldfish or any "4 Card Name" list) or import an
   MTGGoldfish link; it splits into maindeck and sideboard as you type, with
   card pictures on hover. Pick a format (the Sideboard Planner's five, plus
   Historic, Explorer, Timeless, Alchemy, Brawl, Commander) or none.
-- **Check against my collection** → `/collection`, whose "Compare with a deck"
-  panel lists what you're missing. **Open in Pack Planner** → `/planner`, which
-  runs the analysis straight away. **Build a sideboard guide** → `/sideboard`,
+- **Check in Deck Check** → `/deck-check`, which runs the comparison against
+  your collection straight away. **Build a sideboard guide** → `/sideboard`,
   which loads it as the decklist and sets the format; if a guide is already
   there it asks first (keep the matchups, start fresh, or save then start
   fresh).
@@ -50,63 +53,86 @@ Keep your own decklists and send them to the other tools.
   checks before opening another deck. Decks are stored normalised — a `Deck`
   and a `Sideboard` section, one line per card (`lib/deckText.ts`).
 
-### Pack Planner — `/planner`
-
-Paste one or more decklists (or MTGGoldfish deck/archetype links) plus the
-collection you already own; it subtracts one from the other and reports only
-what you still need.
-
-- **Arena Mode** — wildcards you'd spend by rarity, and what's missing grouped by
-  set so you can see which packs cover the most ground.
-- **Paper Mode** — the shortfall priced and formatted for TCGPlayer's mass entry,
-  with a card count to check your cart against.
-- Pick the exact printing and art for any card; compare several decks at once.
-- The collection box merges copies of the same card into one line, on paste and
-  when you leave the box, and links to the Collection page to edit it with
-  pictures.
-- Signed in: save the collection (as Arena or Paper) or the whole comparison to
-  your profile, then reopen it, update it in place, save it as new, or
-  duplicate it. A **collection** is just your cards; a **comparison** is the
-  decklists, the collection and the mode together.
-- Opening a comparison (from the planner or `?analysis=` from the profile)
-  puts back its decklists, its collection if it has one — otherwise the one
-  already in the box is kept — and its mode, then **runs the analysis
-  automatically**. A deck arriving from the Decks page runs the same way. A
-  summary above the deck boxes says what was opened and which collection is
-  being compared against.
-- **Start Over** clears the decklists, the collection, printing picks and the
-  last breakdown, but keeps Arena/Paper mode. If there is work to lose it asks first, and where
-  sign-in is configured it offers to save before clearing.
-
 ### Collection — `/collection`
 
-Build the collection the Pack Planner compares against, with a picture of every
-card.
+Your cards, with a picture of every one. Only the collection — comparing decks
+against it is Deck Check's job.
 
 - Add cards by name with suggestions as you type, or paste a list or an Arena
-  export.
+  export. Every name is checked against the card data first; lines that aren't
+  cards are listed with "did you mean" suggestions, and cards from an older
+  collection that aren't recognised can be removed in one click.
 - A tile per card with +/− counts, plus filter, sort and pagination.
 - Copies across printings always merge into one line — whether pasted, saved,
   loaded or compared (`lib/collectionText.ts`).
-- Shares one collection and one Arena/Paper mode with the Pack Planner through
-  localStorage, including which saved collection is open (`lib/openCollection.ts`).
+- Kept in localStorage (`mtgpp:collection`, its Arena/Paper type in
+  `mtgpp:collection-mode`, and which saved collection it came from in
+  `mtgpp:collection-open` — `lib/openCollection.ts`). Deck Check reads it as
+  its default collection and never writes it.
 - Signed in: save to your profile as Arena or Paper; a saved collection's
   **Edit** button on the profile opens it here.
-- **Compare with a deck**: pick a saved deck, paste one, or arrive with
-  `?deck=<id>` / a hand-off from the Decks page. The deck's names are resolved
-  through `/api/card-resolve` so spellings match the collection; it shows deck
-  qty vs owned and the shortfall per card, pictures of what's missing, and a
-  copyable missing list. Basic lands are not counted. Read-only: it never
-  changes the collection.
+- **Check decks against it** → `/deck-check?source=collection`, which makes
+  Deck Check use this collection even if the tab had chosen another.
+- Old `/collection?deck=<id>` links (the "Compare with a deck" panel this page
+  used to have) are redirected to `/deck-check?deck=<id>` in `next.config.js`.
 
-### Standard Rotation — `/rotation`
+### Deck Check — `/deck-check`
 
-Paste a Standard list, or an MTGGoldfish link, to see which cards leave at the
-next rotation.
+Decks against a collection: what each deck is missing, and what it costs to
+get. Formerly the Pack Planner at `/planner`, which now permanently redirects
+here with its query string (`next.config.js`).
 
-A card only counts as rotating if **every** Standard-legal printing it has is in
-a set that's leaving. If it's also printed in a set that's sticking around —
-including one that hasn't released yet — it stays.
+- **Decks box** — a list of deck slots (`lib/deckSlots.ts`), each labelled
+  *Saved deck* or *Pasted*:
+  - **Add existing deck** (signed in) picks from your saved decks; the slot
+    shows the deck's name and format and links to it on the Decks page.
+  - **+ New deck** adds a slot to paste a list or an MTGGoldfish deck/archetype
+    link into (Analyze imports the link).
+  - A pasted slot has **Save to Decks** (name + format, always a new deck; a
+    name you already use is a 409, shown as such). After saving, the slot is
+    linked to that deck.
+  - A saved deck edited in its slot is marked *Edited* and offers **Save
+    changes to deck** (PUT, only on that click) or **Save as new deck**.
+  - Signed out, one sign-in prompt covers adding and saving; without auth
+    configured none of it renders.
+- **Collection box** — always says what's being checked against, its card
+  count and the mode (`lib/deckCheckCollection.ts`):
+  - **Use my Collection page collection** — the default, read from
+    `mtgpp:collection`.
+  - **Load collection** (signed in) — a saved collection, grouped Arena /
+    Paper; Deck Check switches to its mode.
+  - **New (paste)** — paste one, with **Save to Collection** (name + Arena or
+    Paper, always a new collection, 409 on a clash).
+  - Loading or pasting here doesn't change the Collection page's collection.
+    The choice is kept in `sessionStorage` (`mtgpp:deck-check-collection`) so
+    it survives a reload in that tab. Switching away from an unsaved pasted
+    collection asks first.
+- **Results**:
+  - **What each deck is missing** — per deck, the cards you don't own with
+    pictures, need / own / short counts, a copyable missing list and the full
+    card table. Maindeck and sideboard count together; basic lands are not
+    counted. Names are resolved through `/api/card-resolve` so spellings match
+    the collection (`lib/deckShortfall.ts`, `app/components/DeckShortfall.tsx`).
+  - **Arena Mode** — wildcards you'd spend by rarity, and what's missing grouped
+    by set so you can see which packs cover the most ground.
+  - **Paper Mode** — the shortfall priced and formatted for TCGPlayer's mass
+    entry, with a card count to check your cart against.
+  - Pick the exact printing and art for any card in the combined breakdown.
+- **Saved comparisons** (signed in) — the decks' text, the collection and the
+  mode together. Opening one (from Deck Check or `?analysis=` from the
+  profile) puts back its decks as pasted slots, its collection if it has one —
+  otherwise the one in use is kept — and its mode, then **runs the analysis
+  automatically**, with a summary banner saying what was opened and which
+  collection is being compared against.
+- `?deck=<id>` and the Decks page's hand-off add the deck alongside the slots
+  already there (first empty slot, else a new one) and run once; a saved deck
+  that's already in a slot isn't added twice — that slot is updated and the
+  banner says so. `?collection=<id>` loads a saved collection.
+- The slots are kept in `sessionStorage` (`mtgpp:deck-check-slots`,
+  `lib/deckSlots.ts`) so they survive a reload and signing in.
+- **Start Over** clears the slots, any pasted collection and the results, and
+  goes back to the Collection page collection. If there is work to lose it asks
+  first, and where sign-in is configured it offers to save before clearing.
 
 ### Sideboard Planner — `/sideboard`
 
@@ -142,12 +168,22 @@ Build a matchup-by-matchup sideboard guide, then print it on one page.
   the decklist, splits it and sets the format if supported. With a guide
   already in progress it asks first rather than replacing anything.
 
+### Standard Rotation — `/rotation`
+
+Paste a Standard list, or an MTGGoldfish link, to see which cards leave at the
+next rotation.
+
+A card only counts as rotating if **every** Standard-legal printing it has is in
+a set that's leaving. If it's also printed in a set that's sticking around —
+including one that hasn't released yet — it stays.
+
 ### Profile — `/profile`
 
-Only exists when auth is configured. Lists saved decks (with Open, the three
-send-to links, Duplicate and Delete), sideboard guides, collections
-(grouped Arena / Paper) and comparisons, each of which can be opened, edited,
-duplicated or deleted; and deletes the whole account on request.
+Only exists when auth is configured. Lists saved decks (Open, Check in Deck
+Check, Sideboard guide, Duplicate, Delete), sideboard guides, collections
+(grouped Arena / Paper; Edit, Use in Deck Check) and comparisons (Open in Deck
+Check), each of which can also be duplicated or deleted; and deletes the whole
+account on request.
 
 ---
 
@@ -176,21 +212,22 @@ daily — **estimates, not live quotes**.
 ```
 app/
   page.tsx              landing page describing each tool
-  planner/              Pack Planner
   decks/                Decks
   collection/           Collection
-  rotation/             Standard Rotation
+  deck-check/           Deck Check (was /planner; redirected in next.config.js)
   sideboard/            Sideboard Planner
+  rotation/             Standard Rotation
   profile/              saved decks, guides, collections, comparisons (auth only)
   signin/               Google sign-in (auth only)
   about/ privacy/ report/
   components/           shared client components
   api/
-    analyze/            Pack Planner comparison
+    analyze/            Deck Check's combined comparison
     rotation/           rotation check
     import-deck/        MTGGoldfish deck or archetype link -> decklist
     archetypes/         live metagame: { format, limit, period } -> name, share, url
     card-search/        card-name suggestions for the Collection page
+    card-resolve/       official spelling for card names (Collection, Deck Check)
     card-images/        card pictures by name, from the bundled data
     decks/ guides/ collections/ analyses/
                         saved items: list, create, get, update, delete, [id]/copy
@@ -206,8 +243,12 @@ lib/
   deckText.ts           saved-deck normal form, formats, validation
   decks.ts              saved-deck queries (decks table)
   deckHandoff.ts        passing an unsaved deck between pages via sessionStorage
+  deckSlots.ts          Deck Check's deck slots: saved or pasted, edited or not
+  deckShortfall.ts      one deck's missing cards against a collection
+  deckCheckCollection.ts
+                        which collection Deck Check is using, kept per tab
   collectionText.ts     merges copies of a card across printings into one line
-  openCollection.ts     the collection shared by Pack Planner and Collection page
+  openCollection.ts     the Collection page's collection keys, which Deck Check reads
   formats.ts            supported formats, metagame periods, archetype limits
   archetypeMatch.ts     matches a matchup name to its closest archetype
   printFit.ts           sizes the printed sideboard sheet to fill one page

@@ -17,7 +17,7 @@ export interface DeckSections {
  *
  * This is deliberately separate from lib/deckParser's parseDecklist, which
  * treats a blank line as "a second deck" and merges everything together —
- * correct for the Pack Planner, wrong here, where the whole point is keeping
+ * correct for Deck Check's analysis, wrong here, where the whole point is keeping
  * the two halves apart.
  *
  * Two conventions are supported, because the app accepts lists from both

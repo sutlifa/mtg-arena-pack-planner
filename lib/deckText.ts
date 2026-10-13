@@ -92,9 +92,9 @@ export function deckCounts(text: string): { main: number; side: number } {
 }
 
 /**
- * The deck as ONE Pack Planner deck box: every line, no blank ones.
+ * The deck as ONE Deck Check slot: every line, no blank ones.
  *
- * The planner reads a blank line inside a box as the start of a second deck
+ * The analysis reads a blank line inside a slot as the start of a second deck
  * (lib/deckParser), and merges separate decks by taking the larger count of
  * each card. Handed the normalised text as-is, a card with two copies in the
  * maindeck and two in the sideboard would be costed at two, not four. With
@@ -110,8 +110,8 @@ export function plannerDeckText(text: string): string {
 
 /**
  * What to say when text has no card lines in it. One string for the Decks
- * page, the Collection page's comparison and the API, so all three explain
- * the same problem the same way.
+ * page, Deck Check's slots and per-deck view, and the API, so they all
+ * explain the same problem the same way.
  */
 export const NO_CARDS_MESSAGE = 'No cards found in that list — use one card per line, like "4 Lightning Bolt".';
 

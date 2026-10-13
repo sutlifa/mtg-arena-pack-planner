@@ -69,7 +69,8 @@ ALTER TABLE collections DROP CONSTRAINT IF EXISTS collections_user_id_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS collections_user_name_mode_key
   ON collections (user_id, name, arena_mode);
 
--- A saved Pack Planner comparison: the decklists and collection that went in,
+-- A saved Deck Check comparison (Deck Check was once the Pack Planner, which
+-- is why the table is saved_analyses): the decklists and collection that went in,
 -- plus the mode they were run under.
 --
 -- Only the inputs are stored, never the computed breakdown. Prices, Arena
@@ -96,8 +97,8 @@ CREATE INDEX IF NOT EXISTS saved_analyses_user_idx
 -- format it is for.
 --
 -- Stored as normalised text rather than card rows, for the same reason as
--- collections: every tool that reads a deck (the Pack Planner, the Sideboard
--- Planner's split, the Collection page's "what am I missing") already parses
+-- collections: every tool that reads a deck (Deck Check's analysis and its
+-- per-deck "what am I missing", the Sideboard Planner's split) already parses
 -- text, and a deck is only ever read and written whole by its one owner.
 -- "Normalised" means lib/deckText's form -- a "Deck" section and an optional
 -- "Sideboard" section, one "qty name" line per card, set codes removed -- so

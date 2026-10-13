@@ -24,7 +24,12 @@
  * whether to trust what was read, the same split as lib/openCollection.
  */
 
-export type HandoffTarget = "planner" | "collection" | "sideboard";
+/**
+ * The tools a deck can be sent to. The Collection page used to be one ("what
+ * am I missing?"); that comparison now lives only in Deck Check, so the
+ * Collection page no longer receives decks at all.
+ */
+export type HandoffTarget = "deckCheck" | "sideboard";
 
 export interface HandoffDeck {
     /** The saved row it came from, or null for an unsaved deck. */
@@ -35,16 +40,28 @@ export interface HandoffDeck {
 }
 
 export const HANDOFF_PATHS: Record<HandoffTarget, string> = {
-    planner: "/planner",
-    collection: "/collection",
+    deckCheck: "/deck-check",
     sideboard: "/sideboard",
 };
 
 /** Long enough for a slow page load; short enough not to haunt a later visit. */
 export const HANDOFF_MAX_AGE_MS = 5 * 60 * 1000;
 
+/**
+ * The sessionStorage key a target's hand-off waits under.
+ *
+ * Deck Check keeps the "planner" suffix it had as the Pack Planner. A hand-off
+ * only lives for a few minutes, so renaming it would cost almost nothing — but
+ * it would cost something for a tab that clicked "send" on the old build and
+ * loaded the new one, and the key is never shown to anyone.
+ */
+const HANDOFF_KEY_SUFFIX: Record<HandoffTarget, string> = {
+    deckCheck: "planner",
+    sideboard: "sideboard",
+};
+
 export function handoffKey(target: HandoffTarget): string {
-    return `mtgpp:deck-handoff:${target}`;
+    return `mtgpp:deck-handoff:${HANDOFF_KEY_SUFFIX[target]}`;
 }
 
 export function encodeHandoff(deck: HandoffDeck, now: number): string {

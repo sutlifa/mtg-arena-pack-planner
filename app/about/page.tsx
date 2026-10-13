@@ -35,9 +35,10 @@ export default function AboutPage() {
                             owns two of the four copies and has a stack of wildcards sitting unspent.
                         </p>
                         <p>
-                            The Pack Planner closes that gap. You paste in one or more decklists and the
-                            collection you already own, and it subtracts one from the other. What comes
-                            back is only the part you still need to acquire, priced and counted.
+                            Deck Check closes that gap. You give it one or more decks and the collection
+                            you already own, and it subtracts one from the other. What comes back is only
+                            the part you still need to acquire — card by card for each deck, then priced
+                            and counted.
                         </p>
                         <p>
                             The other tools grew out of the same idea — answering a concrete question
@@ -52,50 +53,43 @@ export default function AboutPage() {
                         <div>
                             <h3 className="font-title text-xl mb-1">Decks</h3>
                             <p>
-                                Somewhere to keep your own decklists. Paste one — from Arena, MTGGoldfish
-                                or anywhere with one card per line — pick its format, and it&apos;s split
-                                into maindeck and sideboard. From there it goes straight to the other
-                                tools: checked against your collection on the Collection page, which
-                                lists exactly the cards and copies you&apos;re missing; costed in the Pack
-                                Planner, which runs the comparison as soon as it arrives; or loaded into
-                                the Sideboard Planner as the deck a guide is built from. All of that
-                                works signed out; signing in lets you save decks to come back to.
-                            </p>
-                        </div>
-                        <div>
-                            <h3 className="font-title text-xl mb-1">Pack Planner</h3>
-                            <p>
-                                Compares one or more decks — pasted, or pulled from an MTGGoldfish link —
-                                against your collection. In Arena Mode it reports the wildcards you&apos;d
-                                spend by rarity and groups what&apos;s missing by set, so you can see which
-                                packs cover the most ground. In Paper Mode it prices the shortfall and
-                                formats it for TCGPlayer&apos;s mass entry. Either way you get a paste-ready
-                                list with a card count to check your cart against, and you can pick the
-                                exact printing and art for each card.
+                                Somewhere to keep and edit your own decklists. Paste one — from Arena,
+                                MTGGoldfish or anywhere with one card per line — pick its format, and
+                                it&apos;s split into maindeck and sideboard. When it&apos;s ready, it goes
+                                straight to Deck Check, which checks it against your collection as soon
+                                as it arrives, or to the Sideboard Planner as the deck a guide is built
+                                from.
+                                {accounts
+                                    ? " All of that works signed out; signing in lets you save decks to come back to."
+                                    : ""}
                             </p>
                         </div>
                         <div>
                             <h3 className="font-title text-xl mb-1">Collection</h3>
                             <p>
-                                Builds the collection the Pack Planner compares against, with a picture of
-                                every card. Add cards by name, with suggestions as you type, or paste a
-                                list or an Arena export; then adjust counts, filter and sort. Copies of a
-                                card across different printings always merge into one line — here, in
-                                the Pack Planner, and in anything you save or load — so an Arena
-                                export&apos;s dozen lines for one card become one. It&apos;s the same collection,
-                                in the same Arena or Paper mode, that the Pack Planner uses. Its
-                                &quot;Compare with a deck&quot; panel shows what any deck — saved, pasted or
-                                sent from the Decks page — needs that the collection doesn&apos;t have.
+                                Your cards, with a picture of every one. Add cards by name, with
+                                suggestions as you type, or paste a list or an Arena export; then adjust
+                                counts, filter and sort. Copies of a card across different printings
+                                always merge into one line — here, in Deck Check, and in anything you
+                                save or load — so an Arena export&apos;s dozen lines for one card become
+                                one. It&apos;s the collection Deck Check uses unless you pick another there.
                             </p>
                         </div>
                         <div>
-                            <h3 className="font-title text-xl mb-1">Standard Rotation</h3>
+                            <h3 className="font-title text-xl mb-1">Deck Check</h3>
                             <p>
-                                Shows which cards in a Standard list, or an MTGGoldfish link, survive the
-                                next rotation. A card only counts as rotating if <em>every</em>{" "}
-                                Standard-legal printing it has is in a set that&apos;s leaving — if it&apos;s
-                                also printed in a set that&apos;s sticking around, including one that
-                                hasn&apos;t released yet, it stays.
+                                The one place that compares decks with a collection.{" "}
+                                {accounts
+                                    ? "Add decks you've saved or paste new ones — or pull one from an MTGGoldfish link — and check them against your Collection page collection, one of your saved collections, or one you paste."
+                                    : "Paste decks — or pull one from an MTGGoldfish link, or send one from the Decks page — and check them against your Collection page collection or one you paste."}{" "}
+                                For each deck it shows the cards you&apos;re
+                                missing, with pictures, how many you own and how many you&apos;re short,
+                                and a list to copy. In Arena Mode it adds up the wildcards you&apos;d spend
+                                by rarity and groups what&apos;s missing by set, so you can see which packs
+                                cover the most ground. In Paper Mode it prices the shortfall and formats
+                                it for TCGPlayer&apos;s mass entry. Either way you get a paste-ready list
+                                with a card count to check your cart against, and you can pick the exact
+                                printing and art for each card. It used to be called the Pack Planner.
                             </p>
                         </div>
                         <div>
@@ -117,6 +111,16 @@ export default function AboutPage() {
                                 different one or paste your own link if the guess is wrong. Export PDF
                                 prints the whole guide on one page for your deck box, with the text
                                 sized to fill it.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 className="font-title text-xl mb-1">Standard Rotation</h3>
+                            <p>
+                                Shows which cards in a Standard list, or an MTGGoldfish link, survive the
+                                next rotation. A card only counts as rotating if <em>every</em>{" "}
+                                Standard-legal printing it has is in a set that&apos;s leaving — if it&apos;s
+                                also printed in a set that&apos;s sticking around, including one that
+                                hasn&apos;t released yet, it stays.
                             </p>
                         </div>
                     </div>

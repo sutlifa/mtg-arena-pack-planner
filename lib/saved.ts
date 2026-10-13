@@ -2,7 +2,8 @@ import { sql } from "./db";
 import { copyName } from "./copyName";
 
 /**
- * Saved collections and saved comparisons, for the Pack Planner.
+ * Saved collections and saved comparisons — the Collection page and Deck
+ * Check save and load collections, and Deck Check saves comparisons.
  *
  * Same rules as lib/guides: the owner's userId is always in the WHERE clause
  * and always comes from the server-side session, never from a request body.

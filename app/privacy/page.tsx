@@ -15,7 +15,7 @@ export const metadata = {
  * deploy and claim the policy changed when it didn't, which makes the date
  * meaningless to anyone checking whether something is new.
  */
-const LAST_UPDATED = "October 11, 2026";
+const LAST_UPDATED = "October 12, 2026";
 
 /**
  * A cookie name that wraps only where a reader would expect it to.
@@ -141,10 +141,10 @@ export default function PrivacyPage() {
                         <p>
                             A few things are saved in your browser&apos;s{" "}
                             <code className="px-1 rounded bg-parchment">localStorage</code> so you don&apos;t
-                            have to re-enter them next visit: the collection shared by the Pack Planner and
-                            the Collection page (under{" "}
+                            have to re-enter them next visit: the collection you build on the Collection
+                            page, which Deck Check also reads (under{" "}
                             <code className="px-1 rounded bg-parchment">mtgpp:collection</code>), whether
-                            you&apos;re working in Arena or Paper mode (
+                            it&apos;s an Arena or a Paper collection (
                             <code className="px-1 rounded bg-parchment">mtgpp:collection-mode</code>),
                             {accounts ? (
                                 <>
@@ -164,22 +164,48 @@ export default function PrivacyPage() {
                             (read and removed) by the receiving page, ignored after
                             five minutes. If that changes, change this. */}
                         <p>
-                            When you send a deck from the Decks page to another tool, the list is passed
-                            to that page through your browser&apos;s{" "}
+                            When you send a deck from the Decks page to Deck Check or the Sideboard
+                            Planner, the list is passed to that page through your browser&apos;s{" "}
                             <code className="px-1 rounded bg-parchment">sessionStorage</code> (under a key
                             starting <code className="px-1 rounded bg-parchment">mtgpp:deck-handoff:</code>
                             ), never in the page&apos;s web address. The receiving page removes it as soon
                             as it reads it, it is ignored if it&apos;s more than a few minutes old, and the
                             browser discards it when the tab closes.
                         </p>
+                        {/* Written against lib/deckSlots (encodeSlots) and
+                            lib/deckCheckCollection: both sessionStorage. Slots are
+                            removed when they're all empty (Start Over); the
+                            collection only when it isn't the Collection page's,
+                            removed when Deck Check goes back to that one. */}
+                        <p>
+                            The decks you put in Deck Check&apos;s slots are kept in{" "}
+                            <code className="px-1 rounded bg-parchment">sessionStorage</code> as well (under{" "}
+                            <code className="px-1 rounded bg-parchment">mtgpp:deck-check-slots</code>
+                            {accounts ? ", along with which of your saved decks each slot came from" : ""}
+                            ), so they survive reloading the page
+                            {accounts ? " or signing in" : ""}. They are removed when you press{" "}
+                            <strong>Start Over</strong> or empty every slot, and the browser discards them
+                            when the tab closes.
+                        </p>
+                        <p>
+                            If you{" "}
+                            {accounts
+                                ? "load one of your saved collections into Deck Check, or paste a collection there"
+                                : "paste a collection into Deck Check"}
+                            , it is kept in <code className="px-1 rounded bg-parchment">sessionStorage</code>{" "}
+                            too (under{" "}
+                            <code className="px-1 rounded bg-parchment">mtgpp:deck-check-collection</code>),
+                            so it survives reloading the page. It doesn&apos;t replace your Collection page
+                            collection, it is removed when you switch Deck Check back to that one, and the
+                            browser discards it when the tab closes.
+                        </p>
                         <p>
                             That data stays on your device. It is not tied to any identifier, and this site
-                            cannot read it on any other device. Clearing it is immediate: the{" "}
-                            <strong>Clear</strong> button next to the Pack Planner&apos;s collection box,{" "}
+                            cannot read it on any other device. Clearing it is immediate:{" "}
                             <strong>New deck</strong> on the Decks page, or <strong>Start Over</strong> in
-                            the Pack Planner, Collection page or Sideboard Planner, empties what you
-                            entered. Clearing site data in your browser removes all of it, including which
-                            mode and format you last used.
+                            Deck Check, the Collection page or the Sideboard Planner, empties what you
+                            entered there. Clearing site data in your browser removes all of it, including
+                            which mode and format you last used.
                         </p>
                     </div>
                 </section>
@@ -320,10 +346,19 @@ export default function PrivacyPage() {
                         <p>
                             To compare a deck against your collection, the text you&apos;ve entered has to reach
                             the server that does the matching. When you press Analyze or Check Rotation, your
-                            decklists — and, in the Pack Planner, your collection text — are sent to this
-                            site&apos;s own API so the comparison can be computed. Opening a saved comparison,
-                            or sending a deck to the Pack Planner, does the same straight away, without
-                            the click.
+                            decklists — and, in Deck Check, the collection you&apos;re checking against —
+                            are sent to this site&apos;s own API so the comparison can be computed. Opening a
+                            saved comparison, or sending a deck to Deck Check, does the same straight away,
+                            without the click.
+                        </p>
+                        {/* DeckShortfall: card-resolve with the deck's names
+                            (suggest: false), then card-images for the missing
+                            ones. The arithmetic is lib/deckShortfall, client-side. */}
+                        <p>
+                            After an analysis, Deck Check&apos;s &quot;What each deck is missing&quot;
+                            sends each deck&apos;s card names to the server, to match their spelling to your
+                            collection&apos;s, and asks for pictures of the cards you&apos;re missing. The
+                            per-deck comparison itself happens in your browser.
                         </p>
                         <p>
                             That text is used to build the response and then discarded. Running a comparison
@@ -354,10 +389,7 @@ export default function PrivacyPage() {
                             Those requests carry only what you typed or the card names, and the app
                             keeps none of it — though a suggestion request puts what you typed in its web
                             address, so it appears in Vercel&apos;s standard request logs like any other
-                            address. Its &quot;Compare with a deck&quot; panel sends the deck&apos;s card names
-                            the same way, to match their spelling to your collection&apos;s, and asks for
-                            pictures of the cards you&apos;re missing; the comparison itself happens in
-                            your browser.
+                            address.
                         </p>
                         {/* DeckBuilder: deckSections runs client-side; the only
                             requests are card-images (debounced, names only),
@@ -388,12 +420,13 @@ export default function PrivacyPage() {
                         {accounts && (
                             <p>
                                 While you&apos;re signed in, a few requests read or change your own saved
-                                work: the Pack Planner fetches the list of your saved collections and
-                                comparisons when it opens, and the Decks page and the Collection
-                                page&apos;s &quot;Compare with a deck&quot; panel fetch the list of your saved
-                                decks, so they&apos;re ready to load; opening a saved deck, guide,
-                                collection or comparison fetches it; and pressing Save, renaming a deck
-                                or guide, duplicating or deleting anything sends that change.
+                                work: Deck Check fetches the list of your saved comparisons when it
+                                opens, and the list of your saved decks or collections when you open its
+                                &quot;Add existing deck&quot; or &quot;Load collection&quot;; the Decks page
+                                fetches the list of your saved decks, so they&apos;re ready to load;
+                                opening a saved deck, guide, collection or comparison fetches it; and
+                                pressing Save, renaming a deck or guide, duplicating or deleting anything
+                                sends that change.
                             </p>
                         )}
                     </div>
@@ -413,15 +446,16 @@ export default function PrivacyPage() {
                             </li>
                             {/* What @vercel/analytics records per view, per Vercel's docs.
                                 The query strings on this site's pages are only saved-item
-                                ids (?guide=, ?collection=, ?analysis=, ?deck=) and /signin's
-                                ?callbackUrl= path — never anything typed. With auth off
-                                none of those links exist (/profile and /signin 404), so
-                                that branch says only what is true either way. */}
+                                ids (?guide=, ?collection=, ?analysis=, ?deck=), /signin's
+                                ?callbackUrl= path, and the fixed ?source=collection on the
+                                Collection page's link to Deck Check — never anything typed.
+                                With auth off only the last exists (/profile and /signin 404),
+                                so that branch says only what is true either way. */}
                             <li>
                                 <strong>Vercel Web Analytics</strong> — records each page view: the page&apos;s
                                 address (including anything after a &quot;?&quot;, which on this site
                                 {accounts
-                                    ? " is at most the number of a saved item you opened or the page to return to after signing in"
+                                    ? " is at most the number of a saved item you opened, the page to return to after signing in, or a fixed word telling Deck Check which collection to use"
                                     : " never contains anything personal"}
                                 ), the page you came from, and the time. From the request, Vercel
                                 works out your country, browser, operating system and device type, and counts

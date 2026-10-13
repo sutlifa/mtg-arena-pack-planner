@@ -13,9 +13,9 @@ const RESOLVE_CHUNK = 500;
  * Every card in the collection is a real card stored under its real name —
  * the add box, a paste and an Arena export all go through here first, and
  * nothing that comes back null is added. That's what lets every tile have a
- * picture and every name match the Pack Planner's card data exactly. The
- * Collection page's deck comparison resolves the deck's names through the
- * same call, so "Lim-Dul's Vault" in a deck meets "Lim-Dûl's Vault" in the
+ * picture and every name match Deck Check's card data exactly. Deck Check's
+ * per-deck view (DeckShortfall) resolves each deck's names through the same
+ * call, so "Lim-Dul's Vault" in a deck meets "Lim-Dûl's Vault" in the
  * collection instead of reading as missing.
  *
  * `suggest: false` when only the verdict matters (checking a collection that

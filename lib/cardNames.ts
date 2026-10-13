@@ -13,7 +13,7 @@ import { cleanName } from "./collectionText";
  * names. Whatever was typed or pasted — "lightning bolt", "Lim-Dul's Vault",
  * "aether vial", "Fable of the Mirror Breaker", a double-faced card's back
  * face, an Arena-only name — is resolved here, against the same bundled card
- * data the Pack Planner uses, so the answer costs no outbound request.
+ * data Deck Check's analysis uses, so the answer costs no outbound request.
  *
  * Server-only (it reads lib/data/cards-min.json through cardDataStore). The
  * index is built once per server process; after that every lookup is a Map
@@ -163,7 +163,7 @@ function exact(text: string): string | null {
  *      a real card is written front-first, so a back side on its own after
  *      something unrecognised is not evidence of anything. (A back face typed
  *      alone, "Reflection of Kiki-Jiki", is still found in step 1.)
- *   3. lib/serverAliasMap, the Pack Planner's Arena aliases, via lookupCard
+ *   3. lib/serverAliasMap, the analysis's Arena aliases, via lookupCard
  *      — but only when the alias map has an entry for exactly this name.
  *
  * Deliberately NOT a bare lookupCard fallback. Its normalizeName strips

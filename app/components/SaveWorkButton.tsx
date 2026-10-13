@@ -3,20 +3,25 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 
-/** A saved row the planner currently has open. */
+/** A saved row a page currently has open. */
 export type SavedRef = { id: number; name: string; arena: boolean } | null;
 
 export type SaveKind = "collection" | "comparison";
 
 /**
- * Save the Pack Planner's inputs — one button, plus the inline name form it
- * opens when there is nothing to update.
+ * Save a collection or a Deck Check comparison — one button, plus the inline
+ * name form it opens when there is nothing to update.
  *
- * Split out of PackPlannerSaves so the Start Over dialog can offer "save and
- * clear" using the *same* save path as the buttons above it. The Sideboard
- * Planner already does exactly this with SaveToProfileButton; a second,
- * dialog-only implementation would be two places to fix every time a limit
- * or an error message changes.
+ * Shared by the Collection page (its Save and its Start Over dialog), Deck
+ * Check's "Save to Collection" for a pasted collection, and Deck Check's
+ * comparisons panel and Start Over dialog, so every one of those goes through
+ * the *same* save path. The Sideboard Planner does exactly this with
+ * SaveToProfileButton; a second, dialog-only implementation would be two
+ * places to fix every time a limit or an error message changes.
+ *
+ * It was PackPlannerSave until the Pack Planner became Deck Check; by then
+ * the Collection page used it as much as the planner did, so the name had
+ * stopped describing it.
  *
  * Only ever rendered where auth is configured: useSession throws without a
  * SessionProvider, and the provider isn't mounted on a deployment without
@@ -27,7 +32,7 @@ export type SaveKind = "collection" | "comparison";
  * flipping a collection's mode, would leave the original behind and quietly
  * write a second row.
  */
-export default function PackPlannerSave({
+export default function SaveWorkButton({
     kind,
     decks,
     collection,
@@ -35,19 +40,27 @@ export default function PackPlannerSave({
     open,
     label,
     allowSaveAsNew = true,
+    createOnly = false,
     variant = "secondary",
-    returnTo = "/planner",
+    returnTo = "/deck-check",
     onSaved,
 }: {
     kind: SaveKind;
     decks: string[];
     collection: string;
-    /** The planner's current Arena/Paper toggle. */
+    /** The page's current Arena/Paper mode. */
     arenaMode: boolean;
     open: SavedRef;
     /** Override the button text — the Start Over dialog uses "Save and clear". */
     label?: string;
     allowSaveAsNew?: boolean;
+    /**
+     * Always save a new row, never update one by name. Deck Check's "Save to
+     * Collection" uses it: it is saving a pasted collection *alongside* the
+     * ones you have, and quietly overwriting "My Arena collection" because
+     * the paste happened to be given the same name would destroy one.
+     */
+    createOnly?: boolean;
     variant?: "primary" | "secondary";
     /** Where signing in from the "Sign in to Save" link comes back to. */
     returnTo?: string;
@@ -120,7 +133,7 @@ export default function PackPlannerSave({
                 // second save: createOnly makes a name clash a 409 instead of
                 // an overwrite of whatever already has that name. With nothing
                 // open it stays the name upsert the form describes.
-                body: JSON.stringify({ ...body(name.trim(), arena), createOnly: open !== null }),
+                body: JSON.stringify({ ...body(name.trim(), arena), createOnly: createOnly || open !== null }),
             });
             const data = await res.json().catch(() => ({}));
 
@@ -237,14 +250,16 @@ export default function PackPlannerSave({
                         ))}
                     </div>
                     <p className="text-xs text-ink/55 mt-1">
-                        Loading it later puts the planner back into this mode.
+                        Loading it in Deck Check later switches to this mode.
                     </p>
                 </div>
 
                 <p className="text-xs text-ink/55">
                     {open
                         ? `This creates a second ${noun} and leaves "${open.name}" as it was.`
-                        : `Reusing a name updates that ${noun} instead of making a second one.`}
+                        : createOnly
+                            ? `This adds a new ${noun}; it never replaces one you already have.`
+                            : `Reusing a name updates that ${noun} instead of making a second one.`}
                 </p>
 
                 {message && (

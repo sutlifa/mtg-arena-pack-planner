@@ -6,7 +6,7 @@ import { isAuthConfigured } from "@/lib/authConfig";
 export const metadata = {
     title: "MTG Planning App",
     description:
-        "Free tools for planning a Magic deck: keep your decklists, see what they cost you to build and what you already own, what rotates out of Standard, and how to sideboard against the field.",
+        "Free tools for planning a Magic deck: keep your decklists and your collection, check what each deck is missing and what it costs to build, what rotates out of Standard, and how to sideboard against the field.",
 };
 
 /**
@@ -14,7 +14,13 @@ export const metadata = {
  *
  * The Pack Planner used to live here, which meant every visitor landed in one
  * specific tool with no sign that the others existed. This page exists to
- * describe what each one is for; the planner moved to /planner.
+ * describe what each one is for; the planner moved to /planner, and later
+ * became Deck Check at /deck-check.
+ *
+ * The cards are in the nav's order and say what each tool is *for*, because
+ * the three that touch decks and cards were once muddled: Decks holds your
+ * decklists, Collection holds your cards, and Deck Check is the only one that
+ * compares the two.
  *
  * Still statically prerendered. isAuthConfigured() is a plain env read, and
  * the one per-visitor part — whether you're signed in — is decided in the
@@ -42,36 +48,20 @@ const TOOLS: Tool[] = [
         name: "Decks",
         art: "/art/banner-rotation.svg",
         tagline: "Where do I keep my lists?",
-        body: "Paste a decklist from Arena, MTGGoldfish or anywhere else, pick its format and see it split into maindeck and sideboard. From there one click sends it to the other tools: check it against your collection to see exactly which cards you're missing, cost it in the Pack Planner, or load it into the Sideboard Planner to start a guide.",
+        body: "Your decklists, kept and edited in one place. Paste one from Arena, MTGGoldfish or anywhere else, pick its format and see it split into maindeck and sideboard, with a picture of each card. When it's ready, one click checks it in Deck Check or loads it into the Sideboard Planner to start a guide.",
         points: [
             "Paste a list or an MTGGoldfish link; maindeck and sideboard split automatically",
-            "See what you're missing from your collection, card by card, with a copyable list",
-            "Send it to the Pack Planner, which runs the comparison straight away",
+            "Check it in Deck Check, which runs straight away against your collection",
             "Start a sideboard guide from it, with the format already set",
         ],
         saves: "Save decks to your profile, then rename, duplicate or reopen them from any device",
-    },
-    {
-        href: "/planner",
-        name: "Pack Planner",
-        art: "/art/banner-planner.svg",
-        tagline: "What will this deck actually cost me?",
-        body: "Paste your decklists, or MTGGoldfish links to them, and the collection you already own, and it subtracts one from the other. Arena Mode reports the wildcards you'd spend by rarity and groups what's missing by set, so you can see which packs cover the most ground. Paper Mode prices the shortfall and formats it for TCGPlayer's mass entry.",
-        points: [
-            "Compare several decks at once",
-            "Wildcard costs and pack recommendations for Arena",
-            "Priced, paste-ready shopping list for paper",
-            "Pick the exact printing and art for each card",
-            "Copies of a card in your collection merge into one line",
-        ],
-        saves: "Save collections and comparisons to your profile; opening a comparison re-runs it",
     },
     {
         href: "/collection",
         name: "Collection",
         art: "/art/banner-planner.svg",
         tagline: "What do I already own?",
-        body: "Build the collection the Pack Planner compares your decks against, one card at a time or by pasting an export, and see a picture of every card in it. Every printing of a card counts together, so an Arena export's scattered lines become one tidy entry per card. It's the same collection, in the same Arena or Paper mode, that the Pack Planner uses — change it in either place and the other sees it.",
+        body: "Your cards, with a picture of every one. Add them one at a time or paste an export; every printing of a card counts together, so an Arena export's scattered lines become one tidy entry per card. This is the collection Deck Check checks your decks against.",
         points: [
             "Add cards by name with suggestions, or paste a list or an Arena export",
             "A picture of every card, with quick +/− counts",
@@ -81,16 +71,19 @@ const TOOLS: Tool[] = [
         saves: "Saves to your profile as Arena or Paper, and opens here from your profile to edit",
     },
     {
-        href: "/rotation",
-        name: "Standard Rotation",
-        art: "/art/banner-rotation.svg",
-        tagline: "What am I about to lose?",
-        body: "Paste a Standard list, or an MTGGoldfish link, to see which cards leave the format at the next rotation and which survive. A card only counts as rotating if every Standard-legal printing it has is in a set that's leaving — if it's also printed in a set that's sticking around, including one that hasn't released yet, it stays.",
+        href: "/deck-check",
+        name: "Deck Check",
+        art: "/art/banner-planner.svg",
+        tagline: "What am I missing, and what will it cost me?",
+        body: "Puts your decks and your collection side by side. Paste decks or send them from the Decks page, check them against your Collection page collection or one you paste, and see exactly which cards each deck is missing. Arena Mode adds up the wildcards you'd spend by rarity and groups what's missing by set, so you can see which packs cover the most ground; Paper Mode prices the shortfall and formats it for TCGPlayer's mass entry.",
         points: [
-            "Checks every printing, not just the one you own",
-            "Accounts for sets that haven't released yet",
-            "Flags cards that were never Standard-legal",
+            "What each deck is missing, card by card, with pictures and a copyable list",
+            "Check several decks at once",
+            "Wildcard costs and pack recommendations for Arena",
+            "Priced, paste-ready shopping list for paper",
+            "Pick the exact printing and art for each card",
         ],
+        saves: "Add your saved decks and collections, save pasted ones to Decks or Collection, and save whole comparisons — opening one re-runs it",
     },
     {
         href: "/sideboard",
@@ -107,6 +100,18 @@ const TOOLS: Tool[] = [
             "Prints to one page in three columns, with the text sized to fill it",
         ],
         saves: "Save guides to your profile, rename them in place, and duplicate them",
+    },
+    {
+        href: "/rotation",
+        name: "Standard Rotation",
+        art: "/art/banner-rotation.svg",
+        tagline: "What am I about to lose?",
+        body: "Paste a Standard list, or an MTGGoldfish link, to see which cards leave the format at the next rotation and which survive. A card only counts as rotating if every Standard-legal printing it has is in a set that's leaving — if it's also printed in a set that's sticking around, including one that hasn't released yet, it stays.",
+        points: [
+            "Checks every printing, not just the one you own",
+            "Accounts for sets that haven't released yet",
+            "Flags cards that were never Standard-legal",
+        ],
     },
 ];
 
@@ -129,8 +134,8 @@ export default function HomePage() {
                             <p className="leading-relaxed">
                                 Everything works without an account — no sign-up wall, nothing behind a
                                 paywall. Signing in with Google only adds a profile that saves your
-                                decks, collections, comparisons and sideboard guides, so they follow you to
-                                another device.
+                                decks, collections, Deck Check comparisons and sideboard guides, so they
+                                follow you to another device.
                             </p>
                             <StartHereSignIn />
                         </>

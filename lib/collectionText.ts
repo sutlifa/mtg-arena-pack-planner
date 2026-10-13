@@ -10,8 +10,8 @@
  *     5 Lightning Bolt (2XM) 129
  *     4 Lightning Bolt [STA]
  *
- * Every consumer already treats those as one card — the Pack Planner's
- * analysis merges by name (lib/collectionParser.ts) — so showing them as
+ * Every consumer already treats those as one card — Deck Check's analysis
+ * merges by name (lib/collectionParser.ts) — so showing them as
  * three lines only makes the list harder to read. `mergeCollection` folds
  * them into "12 Lightning Bolt", and `formatCollection` writes the merged
  * list back out as plain "qty name" lines, which every parser accepts.

@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import AuthButton from "./AuthButton";
 
 // In the order you'd use them: your decks, what you own, what you're
-// missing, how to sideboard the deck, and finally what rotates out of it.
+// missing (Deck Check, which compares the two), how to sideboard the deck,
+// and finally what rotates out of it.
 const TABS = [
     { href: "/", label: "Home" },
     { href: "/decks", label: "Decks" },
     { href: "/collection", label: "Collection" },
-    { href: "/planner", label: "Pack Planner" },
+    { href: "/deck-check", label: "Deck Check" },
     { href: "/sideboard", label: "Sideboard Planner" },
     { href: "/rotation", label: "Standard Rotation" },
 ];

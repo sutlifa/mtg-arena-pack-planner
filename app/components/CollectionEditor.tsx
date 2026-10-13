@@ -5,9 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "./HelpTip";
-import PackPlannerSave, { type SavedRef } from "./PackPlannerSave";
-import DeckCompare from "./DeckCompare";
-// Shared with DeckCompare; see there for what a verdict is.
+import SaveWorkButton, { type SavedRef } from "./SaveWorkButton";
+// Shared with Deck Check's per-deck view (DeckShortfall); see there for what
+// a verdict is.
 import { resolveNames } from "./resolveNames";
 import {
     applyVerdicts,
@@ -20,9 +20,9 @@ import {
     type NameVerdict,
 } from "@/lib/collectionText";
 import { MAX_CARD_SEARCH_CHARS } from "@/lib/inputLimits";
-// The same keys the Pack Planner keeps its collection under. One collection,
-// two views of it: edit it here with pictures, and the Pack Planner compares
-// your decks against exactly what you left here — and the other way round.
+// The keys this page keeps its collection under. Deck Check reads the same
+// keys — "your Collection page collection" is its default — but never writes
+// them: this page owns the collection, Deck Check only compares against it.
 // lib/openCollection explains why the open ref carries a fingerprint.
 import {
     COLLECTION_KEY,
@@ -109,8 +109,8 @@ function SavedCollectionLoader({
                     arena: collection.arena_mode,
                 });
                 // The ?collection= link has done its job, so take it out of
-                // the address. Left in, a reload — or Back from the Pack
-                // Planner — would fetch the saved copy again and silently
+                // the address. Left in, a reload — or Back from Deck
+                // Check — would fetch the saved copy again and silently
                 // replace whatever was edited since. Without it the page
                 // restores from localStorage like any other visit, and a
                 // fresh Edit click from the profile still arrives with the
@@ -491,14 +491,17 @@ function CardTile({
 /**
  * Build and edit a collection with pictures of what's in it.
  *
- * The Pack Planner's collection is a text box, which is fine for pasting an
- * export and hard to read or edit card by card — especially an Arena export,
- * which lists every printing of a card on its own line. Here every card is
- * one tile with its art and one count, whatever printings it came from.
+ * A pasted collection is a wall of text, which is fine for an export and hard
+ * to read or edit card by card — especially an Arena export, which lists
+ * every printing of a card on its own line. Here every card is one tile with
+ * its art and one count, whatever printings it came from.
  *
- * It stores the collection in the same place the Pack Planner reads it, as
- * merged "qty name" text, and saves to the same profile collections — so
- * nothing about the planner, its comparisons or saved collections changes.
+ * This page is only the collection. Comparing decks against it — what a deck
+ * is missing, what it costs — is Deck Check's job; the "Compare with a deck"
+ * panel that used to sit at the bottom of this page moved there, so there is
+ * one place that does it. Deck Check reads the collection stored here (as
+ * merged "qty name" text) as its default, and saved collections are the same
+ * profile rows either page can load.
  */
 export default function CollectionEditor({ authEnabled }: { authEnabled: boolean }) {
     const [cards, setCards] = useState<CollectionCard[]>([]);
@@ -540,8 +543,9 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
     const checkGen = useRef(0);
 
     /**
-     * Bring a collection that was already here — from localStorage, a saved
-     * collection, or the Pack Planner's shared text — up to the same standard
+     * Bring a collection that was already here — from localStorage (written
+     * by an older version of this page, or by the Pack Planner before it
+     * became Deck Check), or a saved collection — up to the same standard
      * as anything added now: names that resolve are put under their official
      * spelling (merging where two spellings were one card), and names that
      * don't are marked, not deleted. Spelling is the only thing changed
@@ -579,7 +583,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
             });
     };
 
-    /* ---- persistence, shared with the Pack Planner ---- */
+    /* ---- persistence, read by Deck Check ---- */
 
     // Restored after mount, as the planners do, so server and first client
     // render agree. See the same exception in SideboardPlanner.
@@ -594,7 +598,8 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
             }
             const mode = localStorage.getItem(MODE_KEY);
             if (mode) setArena(mode !== "paper");
-            // Only if it still belongs to that text: the Pack Planner may
+            // Only if it still belongs to that text: something else (an older
+            // tab, a build from before Deck Check stopped writing here) may
             // have replaced the collection since this page last saw it.
             setOpen(decodeOpen(localStorage.getItem(OPEN_KEY), text));
         } catch {
@@ -846,7 +851,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
 
                 <div className="flex flex-wrap items-center gap-3 border-t border-brass/25 pt-4">
                     {authEnabled && (
-                        <PackPlannerSave
+                        <SaveWorkButton
                             kind="collection"
                             decks={[]}
                             collection={text}
@@ -859,11 +864,14 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                             }}
                         />
                     )}
+                    {/* ?source=collection: Deck Check otherwise keeps whatever
+                        collection this tab last chose there, and a button that
+                        says "this collection" has to mean this one. */}
                     <Link
-                        href="/planner"
+                        href="/deck-check?source=collection"
                         className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
                     >
-                        Compare in Pack Planner
+                        Check decks against it
                     </Link>
                     <button
                         type="button"
@@ -875,8 +883,8 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                     </button>
                 </div>
                 <p className="text-xs text-ink/55">
-                    This is the same collection the Pack Planner compares your decks against — change it
-                    here and the planner sees it.
+                    Deck Check compares your decks against this collection unless you load a different
+                    one there — change it here and Deck Check sees it.
                 </p>
             </section>
 
@@ -1087,11 +1095,6 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                 )}
             </section>
 
-            {/* ---- what a deck needs that this collection doesn't have ----
-                Last, and in its own panel, because it only reads the
-                collection: nothing in it adds, removes or saves cards. */}
-            <DeckCompare cards={cards} arena={arena} authEnabled={authEnabled} ready={hydrated} />
-
             {/* ---- start over, with a chance to save first ---- */}
             {confirmClear && (
                 <div
@@ -1108,7 +1111,8 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                             Start over?
                         </h3>
                         <p className="leading-relaxed">
-                            This empties the collection here and in the Pack Planner.
+                            This empties your collection here, and in Deck Check wherever it&apos;s
+                            using this one.
                         </p>
                         <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
                             There&apos;s no undo. Anything you haven&apos;t saved is gone.
@@ -1137,7 +1141,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
                                 Clear without saving
                             </button>
                             {authEnabled && (
-                                <PackPlannerSave
+                                <SaveWorkButton
                                     kind="collection"
                                     decks={[]}
                                     collection={text}

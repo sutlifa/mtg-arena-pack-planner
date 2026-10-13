@@ -29,10 +29,10 @@ function imageOf(card: Images & { raw?: { card_faces?: Images[] } }): string | n
  * Card images for a list of names, for the Sideboard Planner's opponent
  * decklist and the Collection page's tiles.
  *
- * Answered from lib/data/cards-min.json — the same data the Pack Planner
- * uses — rather than from Scryfall's API, so showing a 75-card list costs no
- * outbound requests at all; only the images themselves come from Scryfall's
- * CDN, as they already do on the Pack Planner. Paper printings are preferred,
+ * Answered from lib/data/cards-min.json — the same data Deck Check's
+ * analysis uses — rather than from Scryfall's API, so showing a 75-card list
+ * costs no outbound requests at all; only the images themselves come from
+ * Scryfall's CDN, as they already do in Deck Check's breakdown. Paper printings are preferred,
  * matching what an MTGGoldfish list shows.
  *
  * Unknown names come back as null rather than failing the request: one

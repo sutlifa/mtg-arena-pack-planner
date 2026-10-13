@@ -68,16 +68,17 @@ function readDraft(raw: string | null): Draft {
     }
 }
 
+/**
+ * Where a deck can go from here. This page only edits decks; checking one
+ * against a collection is Deck Check's job. It used to be two buttons —
+ * "Check against my collection", which went to the Collection page, and
+ * "Open in Pack Planner" — for what is now one tool.
+ */
 const SEND_TARGETS: { target: HandoffTarget; label: string; hint: string }[] = [
     {
-        target: "collection",
-        label: "Check against my collection",
-        hint: "What you're missing, card by card, on the Collection page.",
-    },
-    {
-        target: "planner",
-        label: "Open in Pack Planner",
-        hint: "Wildcards or a priced shopping list, run straight away against your collection.",
+        target: "deckCheck",
+        label: "Check in Deck Check",
+        hint: "What you're missing, card by card, plus wildcards or a priced shopping list — run straight away against your collection.",
     },
     {
         target: "sideboard",
@@ -91,8 +92,8 @@ const SEND_TARGETS: { target: HandoffTarget; label: string; hint: string }[] = [
  * other tools.
  *
  * Signed out (or on a deployment without sign-in) everything but saving
- * works — the split, the formats, and all three "send to" actions, which hand
- * the deck over without an account (see lib/deckHandoff). Saving is in
+ * works — the split, the formats, and both "send to" actions, which hand the
+ * deck over without an account (see lib/deckHandoff). Saving is in
  * DeckSaves, rendered only where auth is configured, because it needs
  * useSession.
  */
@@ -663,7 +664,7 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
                                     : "Paste a decklist above to use it in the other tools."}
                     </p>
                 )}
-                <div className="grid sm:grid-cols-3 gap-3">
+                <div className="grid sm:grid-cols-2 gap-3">
                     {SEND_TARGETS.map((s) => (
                         <button
                             key={s.target}

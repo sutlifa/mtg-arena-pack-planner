@@ -84,7 +84,7 @@ export default async function ProfilePage() {
                                                 updated {formatDate(d.updated_at)}
                                             </p>
                                         </div>
-                                        {/* Six actions: wraps onto further lines on a
+                                        {/* Five actions: wraps onto further lines on a
                                             phone rather than widening the row, like
                                             the lists below. */}
                                         <div className="flex flex-wrap items-center gap-1">
@@ -95,16 +95,10 @@ export default async function ProfilePage() {
                                                 Open
                                             </Link>
                                             <Link
-                                                href={`/collection?deck=${d.id}`}
+                                                href={`/deck-check?deck=${d.id}`}
                                                 className="px-3 py-2 rounded text-sm font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
                                             >
-                                                Check collection
-                                            </Link>
-                                            <Link
-                                                href={`/planner?deck=${d.id}`}
-                                                className="px-3 py-2 rounded text-sm font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
-                                            >
-                                                Pack Planner
+                                                Check in Deck Check
                                             </Link>
                                             <Link
                                                 href={`/sideboard?deck=${d.id}`}
@@ -119,10 +113,10 @@ export default async function ProfilePage() {
                                 ))}
                             </ul>
                             <p className="text-xs text-ink/55 leading-relaxed">
-                                Open edits the deck on the Decks page. Check collection shows what
-                                you&apos;re missing on the Collection page; Pack Planner costs it against
-                                your collection straight away; Sideboard guide loads it into the
-                                Sideboard Planner, asking first if a guide is already there.
+                                Open edits the deck on the Decks page. Check in Deck Check shows what
+                                you&apos;re missing and what it costs, against your collection, straight
+                                away; Sideboard guide loads it into the Sideboard Planner, asking first
+                                if a guide is already there.
                             </p>
                         </>
                     )}
@@ -194,14 +188,14 @@ export default async function ProfilePage() {
                             >
                                 Collection
                             </Link>{" "}
-                            page or paste one into the{" "}
+                            page and press <strong>Save Collection</strong>, or paste one into{" "}
                             <Link
-                                href="/planner"
+                                href="/deck-check"
                                 className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
-                                Pack Planner
-                            </Link>
-                            , then press <strong>Save Collection</strong>.
+                                Deck Check
+                            </Link>{" "}
+                            and press <strong>Save to Collection</strong>.
                         </p>
                     ) : (
                         <div className="space-y-5">
@@ -241,10 +235,10 @@ export default async function ProfilePage() {
                                                             Edit
                                                         </Link>
                                                         <Link
-                                                            href={`/planner?collection=${c.id}`}
+                                                            href={`/deck-check?collection=${c.id}`}
                                                             className="px-4 py-2 rounded font-title bg-parchment-dark text-ink hover:bg-brass/20 transition-colors"
                                                         >
-                                                            Use in Pack Planner
+                                                            Use in Deck Check
                                                         </Link>
                                                         <DuplicateSavedButton
                                                             kind="collections"
@@ -265,7 +259,8 @@ export default async function ProfilePage() {
                             <p className="text-xs text-ink/55 leading-relaxed">
                                 Arena and paper collections are kept separately, so the same name can exist
                                 in both. Edit opens it on the Collection page with a picture of every card;
-                                Use in Pack Planner loads it there and switches the planner into its mode.
+                                Use in Deck Check checks your decks against it there, in its mode, without
+                                changing the collection on your Collection page.
                             </p>
                         </div>
                     )}
@@ -276,12 +271,12 @@ export default async function ProfilePage() {
 
                     {analyses.length === 0 ? (
                         <p className="text-ink/75 leading-relaxed">
-                            Nothing saved yet. Add decklists in the{" "}
+                            Nothing saved yet. Check some decks in{" "}
                             <Link
-                                href="/planner"
+                                href="/deck-check"
                                 className="text-brand underline underline-offset-2 hover:text-brand-dark"
                             >
-                                Pack Planner
+                                Deck Check
                             </Link>{" "}
                             and press <strong>Save Comparison</strong>.
                         </p>
@@ -304,10 +299,10 @@ export default async function ProfilePage() {
                                         {/* Wraps like the guides list above. */}
                                         <div className="flex flex-wrap items-center gap-1">
                                             <Link
-                                                href={`/planner?analysis=${a.id}`}
+                                                href={`/deck-check?analysis=${a.id}`}
                                                 className="px-4 py-2 rounded font-title bg-brand text-midnight-light hover:bg-brand-dark transition-colors"
                                             >
-                                                Open
+                                                Open in Deck Check
                                             </Link>
                                             <DuplicateSavedButton kind="analyses" id={a.id} />
                                             <DeleteSavedButton
@@ -320,9 +315,9 @@ export default async function ProfilePage() {
                                 ))}
                             </ul>
                             <p className="text-xs text-ink/55 leading-relaxed">
-                                A comparison stores the decklists, collection and mode you used — not the
-                                result. Prices and Arena availability change, so opening one re-runs the
-                                comparison against today&apos;s data rather than showing a stale answer.
+                                A comparison stores the decklists, collection and mode you checked in Deck
+                                Check — not the result. Prices and Arena availability change, so opening one
+                                re-runs it against today&apos;s data rather than showing a stale answer.
                             </p>
                         </>
                     )}

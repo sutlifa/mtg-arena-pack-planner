@@ -39,6 +39,16 @@ export function sendDeck(target: HandoffTarget, deck: HandoffDeck, opts: { saved
 }
 
 /**
+ * How a deck arrived. `stored` is true when it was just fetched by id, so it
+ * is exactly the saved deck; false for a sessionStorage hand-off, which may
+ * carry a saved deck's id *with* edits that were never saved. Deck Check uses
+ * it to mark a slot as edited from the start; pages that don't care ignore it.
+ */
+export interface Arrival {
+    stored: boolean;
+}
+
+/**
  * Receives a deck on arrival: ?deck=<id> (fetched, so it needs the owner
  * signed in) or the sessionStorage hand-off left by sendDeck.
  *
@@ -64,7 +74,7 @@ export function DeckHandoffLoader({
     /** Which hand-off to take. "decks" is the Decks page, which only opens by id. */
     target: HandoffTarget | "decks";
     ready: boolean;
-    onDeck: (deck: HandoffDeck) => void;
+    onDeck: (deck: HandoffDeck, arrival: Arrival) => void;
     /** isAuthConfigured(), from the server page. Without it there are no saved decks. */
     authEnabled: boolean;
 }) {
@@ -98,7 +108,7 @@ export function DeckHandoffLoader({
                 return;
             }
             const deck = decodeHandoff(raw, Date.now());
-            if (deck) onDeckRef.current(deck);
+            if (deck) onDeckRef.current(deck, { stored: false });
             return;
         }
 
@@ -149,12 +159,15 @@ export function DeckHandoffLoader({
                 const { deck } = await res.json();
                 if (cancelled || typeof deck?.decklist !== "string") return;
 
-                onDeckRef.current({
-                    id: deck.id,
-                    name: deck.name,
-                    format: deck.format ?? null,
-                    decklist: deck.decklist,
-                });
+                onDeckRef.current(
+                    {
+                        id: deck.id,
+                        name: deck.name,
+                        format: deck.format ?? null,
+                        decklist: deck.decklist,
+                    },
+                    { stored: true }
+                );
 
                 // Done with the parameter: left in, a reload or Back would
                 // open the saved copy again over everything done since. The

@@ -3,18 +3,22 @@
 /**
  * Which saved collection the browser's working collection came from.
  *
- * The Pack Planner and the Collection page edit one collection, kept in
- * localStorage under COLLECTION_KEY. When that text was opened from (or saved
- * to) a profile collection, Save should update that row in place — so both
- * pages also need to know *which* row, and they share that under OPEN_KEY.
+ * The Collection page keeps its collection in localStorage under
+ * COLLECTION_KEY. When that text was opened from (or saved to) a profile
+ * collection, Save should update that row in place — so the page also needs
+ * to know *which* row, and keeps that under OPEN_KEY. Deck Check reads all
+ * three keys (it shows "opened from your saved collection X") but never writes
+ * them; it keeps a collection of its own choosing separately
+ * (lib/deckCheckCollection).
  *
- * The danger is the two keys drifting apart. Either page can replace the text
- * — load a different saved collection, Start Over, paste a new export — and a
- * ref left behind from before would then aim Save at the wrong row: the
- * header says "Editing A", the tiles show B, and Save writes B over A. So the
- * ref is never stored alone. It is stored with a fingerprint of the exact text
- * it belongs to, and a reader that finds the text no longer matches treats
- * the ref as gone. Every writer of COLLECTION_KEY rewrites OPEN_KEY alongside
+ * The danger is the two keys drifting apart. The text can be replaced — a
+ * different saved collection loaded, Start Over, a new export pasted, or,
+ * before Deck Check stopped writing here, the Pack Planner doing any of those
+ * in another tab — and a ref left behind from before would then aim Save at
+ * the wrong row: the header says "Editing A", the tiles show B, and Save
+ * writes B over A. So the ref is never stored alone. It is stored with a
+ * fingerprint of the exact text it belongs to, and a reader that finds the
+ * text no longer matches treats the ref as gone. Every writer of COLLECTION_KEY rewrites OPEN_KEY alongside
  * it; the fingerprint is the backstop for whatever doesn't (an older tab, a
  * build from before this existed, a hand-edited devtools value).
  *
@@ -25,7 +29,7 @@
  * what was read.
  */
 
-/** The working collection text, shared by the Pack Planner and the Collection page. */
+/** The Collection page's collection text, which Deck Check also reads. */
 export const COLLECTION_KEY = "mtgpp:collection";
 /** "arena" or "paper" — the mode that collection is being worked in. */
 export const MODE_KEY = "mtgpp:collection-mode";

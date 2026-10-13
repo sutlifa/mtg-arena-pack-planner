@@ -8,9 +8,9 @@ const SHOW_AFTER_PX = 600;
 /**
  * Floating "back to top" control.
  *
- * Lives in the root layout so every page gets it — the Pack Planner and the
+ * Lives in the root layout so every page gets it — Deck Check and the
  * Sideboard Planner both run to several screens once results are in, and the
- * planner in particular can be twenty-five matchups long.
+ * Sideboard Planner in particular can be twenty-five matchups long.
  *
  * Marked sb-noprint so it never lands on the printed sheet.
  */
