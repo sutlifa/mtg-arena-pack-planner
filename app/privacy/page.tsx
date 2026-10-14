@@ -416,14 +416,18 @@ export default function PrivacyPage() {
                             client-side; the only requests are card-images and
                             card-resolve (debounced, names only), card-search from
                             the add boxes (CardNameAdd, GET ?q= — hence the caveat
-                            above), import-deck when a link is pasted or imported,
+                            above), card-images from those boxes for the one
+                            suggestion pointed or arrowed at (POST body, a card
+                            name from the suggestion list, Decks page only),
+                            import-deck when a link is pasted or imported,
                             and the saved-deck calls covered in the signed-in
                             paragraph below. */}
                         <p>
                             The Decks page splits and edits your list in your browser. It sends the
                             server the card names in it, to show their pictures and check each is a
                             real card, what you type into its add boxes, for suggestions (the same
-                            caveat as the Collection page&apos;s), and an MTGGoldfish link when you
+                            caveat as the Collection page&apos;s), the name of a suggestion you point
+                            at, to show its picture, and an MTGGoldfish link when you
                             paste or import one — not the list itself, unless you&apos;re signed in and
                             press Save.
                         </p>

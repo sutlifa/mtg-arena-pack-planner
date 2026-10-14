@@ -337,7 +337,18 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
      */
     const guard = useLeaveGuard({ dirty: Boolean(dirty), onLeavePage: clearStoredDraft });
 
+    /**
+     * The card pinned in the list editor's big picture. Held here, not in
+     * DeckListEditor, for the same reason as `images` below: "Edit as text"
+     * unmounts the editor, and coming back reset the pin to the first card.
+     * A pin on a card the text edit removed is ignored by the editor, so
+     * nothing needs tidying here. Opening another deck or starting a new
+     * one does clear it — a pin is about the deck you were looking at.
+     */
+    const [pinned, setPinned] = useState<string | null>(null);
+
     const applyOpen = (d: SavedDeck, message?: string) => {
+        setPinned(null);
         setDraft({
             text: d.decklist,
             name: "",
@@ -401,6 +412,7 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
     const startNew = () =>
         guard.request({
             run: () => {
+                setPinned(null);
                 setDraft(EMPTY_DRAFT);
                 setView("start");
                 setConfirmDelete(false);
@@ -1038,7 +1050,14 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
 
                         {view === "cards" && (
                             <>
-                                <DeckListEditor deck={sections} onChange={editDeck} images={images} verdicts={verdicts} />
+                                <DeckListEditor
+                                    deck={sections}
+                                    onChange={editDeck}
+                                    images={images}
+                                    verdicts={verdicts}
+                                    pinned={pinned}
+                                    onPinnedChange={setPinned}
+                                />
                                 {!hasCards && !open && (
                                     <p className="text-sm text-ink/70">
                                         Got a list already?{" "}

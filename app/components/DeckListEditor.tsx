@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import CardNameAdd, { type AddProblem } from "./CardNameAdd";
+import { HoverPreview, isHoverPointer, useHoverSpot } from "./CardHoverPreview";
 import { totalCards, type DeckCard, type DeckSections } from "@/lib/deckSections";
 import {
     OTHER_SECTION,
@@ -30,8 +31,18 @@ import type { NameVerdict } from "@/lib/collectionText";
  * It holds no deck of its own. `deck` is split from the page's text and
  * every edit goes back up through `onChange` as whole new sections, which
  * the page turns straight back into that text (lib/deckEdit explains why
- * the text stays the only copy). What it does keep is view state: which
- * card's picture is showing, and each add box's latest complaint.
+ * the text stays the only copy). What it does keep is view state: the hover
+ * picture, the phone's corner card, and each add box's latest complaint.
+ * Which card is pinned is held by the page, like the pictures, so it
+ * survives a trip to "Edit as text" (which unmounts this).
+ *
+ * Pictures come two ways, and keeping them apart is the point. Clicking (or
+ * tapping, or Enter on) a name PINS it: the big picture beside the list shows
+ * that card and stays on it until another name is clicked. Pointing at a name
+ * with a mouse shows a SMALL picture beside the name (CardHoverPreview) and
+ * leaves the pin alone. Hover used to drive the big picture directly, so it
+ * jumped to whatever row the mouse crossed on its way anywhere and never
+ * stayed on the card you'd chosen — the complaint this split answers.
  *
  * Names: everything added through the boxes is a real card under its
  * official name (CardNameAdd checks first). A pasted list is checked by the
@@ -62,7 +73,8 @@ function CardRow({
     section,
     shown,
     verdict,
-    onPreview,
+    onPin,
+    onHoverName,
     onQty,
     onMove,
     onRemove,
@@ -70,9 +82,12 @@ function CardRow({
 }: {
     card: DeckCard;
     section: Section;
+    /** This card is the one in the big picture — pinned, or the default before anything is. */
     shown: boolean;
     verdict: NameVerdict | undefined;
-    onPreview: (tapped: boolean) => void;
+    onPin: () => void;
+    /** The name under a mouse (its button, to place the small picture by), or null when it leaves. */
+    onHoverName: (name: HTMLElement | null) => void;
     onQty: (qty: number) => void;
     onMove: () => void;
     onRemove: () => void;
@@ -92,9 +107,8 @@ function CardRow({
             className={
                 "flex flex-wrap items-center gap-x-1 gap-y-1 px-1.5 py-1 rounded " +
                 (unknown ? "ring-2 ring-red-700/50 " : "") +
-                (shown ? "bg-brass/20" : "hover:bg-brass/10")
+                (shown ? "bg-brass/20 ring-1 ring-brass/60" : "hover:bg-brass/10")
             }
-            onMouseEnter={() => onPreview(false)}
         >
             {/* − and + from sm up. On a phone the row is too narrow for both
                 buttons and a readable name, and the count box does the same
@@ -127,18 +141,39 @@ function CardRow({
                 +
             </button>
 
-            {/* A button, so a tap and Tab move the picture as well as a mouse
-                does — OpponentDeck's pattern. A tap also opens the phone's
-                picture (see `peek` in the editor). */}
+            {/* The pin. A real button, so a tap, a click and Enter or Space
+                on the keyboard all pin the same way, and aria-pressed tells a
+                screen reader which name the big picture is showing. Focus
+                alone no longer moves the picture: tabbing past a row on the
+                way to its count box shouldn't throw away the card you
+                pinned, any more than a mouse passing over it should. A tap
+                also opens the phone's corner picture (`peek` in the editor). */}
             <button
                 type="button"
-                onFocus={() => onPreview(false)}
-                onClick={() => onPreview(true)}
+                aria-pressed={shown}
+                onClick={onPin}
+                // The whole name cell is the hover target, and the small
+                // picture is placed against the whole cell — beside its
+                // right end (over this row's → SB and ×) or its left, never
+                // inside it — so wherever the cursor is on the name, the
+                // picture isn't under it. An earlier version hovered only
+                // the text, which left ~22px of dead space between two
+                // names and blinked the picture off on a slow sweep. -my-1
+                // with py-1 reaches into the row's own padding for the
+                // same reason.
+                onPointerEnter={(e) => {
+                    if (isHoverPointer(e)) onHoverName(e.currentTarget);
+                }}
+                onPointerLeave={() => onHoverName(null)}
                 className={
                     // 5rem, not more: at lg's 1024px each column leaves a row
                     // about 290px, and a wider floor pushed → SB and × onto a
                     // second line on every row. A longer name wraps instead.
-                    "flex-1 min-w-[5rem] text-left text-sm leading-snug [overflow-wrap:anywhere] " +
+                    // The site-wide button:focus outline is kept for the
+                    // keyboard only: after a mouse click it drew a second
+                    // frame inside the pinned row's ring.
+                    "flex-1 min-w-[5rem] -my-1 py-1 self-stretch text-left text-sm leading-snug [overflow-wrap:anywhere] " +
+                    "[&:not(:focus-visible)]:outline-none " +
                     (unknown ? "text-red-700" : "")
                 }
             >
@@ -194,6 +229,8 @@ export default function DeckListEditor({
     onChange,
     images,
     verdicts,
+    pinned,
+    onPinnedChange,
 }: {
     deck: DeckSections;
     onChange: (next: DeckSections) => void;
@@ -201,34 +238,59 @@ export default function DeckListEditor({
     images: Readonly<Record<string, string | null>>;
     /** What /api/card-resolve made of each name, where it's been asked. */
     verdicts: Readonly<Record<string, NameVerdict>>;
+    /**
+     * The clicked card, held by the page so it outlives this editor (see
+     * the top of this file). Null until the first click, when the big
+     * picture shows the deck's first card.
+     */
+    pinned: string | null;
+    onPinnedChange: (name: string | null) => void;
 }) {
-    const [preview, setPreview] = useState<string | null>(null);
+    const setPinned = onPinnedChange;
     /**
      * The phone's picture. Beside the list there's no room under md, so a
      * tap on a name shows its picture in a small corner card instead, until
-     * it's closed or another name is tapped. Hover and focus don't open it —
-     * on a phone neither happens without a tap, and on a desktop the picture
-     * is already beside the list.
+     * it's closed or another name is tapped. It always shows the pinned card
+     * — a tap pins and opens in one go. Hover doesn't open it: on a phone
+     * there is no hover, and on a desktop the picture is already beside the
+     * list.
      */
     const [peek, setPeek] = useState(false);
     // One add box's complaint at a time: adding to the other half, or
     // typing in either, clears it — the newest outcome is the one shown.
     const [problem, setProblem] = useState<{ section: Section; problem: AddProblem } | null>(null);
+    const hover = useHoverSpot();
+    // The big picture's column, for the small picture to keep off. Only
+    // ever read in pointer handlers, when it's on the screen to measure.
+    const panelRef = useRef<HTMLDivElement>(null);
 
     const all = [...deck.maindeck, ...deck.sideboard];
     const firstWithImage = all.find((c) => images[c.name])?.name;
-    // The previewed card only while it's still in the deck. Without this
+    // The pinned card only while it's still in the deck. Without this
     // check a removed card's picture stayed beside an empty list, and the
-    // phone's corner card stayed open on a card that was gone. A move keeps
-    // the name, so the picture simply follows it to the other half; a
-    // rename moves `preview` to the new name (onRename below).
-    const previewInDeck = preview !== null && all.some((c) => c.name === preview);
-    const shown = previewInDeck && images[preview] ? preview : (firstWithImage ?? null);
+    // phone's corner card stayed open on a card that was gone; now the big
+    // picture falls back to the first card with one, or to nothing. A move
+    // keeps the name, so the pin simply follows it to the other half; a
+    // rename moves `pinned` to the new name (onRename below). `pinned` itself
+    // isn't cleared on removal — it's derived around instead, which needs no
+    // effect and is exactly as good.
+    const pinnedInDeck = pinned !== null && all.some((c) => c.name === pinned);
+    // A pinned card stays pinned even while its picture is loading or when
+    // it has none. Falling back to another card there (as the hover-driven
+    // version did) meant a just-added card showed the deck's first card for
+    // half a second and then jumped, and a card with no picture showed a
+    // different card entirely with no sign the click had registered.
+    const shown = pinnedInDeck ? pinned : (firstWithImage ?? null);
     const shownImage = shown ? images[shown] : null;
-    const peekImage = peek && previewInDeck ? images[preview] : null;
+    const peekImage = peek && pinnedInDeck ? images[pinned] : null;
+    // The same "still in the deck" rule for the small picture: a name can
+    // leave the deck while the mouse is still on its row (a count typed down
+    // to 0), and the picture should go with it.
+    const hoverName = hover.spot?.name;
+    const hoverImage = hoverName !== undefined && all.some((c) => c.name === hoverName) ? images[hoverName] : null;
     /** Whatever removed `name` also closes the phone's picture of it. */
     const dropping = (name: string) => {
-        if (name === preview) setPeek(false);
+        if (name === pinned) setPeek(false);
     };
 
     const section = (s: Section) => {
@@ -253,9 +315,16 @@ export default function DeckListEditor({
                                 section={s}
                                 shown={c.name === shown}
                                 verdict={verdicts[c.name]}
-                                onPreview={(tapped) => {
-                                    setPreview(c.name);
-                                    if (tapped) setPeek(true);
+                                onPin={() => {
+                                    setPinned(c.name);
+                                    setPeek(true);
+                                }}
+                                onHoverName={(el) => {
+                                    if (el)
+                                        hover.show(c.name, el.getBoundingClientRect(), {
+                                            avoid: [panelRef.current?.getBoundingClientRect()],
+                                        });
+                                    else hover.hide();
                                 }}
                                 onQty={(qty) => {
                                     if (qty <= 0) dropping(c.name);
@@ -267,7 +336,7 @@ export default function DeckListEditor({
                                     onChange(removeCard(deck, s, c.name));
                                 }}
                                 onRename={(name) => {
-                                    if (preview === c.name) setPreview(name);
+                                    if (pinned === c.name) setPinned(name);
                                     onChange(renameCards(deck, new Map([[c.name, name]])));
                                 }}
                             />
@@ -283,9 +352,19 @@ export default function DeckListEditor({
                     nameLabel={`Card to add to the ${TITLES[s].toLowerCase()}`}
                     problem={problem?.section === s ? problem.problem : null}
                     onProblem={(p) => setProblem(p ? { section: s, problem: p } : null)}
+                    // The deck's pictures, so a suggestion already in the
+                    // deck shows without a lookup — and passing them is what
+                    // turns the suggestion preview on (it's off on the
+                    // Collection page, which shares this box).
+                    previewImages={images}
+                    previewAvoidRef={panelRef}
                     onAdd={(name, qty) => {
                         onChange(addCard(deck, s, name, qty));
-                        setPreview(name);
+                        // A card you just added is the one you want to see.
+                        // This pins it but doesn't open the phone's corner
+                        // card: that opens on a tap, and popping it up over
+                        // the keyboard mid-typing would hide the box.
+                        setPinned(name);
                     }}
                 />
             </div>
@@ -302,8 +381,8 @@ export default function DeckListEditor({
                 {section("maindeck")}
                 {section("sideboard")}
             </div>
-            {/* Beside the list on a wide screen only, pinned while it scrolls. */}
-            <div className="hidden md:block w-[176px] shrink-0 sticky top-4">
+            {/* Beside the list on a wide screen only, stuck in view while it scrolls. */}
+            <div ref={panelRef} className="hidden md:block w-[176px] shrink-0 sticky top-4">
                 {shownImage && (
                     <Image
                         unoptimized
@@ -314,30 +393,38 @@ export default function DeckListEditor({
                         className="w-full h-auto rounded-[4.5%] shadow-card"
                     />
                 )}
+                {shown && shownImage === null && (
+                    <p className="text-sm text-ink/60 [overflow-wrap:anywhere]">No picture for {shown}.</p>
+                )}
             </div>
             {/* The phone's picture: fixed in the corner rather than in the
                 flow, so it neither pushes the list around nor needs room
-                beside it, and it can't widen the page. */}
+                beside it, and it can't widen the page. The bottom-LEFT
+                corner, because ScrollToTop's button owns the bottom-right
+                on every page and sat on top of this card's corner there
+                (the Sideboard Planner's debug tab went left for the same
+                reason). Its × is on the inner corner, away from the edge. */}
             {peekImage && (
-                <div className="md:hidden fixed bottom-3 right-3 z-30 w-36 rounded-[5%] bg-parchment-dark shadow-card p-1.5">
+                <div className="md:hidden fixed bottom-3 left-3 z-30 w-36 rounded-[5%] bg-parchment-dark shadow-card p-1.5">
                     <button
                         type="button"
                         onClick={() => setPeek(false)}
                         aria-label="Close picture"
-                        className="absolute -top-2 -left-2 w-7 h-7 rounded-full bg-parchment text-ink shadow-card leading-none"
+                        className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-parchment text-ink shadow-card leading-none"
                     >
                         ×
                     </button>
                     <Image
                         unoptimized
                         src={peekImage}
-                        alt={preview ?? ""}
+                        alt={pinned ?? ""}
                         width={IMG_W}
                         height={IMG_H}
                         className="w-full h-auto rounded-[4.5%]"
                     />
                 </div>
             )}
+            <HoverPreview spot={hover.spot} src={hoverImage} />
         </div>
     );
 }
