@@ -62,10 +62,35 @@ export function fingerprint(text: string): string {
     return `${text.length}:${hash.toString(36)}`;
 }
 
-/** The OPEN_KEY value for `ref` open on `text`, or null when nothing is open. */
-export function encodeOpen(ref: OpenRef | null, text: string): string | null {
+/**
+ * The OPEN_KEY value for `ref` open on `text`, or null when nothing is open.
+ *
+ * `saved` is the fingerprint of the text as it was last saved or opened —
+ * the Collection page's measure of "unsaved changes", which decides whether
+ * leaving the page asks first. It rides in the same value because it means
+ * nothing without the ref: it is the saved version *of that row*. `text`
+ * follows every edit; `saved` only moves on a save or an open.
+ */
+export function encodeOpen(ref: OpenRef | null, text: string, saved?: string | null): string | null {
     if (!ref || !text) return null;
-    return JSON.stringify({ ref, text: fingerprint(text) });
+    return JSON.stringify({ ref, text: fingerprint(text), ...(saved ? { saved } : {}) });
+}
+
+/**
+ * The saved-version fingerprint stored with the ref, when the ref itself is
+ * still valid for `text` (see decodeOpen). Null when there is none — a value
+ * written before this existed, or nothing open — which the Collection page
+ * reads as "unchanged since it was opened": it can't know otherwise, and
+ * asking about edits nobody made would be worse.
+ */
+export function decodeSaved(raw: string | null, text: string | null): string | null {
+    if (!decodeOpen(raw, text) || !raw) return null;
+    try {
+        const v = JSON.parse(raw);
+        return typeof v?.saved === "string" ? v.saved : null;
+    } catch {
+        return null;
+    }
 }
 
 /**

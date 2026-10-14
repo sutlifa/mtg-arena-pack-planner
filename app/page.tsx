@@ -54,7 +54,7 @@ const TOOLS: Tool[] = [
             "Check it in Deck Check, which runs straight away against your collection",
             "Start a sideboard guide from it, with the format already set",
         ],
-        saves: "Save decks to your profile, then rename, duplicate or reopen them from any device",
+        saves: "Save decks to your profile, open any of them right on the page, and rename or duplicate them — from any device",
     },
     {
         href: "/collection",
@@ -68,7 +68,7 @@ const TOOLS: Tool[] = [
             "Filter, sort and page through a collection of any size",
             "Copies across printings combined into one line",
         ],
-        saves: "Saves to your profile as Arena or Paper, and opens here from your profile to edit",
+        saves: "Saves to your profile as Arena or Paper; open any saved collection right on the page",
     },
     {
         href: "/deck-check",
@@ -99,7 +99,7 @@ const TOOLS: Tool[] = [
             "Each opponent's decklist beside its matchup, with card pictures",
             "Prints to one page in three columns, with the text sized to fill it",
         ],
-        saves: "Save guides to your profile, rename them in place, and duplicate them",
+        saves: "Save guides to your profile, open any of them right on the page, rename them in place, and duplicate them",
     },
     {
         href: "/rotation",
@@ -144,8 +144,9 @@ export default function HomePage() {
                         // nowhere to save to, so the copy promises neither.
                         <p className="leading-relaxed">
                             Everything works without an account — nothing to sign up for, nothing
-                            behind a paywall. Your collection, the deck you&apos;re editing and your sideboard plan are remembered in this
-                            browser between visits.
+                            behind a paywall. Your collection is remembered in this browser between
+                            visits; the deck and sideboard plan you&apos;re working on are kept while
+                            you&apos;re on their page.
                         </p>
                     )}
                 </section>

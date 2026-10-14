@@ -18,9 +18,19 @@ import { useSearchParams } from "next/navigation";
  * useSearchParams opts a component out of prerendering and /sideboard is a
  * static page. Doing this inline would have made the whole route dynamic.
  */
+/** What a ?guide= link says where saved guides can't exist. */
+const SAVED_GUIDES_OFF = "Saved guides aren't available on this site.";
+
 export default function GuideLoader({
     onLoad,
+    authEnabled,
 }: {
+    /**
+     * isAuthConfigured(), from the server page. Without it there are no
+     * saved guides, so a ?guide= link says that rather than "sign in" on a
+     * site where nobody can — DeckHandoffLoader's arrangement for ?deck=.
+     */
+    authEnabled: boolean;
     /**
      * The plan, plus which row it came from. The planner records the id and
      * name so a later Save can update THIS guide instead of making the user
@@ -50,6 +60,13 @@ export default function GuideLoader({
     useEffect(() => {
         if (!guideId) return;
 
+        if (!authEnabled) {
+            // From a timer, not the effect body: an update in response to
+            // the URL, not a render-time cascade.
+            const t = setTimeout(() => setStatus({ id: guideId, message: SAVED_GUIDES_OFF }), 0);
+            return () => clearTimeout(t);
+        }
+
         let cancelled = false;
 
         (async () => {
@@ -58,6 +75,10 @@ export default function GuideLoader({
 
                 if (res.status === 401) {
                     if (!cancelled) setStatus({ id: guideId, message: "Sign in to open that saved guide." });
+                    return;
+                }
+                if (res.status === 503) {
+                    if (!cancelled) setStatus({ id: guideId, message: SAVED_GUIDES_OFF });
                     return;
                 }
                 if (res.status === 404) {
@@ -87,7 +108,7 @@ export default function GuideLoader({
         return () => {
             cancelled = true;
         };
-    }, [guideId]);
+    }, [guideId, authEnabled]);
 
     if (!message) return null;
 

@@ -19,6 +19,11 @@ import { useState } from "react";
  * reason. `kind` is the API segment, constrained to the two literals so a
  * caller can't aim it at an arbitrary endpoint; `actions` are that page's
  * Duplicate and Delete, shown beside Rename.
+ *
+ * Both pages also pass "Open another..." through `actions`, which brings
+ * back their chooser (EntryChooser) — the way to switch to a different saved
+ * item without going to the profile. A page whose work isn't saved yet shows
+ * EntryChooser's DraftBar in this bar's place instead.
  */
 export default function GuideNameBar({
     id,

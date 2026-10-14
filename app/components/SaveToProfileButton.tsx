@@ -141,7 +141,13 @@ export default function SaveToProfileButton({
             if (res.status === 401) {
                 setMessage("Sign in first to save to your profile.");
             } else if (res.status === 404) {
-                setMessage("That guide no longer exists — use “Save as new” to keep this.");
+                // Inside a dialog (allowSaveAsNew off) there is no "Save as
+                // new" button to point at; it's on the page behind it.
+                setMessage(
+                    allowSaveAsNew
+                        ? "That guide no longer exists — use “Save as new” to keep this."
+                        : "That guide no longer exists. Go back to the page and use “Save as new...” to keep this."
+                );
             } else if (!res.ok) {
                 setMessage(data.error ?? "Could not save that guide.");
             } else {
@@ -169,7 +175,12 @@ export default function SaveToProfileButton({
                                 e.preventDefault();
                                 saveAsNew();
                             }
-                            if (e.key === "Escape") setNaming(false);
+                            if (e.key === "Escape") {
+                                // Cancels the name form only — not the dialog
+                                // this form may be sitting in.
+                                e.stopPropagation();
+                                setNaming(false);
+                            }
                         }}
                         placeholder={`${formatLabel} sideboard guide`}
                         className="mt-1 w-full px-3 py-2 rounded bg-parchment-dark text-ink shadow-inner-parchment"

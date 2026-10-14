@@ -60,8 +60,13 @@ export default function AboutPage() {
                                 as it arrives, or to the Sideboard Planner as the deck a guide is built
                                 from.
                                 {accounts
-                                    ? " All of that works signed out; signing in lets you save decks to come back to."
-                                    : ""}
+                                    ? " All of that works signed out; signing in lets you save decks to come back to, and open any of them from the page itself."
+                                    : ""}{" "}
+                                The deck you&apos;re editing is kept while you&apos;re on the page; leave
+                                and it asks first if anything is unsaved, then clears
+                                {accounts
+                                    ? ", so each visit starts with a choice of one of your saved decks or a new one."
+                                    : ", so each visit starts fresh."}
                             </p>
                         </div>
                         <div>
@@ -72,7 +77,11 @@ export default function AboutPage() {
                                 counts, filter and sort. Copies of a card across different printings
                                 always merge into one line — here, in Deck Check, and in anything you
                                 save or load — so an Arena export&apos;s dozen lines for one card become
-                                one. It&apos;s the collection Deck Check uses unless you pick another there.
+                                one. It&apos;s the collection Deck Check uses unless you pick another there,
+                                so it stays in this browser between visits.
+                                {accounts
+                                    ? " Each visit asks whether to keep working on it, open one of your saved collections, or start a new one, and leaving with changes you haven't saved asks whether to save them first."
+                                    : ""}
                             </p>
                         </div>
                         <div>
@@ -103,7 +112,11 @@ export default function AboutPage() {
                                 your sideboard — with separate plans for the play and the draw where
                                 they differ. Suggestions come from your own deck and stop at the copies
                                 you run, and a plan that would leave you under 60 cards is flagged
-                                before you print it.
+                                before you print it. Like the Decks page, it keeps your guide while
+                                you&apos;re working on it, asks before you leave with anything unsaved,
+                                {accounts
+                                    ? " and starts each visit with a choice of one of your saved guides or a new one."
+                                    : " and starts fresh on each visit."}
                             </p>
                             <p className="mt-2">
                                 Beside each matchup is the opponent&apos;s decklist, with card pictures,
@@ -227,8 +240,10 @@ export default function AboutPage() {
                         ) : (
                             <p>
                                 Every tool works without an account, and there is nothing to sign up for.
-                                Your collection, the deck you&apos;re editing and your sideboard plan are remembered in this browser between
-                                visits, and the app keeps nothing you enter anywhere else. The{" "}
+                                Your collection is remembered in this browser between visits; the deck
+                                and the sideboard plan you&apos;re working on are kept while you&apos;re on
+                                their page, which asks before you leave and then clears them. The app
+                                keeps nothing you enter anywhere else. The{" "}
                                 <a
                                     href="/privacy"
                                     className="text-brand underline underline-offset-2 hover:text-brand-dark"

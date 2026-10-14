@@ -10,9 +10,13 @@ import GuideLoader from "./GuideLoader";
 import GuideNameBar from "./GuideNameBar";
 import OpponentDeck from "./OpponentDeck";
 import { DeckHandoffLoader } from "./DeckHandoff";
+import EntryChooser, { DraftBar, SWITCH_BUTTON_CLASS } from "./EntryChooser";
+import { LeaveDialog, useLeaveGuard } from "./LeaveGuard";
+import ModalFrame from "./ModalFrame";
 import { matchArchetype } from "@/lib/archetypeMatch";
 import { deckFormatLabel, normalizeDecklist } from "@/lib/deckText";
-import type { HandoffDeck } from "@/lib/deckHandoff";
+import { decodeHandoff, handoffKey, type HandoffDeck } from "@/lib/deckHandoff";
+import { fingerprint } from "@/lib/openCollection";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
 import { splitDeckSections, totalCards, type DeckCard } from "@/lib/deckSections";
 import {
@@ -38,7 +42,21 @@ import {
     type SheetFit,
 } from "@/lib/printFit";
 
+/**
+ * The plan being worked on, kept in this browser while you're on the page.
+ * Cleared (down to the format and the pulled metagame, which are settings
+ * rather than work) when you leave through the site, after the leave-guard
+ * has asked; it survives a reload, Back or a closed tab, which the guard
+ * can't intercept, and the chooser then offers to pick up where you left off.
+ */
 const STORAGE_KEY = "mtgpp:sideboard";
+/**
+ * A fingerprint of the open guide as last saved or opened (see `workPrint`),
+ * so "unsaved changes" still means something after a reload. Kept beside the
+ * plan rather than inside it because the plan object is exactly what Save
+ * uploads, and the baseline is this browser's bookkeeping, not the guide.
+ */
+const BASELINE_KEY = "mtgpp:sideboard-baseline";
 
 interface Matchup {
     id: string;
@@ -558,6 +576,28 @@ const EMPTY_PLAN: PlanState = {
     savedName: null,
 };
 
+/**
+ * The part of a plan that is the user's work, as one comparable string:
+ * what "unsaved changes" is measured on. Left out on purpose: the open
+ * guide's id and name (identity, not content — and a rename is saved by
+ * itself), the archetype count and time-frame dropdowns (settings for the
+ * next pull, which change nothing until Load Metagame is pressed) and the
+ * pulled list itself (fetched data). A re-pull that changes a matchup's
+ * metagame share does count, because that share is printed on the guide.
+ */
+function workPrint(p: PlanState): string {
+    return fingerprint(
+        JSON.stringify([p.decklist, p.loadedText, p.format, p.matchups, p.stash])
+    );
+}
+
+/** Anything worth keeping — the test for "a guide that isn't saved yet". */
+function hasWork(p: PlanState): boolean {
+    return Boolean(
+        p.decklist.trim() || p.loadedText.trim() || p.matchups.length > 0 || Object.keys(p.stash).length > 0
+    );
+}
+
 export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean }) {
     // Everything persisted lives in one object so restoring from storage is a
     // single state update. Restoring field-by-field would fire a cascade of
@@ -565,6 +605,21 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     // repeated re-renders.
     const [plan, setPlan] = useState<PlanState>(EMPTY_PLAN);
     const [hydrated, setHydrated] = useState(false);
+    /** workPrint of the open guide as last saved or opened; null when none is open. */
+    const [baseline, setBaseline] = useState<string | null>(null);
+    /**
+     * Chooser or editor, decided once the stored plan has been read — see
+     * the restore below. `chooser` says why it's up: arriving, or "Open
+     * another..." (which can go back to the guide unchanged).
+     */
+    const [phase, setPhase] = useState<"loading" | "choosing" | "editing">("loading");
+    const [chooser, setChooser] = useState<"entry" | "switch">("entry");
+    /**
+     * Set once the page is being left, so a "Save and leave" that updates
+     * the plan a moment before the page unmounts can't have the persistence
+     * effect write it back after it was cleared.
+     */
+    const leaving = useRef(false);
 
     const [deckLoading, setDeckLoading] = useState(false);
     const [deckError, setDeckError] = useState<string | null>(null);
@@ -594,28 +649,90 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
     // render and produce markup the server never emitted, which is a worse
     // problem than the lint rule this suppresses. Matches the same deliberate
     // exception in Deck Check.
+    //
+    // The same effect decides whether the visit starts at the chooser. The
+    // address and the hand-off are read here rather than through
+    // useSearchParams, which would make the page dynamic: a ?guide= or
+    // ?deck= link, or a deck handed over from the Decks page, goes straight
+    // to the editor (GuideLoader and DeckHandoffLoader deliver it). The
+    // hand-off is only peeked at — DeckHandoffLoader is what takes it.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
+        let restored = EMPTY_PLAN;
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
-                setPlan(normalisePlan(JSON.parse(saved), EMPTY_PLAN));
+                restored = normalisePlan(JSON.parse(saved), EMPTY_PLAN);
+                setPlan(restored);
             }
+            const storedBaseline = localStorage.getItem(BASELINE_KEY);
+            // An open guide stored by a build from before baselines existed
+            // is taken as unchanged: there's no way to know otherwise, and
+            // the alternative is asking everyone about edits they never made.
+            setBaseline(
+                restored.savedId === null ? null : (storedBaseline ?? workPrint(restored))
+            );
         } catch {
             /* corrupt or unavailable storage is not worth failing over */
         }
+        const params = new URLSearchParams(window.location.search);
+        let handedOver = false;
+        try {
+            handedOver = decodeHandoff(sessionStorage.getItem(handoffKey("sideboard")), Date.now()) !== null;
+        } catch {
+            /* no sessionStorage, so nothing was handed over */
+        }
+        const direct = params.has("guide") || params.has("deck") || handedOver;
+        setPhase(direct || (!authEnabled && !hasWork(restored)) ? "editing" : "choosing");
         setHydrated(true);
-    }, []);
+    }, [authEnabled]);
     /* eslint-enable react-hooks/set-state-in-effect */
 
     useEffect(() => {
-        if (!hydrated) return;
+        if (!hydrated || leaving.current) return;
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+            if (baseline !== null && plan.savedId !== null) localStorage.setItem(BASELINE_KEY, baseline);
+            else localStorage.removeItem(BASELINE_KEY);
         } catch {
             /* quota or private mode — the app still works, it just will not persist */
         }
-    }, [hydrated, plan]);
+    }, [hydrated, plan, baseline]);
+
+    /**
+     * Unsaved work: an open guide that differs from what was saved or
+     * opened, or anything at all in a guide that was never saved. Starting
+     * empty, or opening a guide and not touching it, is not.
+     */
+    const dirty = baseline !== null && plan.savedId !== null ? workPrint(plan) !== baseline : hasWork(plan);
+
+    /**
+     * Leaving through the site clears the plan, keeping only the settings
+     * (format, archetype count, time frame and the pulled list), so the next
+     * visit starts at the chooser with your format already picked.
+     */
+    const clearStoredPlan = () => {
+        leaving.current = true;
+        try {
+            localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                    ...plan,
+                    decklist: "",
+                    loadedText: "",
+                    matchups: [],
+                    stash: {},
+                    savedId: null,
+                    savedName: null,
+                })
+            );
+            localStorage.removeItem(BASELINE_KEY);
+        } catch {
+            /* nothing stored to clear */
+        }
+    };
+
+    const guard = useLeaveGuard({ dirty, onLeavePage: clearStoredPlan });
 
     /* ---- deck loading ---- */
 
@@ -793,7 +910,7 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
      * the next Save at the guide you just walked away from and overwrite it
      * with the blank plan you started instead.
      */
-    const resetEverything = () =>
+    const resetEverything = () => {
         setPlan((prev) => ({
             ...prev,
             decklist: "",
@@ -803,6 +920,70 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             savedId: null,
             savedName: null,
         }));
+        setBaseline(null);
+    };
+
+    /**
+     * Put a saved guide in the planner, as the row it was fetched from. Its
+     * baseline is taken from the normalised plan — the one actually on
+     * screen, which may have gained matchup ids an older plan lacked — so
+     * opening a guide and touching nothing is never "unsaved".
+     */
+    const applyGuide = (loaded: Record<string, unknown>, opened: { id: number; name: string }) => {
+        const next = {
+            ...normalisePlan(loaded, EMPTY_PLAN),
+            // From the row that was actually fetched, not from whatever id
+            // the stored JSON happens to carry.
+            savedId: opened.id,
+            savedName: opened.name,
+        };
+        setPlan(next);
+        setBaseline(workPrint(next));
+        setPendingDeck(null);
+        setDeckNotice(null);
+        setDeckError(null);
+        setPhase("editing");
+    };
+
+    /** Open a saved guide, asking first if that would drop unsaved work. */
+    const requestGuide = (loaded: Record<string, unknown>, opened: { id: number; name: string }) =>
+        guard.request({
+            run: () => applyGuide(loaded, opened),
+            title: `Open “${opened.name}”?`,
+            consequence: "Opening it replaces the guide on this page.",
+            proceedLabel: "Open without saving",
+        });
+
+    /** The chooser's pick. Resolves to a message when the guide can't be opened. */
+    const openGuideById = async (id: number): Promise<string | null> => {
+        try {
+            const res = await fetch(`/api/guides/${id}`);
+            if (res.status === 401) return "Sign in again to open your saved guides.";
+            if (res.status === 404) return "That guide no longer exists.";
+            if (!res.ok) return "Could not open that guide.";
+            const { guide } = await res.json();
+            if (!guide?.plan) return "Could not open that guide.";
+            requestGuide(guide.plan as Record<string, unknown>, { id: guide.id, name: guide.name });
+            return null;
+        } catch {
+            return "Could not open that guide.";
+        }
+    };
+
+    /** The chooser's Start new: an empty guide, keeping format and the pulled metagame. */
+    const startNewGuide = () =>
+        guard.request({
+            run: () => {
+                resetEverything();
+                setPendingDeck(null);
+                setDeckNotice(null);
+                setDeckError(null);
+                setPhase("editing");
+            },
+            title: "Start a new guide?",
+            consequence: "Starting a new guide clears the decklist and every matchup on this page.",
+            proceedLabel: "Start new without saving",
+        });
 
     /* ---- a deck sent from the Decks page ---- */
 
@@ -852,8 +1033,13 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             loadedText: text,
             format: nextFormat,
         }));
+        // A fresh guide has no saved version to compare against; "keep"
+        // keeps the open guide and its baseline, so the swapped list shows
+        // as the unsaved change it is.
+        if (mode === "fresh") setBaseline(null);
         setDeckError(null);
         setPendingDeck(null);
+        setPhase("editing");
 
         const parts = [
             `Loaded ${d.name ? `"${d.name}"` : "your deck"} from the Decks page: ${totalCards(split.maindeck)} maindeck and ${totalCards(split.sideboard)} sideboard cards.`,
@@ -1282,17 +1468,10 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 own Suspense-wrapped child because useSearchParams opts a
                 component out of prerendering, and /sideboard is static. */}
             <Suspense fallback={null}>
-                <GuideLoader
-                    onLoad={(loaded, opened) =>
-                        setPlan({
-                            ...normalisePlan(loaded, EMPTY_PLAN),
-                            // From the row that was actually fetched, not from
-                            // whatever id the stored JSON happens to carry.
-                            savedId: opened.id,
-                            savedName: opened.name,
-                        })
-                    }
-                />
+                {/* Through the leave-guard: a ?guide= link no longer lands
+                    silently on top of unsaved work left from an earlier
+                    visit (a reload, say) — it asks, like any other switch. */}
+                <GuideLoader onLoad={requestGuide} authEnabled={authEnabled} />
             </Suspense>
 
             {/* A deck sent from the Decks page or the profile: ?deck=<id>, or a
@@ -1311,13 +1490,81 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
             {printDebug && <PrintDebugPanel fit={fit} count={matchups.length} rendered={rendered} />}
 
             {/* ===================== screen UI ===================== */}
-            <div className="sb-noprint space-y-10">
-                {plan.savedId !== null && plan.savedName && (
+            {phase === "loading" && (
+                <section className="sb-noprint bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6">
+                    <p className="text-ink/60">Loading...</p>
+                </section>
+            )}
+
+            {phase === "choosing" && (
+                <div className="sb-noprint">
+                    <EntryChooser
+                        kind="guides"
+                        authEnabled={authEnabled}
+                        mode={chooser}
+                        activeId={chooser === "switch" ? plan.savedId : null}
+                        onOpen={openGuideById}
+                        onNew={startNewGuide}
+                        newLabel="Start a new guide"
+                        // On arrival, a plan that outlived the last visit.
+                        // When switching, the guide on the page is what
+                        // "Back" returns to, so it isn't offered twice.
+                        resume={
+                            chooser === "entry" && (hasWork(plan) || plan.savedId !== null)
+                                ? {
+                                      label: "Pick up where you left off",
+                                      detail: plan.savedName
+                                          ? `“${plan.savedName}”${dirty ? ", with changes you haven't saved" : ""}.`
+                                          : `A guide you hadn't saved yet${matchups.length > 0 ? `, with ${matchups.length} matchup${matchups.length === 1 ? "" : "s"}` : ""}.`,
+                                      onResume: () => setPhase("editing"),
+                                  }
+                                : null
+                        }
+                        onCancel={chooser === "switch" ? () => setPhase("editing") : undefined}
+                        cancelLabel={plan.savedName ? `Back to “${plan.savedName}”` : "Back to your guide"}
+                    />
+                </div>
+            )}
+
+            {/* Hidden rather than unmounted while the chooser is up, so a
+                guide's half-typed card rows and opened lists are still there
+                after "Back to ...". */}
+            <div className={"sb-noprint space-y-10" + (phase === "editing" ? "" : " hidden")}>
+                {plan.savedId !== null && plan.savedName ? (
                     <GuideNameBar
                         id={plan.savedId}
                         name={plan.savedName}
                         onRenamed={(name) => setPlan((p) => ({ ...p, savedName: name }))}
+                        actions={
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setChooser("switch");
+                                    setPhase("choosing");
+                                }}
+                                className={SWITCH_BUTTON_CLASS}
+                            >
+                                Open another...
+                            </button>
+                        }
                     />
+                ) : (
+                    // Without sign-in there's nothing else to open, so no
+                    // bar whose only button leads to a one-option chooser.
+                    authEnabled && (
+                        <DraftBar title="New guide" detail="Not saved yet">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setChooser("switch");
+                                    setPhase("choosing");
+                                }}
+                                className={SWITCH_BUTTON_CLASS}
+                            >
+                                Open another...
+                            </button>
+                        </DraftBar>
+                    )
                 )}
 
                 {/* ---- decklist ---- */}
@@ -1875,16 +2122,18 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                                             savedId={plan.savedId}
                                             savedName={plan.savedName}
                                             buttonClass={ACTION_BUTTON}
-                                            onSaved={(saved) =>
+                                            onSaved={(saved) => {
                                                 // Whichever way it saved — updating
                                                 // the open guide, or branching a new
-                                                // one — that row is now what is open.
+                                                // one — that row is now what is open,
+                                                // and what was uploaded is its baseline.
                                                 setPlan((p) => ({
                                                     ...p,
                                                     savedId: saved.id,
                                                     savedName: saved.name,
-                                                }))
-                                            }
+                                                }));
+                                                setBaseline(workPrint(plan));
+                                            }}
                                         />
                                     ))}
                             </div>
@@ -1927,92 +2176,94 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 )}
             </div>
 
-            {/* ---- clear confirmation, with a chance to save first ---- */}
+            {/* ---- clear confirmation, with a chance to save first ----
+                This and the incoming-deck dialog below sit in ModalFrame,
+                like the leave-guard's: portalled to <body> (inside the
+                page's space-y-10 stack the fixed backdrop picked up a
+                sibling margin and left the header clickable above it),
+                focus on the safe button, Tab kept inside, Escape and the
+                backdrop meaning the safe button. */}
             {confirmClear && (
-                <div
-                    className="sb-noprint fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="clear-plan-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) setConfirmClear(false);
-                    }}
+                <ModalFrame
+                    onCancel={() => setConfirmClear(false)}
+                    labelledBy="clear-plan-title"
+                    overlayClassName="sb-noprint"
+                    boxClassName="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink"
                 >
-                    <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
-                        <h3 id="clear-plan-title" className="font-title text-2xl text-red-800">
-                            Start over?
-                        </h3>
+                    <h3 id="clear-plan-title" className="font-title text-2xl text-red-800">
+                        Start over?
+                    </h3>
 
-                        <p className="leading-relaxed">
-                            This wipes the decklist, the maindeck and sideboard it was split into, and
-                            every matchup
-                            {planned > 0
-                                ? ` — including the ${planned} you've written up`
-                                : " on the list"}
-                            . The format and the archetypes you pulled stay, so you can paste a new list
-                            straight in.
+                    <p className="leading-relaxed">
+                        This wipes the decklist, the maindeck and sideboard it was split into, and
+                        every matchup
+                        {planned > 0
+                            ? ` — including the ${planned} you've written up`
+                            : " on the list"}
+                        . The format and the archetypes you pulled stay, so you can paste a new list
+                        straight in.
+                    </p>
+
+                    <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
+                        There&apos;s no undo. Anything you haven&apos;t saved is gone.
+                    </p>
+
+                    {authEnabled ? (
+                        <p className="text-sm text-ink/70">
+                            {plan.savedName
+                                ? `Save your progress first: Save and clear updates “${plan.savedName}”, so you can open it again from your profile.`
+                                : "Save your progress first if you want it back later. Save and clear puts it in your profile, then starts fresh."}
                         </p>
-
-                        <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
-                            There&apos;s no undo. Anything you haven&apos;t saved is gone.
+                    ) : (
+                        <p className="text-sm text-amber-700">
+                            There&apos;s nowhere to save this on this deployment, so clearing is
+                            final. Print it first if you want a copy.
                         </p>
+                    )}
 
-                        {authEnabled ? (
-                            <p className="text-sm text-ink/70">
-                                {plan.savedName
-                                    ? `Save your progress first: Save and clear updates “${plan.savedName}”, so you can open it again from your profile.`
-                                    : "Save your progress first if you want it back later. Save and clear puts it in your profile, then starts fresh."}
-                            </p>
-                        ) : (
-                            <p className="text-sm text-amber-700">
-                                There&apos;s nowhere to save this on this deployment, so clearing is
-                                final. Print it first if you want a copy.
-                            </p>
-                        )}
+                    <div className="flex flex-wrap gap-2 justify-end pt-1">
+                        <button
+                            type="button"
+                            data-autofocus
+                            onClick={() => setConfirmClear(false)}
+                            className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                        >
+                            Keep it
+                        </button>
 
-                        <div className="flex flex-wrap gap-2 justify-end pt-1">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmClear(false)}
-                                className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
-                            >
-                                Keep it
-                            </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                resetEverything();
+                                setConfirmClear(false);
+                            }}
+                            className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                        >
+                            Clear without saving
+                        </button>
 
-                            <button
-                                type="button"
-                                onClick={() => {
+                        {authEnabled && (
+                            <SaveToProfileButton
+                                plan={plan}
+                                format={format}
+                                formatLabel={formatLabel(format)}
+                                savedId={plan.savedId}
+                                savedName={plan.savedName}
+                                // Branching a copy in the middle of a reset
+                                // is a different intent from "keep this
+                                // before I wipe it"; a second button here
+                                // only invites a misclick.
+                                allowSaveAsNew={false}
+                                label="Save and clear"
+                                buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
+                                onSaved={() => {
                                     resetEverything();
                                     setConfirmClear(false);
                                 }}
-                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
-                            >
-                                Clear without saving
-                            </button>
-
-                            {authEnabled && (
-                                <SaveToProfileButton
-                                    plan={plan}
-                                    format={format}
-                                    formatLabel={formatLabel(format)}
-                                    savedId={plan.savedId}
-                                    savedName={plan.savedName}
-                                    // Branching a copy in the middle of a reset
-                                    // is a different intent from "keep this
-                                    // before I wipe it"; a second button here
-                                    // only invites a misclick.
-                                    allowSaveAsNew={false}
-                                    label="Save and clear"
-                                    buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
-                                    onSaved={() => {
-                                        resetEverything();
-                                        setConfirmClear(false);
-                                    }}
-                                />
-                            )}
-                        </div>
+                            />
+                        )}
                     </div>
-                </div>
+                </ModalFrame>
             )}
 
             {/* ---- a deck has arrived, and there's already a guide here ----
@@ -2020,93 +2271,126 @@ export default function SideboardPlanner({ authEnabled }: { authEnabled: boolean
                 first), because it is the same question: something is about to
                 replace work, and saving it first should be one click. */}
             {pendingDeck && (
-                <div
-                    className="sb-noprint fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="incoming-deck-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) setPendingDeck(null);
-                    }}
+                <ModalFrame
+                    onCancel={() => setPendingDeck(null)}
+                    labelledBy="incoming-deck-title"
+                    overlayClassName="sb-noprint"
+                    boxClassName="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink max-h-[90vh] overflow-y-auto [overflow-wrap:anywhere]"
                 >
                     {/* overflow-wrap:anywhere on the whole dialog: it quotes the
                         guide's and the deck's names, which are user text and can
                         be one long unbroken token. At 375px that pushed the
                         bullets wider than the screen. */}
-                    <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink max-h-[90vh] overflow-y-auto [overflow-wrap:anywhere]">
-                        <h3 id="incoming-deck-title" className="font-title text-2xl [overflow-wrap:anywhere]">
-                            Load {pendingDeck.name ? `“${pendingDeck.name}”` : "this deck"}?
-                        </h3>
+                    <h3 id="incoming-deck-title" className="font-title text-2xl [overflow-wrap:anywhere]">
+                        Load {pendingDeck.name ? `“${pendingDeck.name}”` : "this deck"}?
+                    </h3>
 
-                        <p className="leading-relaxed [overflow-wrap:anywhere]">
-                            The planner already has
-                            {plan.savedName ? ` the guide “${plan.savedName}”` : " a guide in progress"}
-                            {matchups.length > 0
-                                ? ` with ${matchups.length} matchup${matchups.length === 1 ? "" : "s"}${planned > 0 ? `, ${planned} written up` : ""}`
+                    <p className="leading-relaxed [overflow-wrap:anywhere]">
+                        The planner already has
+                        {plan.savedName ? ` the guide “${plan.savedName}”` : " a guide in progress"}
+                        {matchups.length > 0
+                            ? ` with ${matchups.length} matchup${matchups.length === 1 ? "" : "s"}${planned > 0 ? `, ${planned} written up` : ""}`
+                            : ""}
+                        .
+                    </p>
+
+                    <ul className="text-sm text-ink/75 list-disc list-outside pl-5 space-y-1">
+                        <li>
+                            <strong>Use this list, keep my matchups</strong> swaps the decklist only
+                            {plan.savedName
+                                ? ` — “${plan.savedName}” stays open, so Save would update it with the new list`
                                 : ""}
-                            .
-                        </p>
+                            {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                ? `. The format stays ${formatLabel(format)} to match your matchups, though the deck is marked ${formatLabel(pendingDeck.format)}.`
+                                : "."}
+                        </li>
+                        <li>
+                            <strong>Start a fresh guide</strong> clears the matchups, like Start Over,
+                            then loads the deck
+                            {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                ? ` and switches the format to ${formatLabel(pendingDeck.format)}.`
+                                : "."}
+                        </li>
+                    </ul>
 
-                        <ul className="text-sm text-ink/75 list-disc list-outside pl-5 space-y-1">
-                            <li>
-                                <strong>Use this list, keep my matchups</strong> swaps the decklist only
-                                {plan.savedName
-                                    ? ` — “${plan.savedName}” stays open, so Save would update it with the new list`
-                                    : ""}
-                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
-                                    ? `. The format stays ${formatLabel(format)} to match your matchups, though the deck is marked ${formatLabel(pendingDeck.format)}.`
-                                    : "."}
-                            </li>
-                            <li>
-                                <strong>Start a fresh guide</strong> clears the matchups, like Start Over,
-                                then loads the deck
-                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
-                                    ? ` and switches the format to ${formatLabel(pendingDeck.format)}.`
-                                    : "."}
-                            </li>
-                        </ul>
-
-                        <div className="flex flex-wrap gap-2 justify-end pt-1">
-                            <button
-                                type="button"
-                                onClick={() => setPendingDeck(null)}
-                                className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
-                            >
-                                Keep what I have
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => applyDeck(pendingDeck, "keep")}
-                                className="px-4 py-2 rounded font-title text-sm bg-parchment-dark text-ink hover:bg-brass/20"
-                            >
-                                Use this list, keep my matchups
-                                {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
-                                    ? ` (stays ${formatLabel(format)})`
-                                    : ""}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => applyDeck(pendingDeck, "fresh")}
-                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
-                            >
-                                Start a fresh guide{authEnabled ? " without saving" : ""}
-                            </button>
-                            {authEnabled && (
-                                <SaveToProfileButton
-                                    plan={plan}
-                                    format={format}
-                                    formatLabel={formatLabel(format)}
-                                    savedId={plan.savedId}
-                                    savedName={plan.savedName}
-                                    allowSaveAsNew={false}
-                                    label="Save, then start fresh"
-                                    buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
-                                    onSaved={() => applyDeck(pendingDeck, "fresh")}
-                                />
-                            )}
-                        </div>
+                    <div className="flex flex-wrap gap-2 justify-end pt-1">
+                        <button
+                            type="button"
+                            data-autofocus
+                            onClick={() => setPendingDeck(null)}
+                            className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                        >
+                            Keep what I have
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => applyDeck(pendingDeck, "keep")}
+                            className="px-4 py-2 rounded font-title text-sm bg-parchment-dark text-ink hover:bg-brass/20"
+                        >
+                            Use this list, keep my matchups
+                            {isSupportedFormat(pendingDeck.format) && pendingDeck.format !== format
+                                ? ` (stays ${formatLabel(format)})`
+                                : ""}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => applyDeck(pendingDeck, "fresh")}
+                            className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                        >
+                            Start a fresh guide{authEnabled ? " without saving" : ""}
+                        </button>
+                        {authEnabled && (
+                            <SaveToProfileButton
+                                plan={plan}
+                                format={format}
+                                formatLabel={formatLabel(format)}
+                                savedId={plan.savedId}
+                                savedName={plan.savedName}
+                                allowSaveAsNew={false}
+                                label="Save, then start fresh"
+                                buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
+                                onSaved={() => applyDeck(pendingDeck, "fresh")}
+                            />
+                        )}
                     </div>
-                </div>
+                </ModalFrame>
+            )}
+
+            {/* ---- leaving, or switching, with unsaved work ---- */}
+            {guard.pending && (
+                <LeaveDialog
+                    pending={guard.pending}
+                    onStay={guard.stay}
+                    onProceed={guard.proceed}
+                    authEnabled={authEnabled}
+                    noun="sideboard guide"
+                    itemName={plan.savedName}
+                    isSaved={plan.savedId !== null}
+                    clearsOnLeave
+                    renderSave={(done, label) =>
+                        // The page's own Save refuses a guide that boards
+                        // you below 60, so this one does too.
+                        illegal.length > 0 ? (
+                            <p className="w-full text-sm text-amber-800">
+                                It can&apos;t be saved while{" "}
+                                {illegal.length === 1 ? "a matchup boards" : `${illegal.length} matchups board`} you
+                                below 60 cards — stay and fix {illegal.length === 1 ? "it" : "them"} first.
+                            </p>
+                        ) : (
+                            <SaveToProfileButton
+                                plan={plan}
+                                format={format}
+                                formatLabel={formatLabel(format)}
+                                savedId={plan.savedId}
+                                savedName={plan.savedName}
+                                allowSaveAsNew={false}
+                                label={label}
+                                buttonClass="px-4 py-2 rounded shadow-card font-title text-sm "
+                                onSaved={done}
+                            />
+                        )
+                    }
+                />
             )}
 
             {/* ===================== printed sheet ===================== */}

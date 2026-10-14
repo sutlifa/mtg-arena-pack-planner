@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 
-interface CollectionSummary {
+export interface CollectionSummary {
     id: number;
     name: string;
     arena_mode: boolean;
@@ -27,19 +27,26 @@ export interface OpenedCollection {
  * created during render is a brand-new type on every render, so React
  * unmounts and remounts the whole subtree each time, throwing away its state
  * and DOM.
+ *
+ * Exported for the Collection page's chooser (EntryChooser), which lists the
+ * same saved collections the same way. `activeLabel` is what an entry that's
+ * already open says beside its count: "in use" here in Deck Check, "open
+ * now" on the Collection page.
  */
-function CollectionGroup({
+export function CollectionGroup({
     title,
     items,
     activeId,
     busyId,
     onPick,
+    activeLabel = "in use",
 }: {
     title: string;
     items: CollectionSummary[];
     activeId: number | null;
     busyId: number | null;
     onPick: (id: number) => void;
+    activeLabel?: string;
 }) {
     return (
         <div>
@@ -65,7 +72,7 @@ function CollectionGroup({
                                     <span className="font-semibold">{c.name}</span>{" "}
                                     <span className="text-ink/60">
                                         ({count.toLocaleString()} different card{count === 1 ? "" : "s"})
-                                        {active ? " · in use" : busyId === c.id ? " · loading..." : ""}
+                                        {active ? ` · ${activeLabel}` : busyId === c.id ? " · loading..." : ""}
                                     </span>
                                 </button>
                             </li>

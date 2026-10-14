@@ -183,7 +183,13 @@ export default function SaveWorkButton({
             if (res.status === 401) {
                 setMessage("Sign in first to save to your profile.");
             } else if (res.status === 404) {
-                setMessage(`That ${noun} no longer exists — use "Save as new" to keep this.`);
+                // Inside a dialog (allowSaveAsNew off) there is no "Save as
+                // new" button to point at; it's on the page behind it.
+                setMessage(
+                    allowSaveAsNew
+                        ? `That ${noun} no longer exists — use "Save as new" to keep this.`
+                        : `That ${noun} no longer exists. Go back to the page and use "Save as new..." to keep this.`
+                );
             } else if (!res.ok) {
                 setMessage(data.error ?? `Could not save that ${noun}.`);
             } else {
@@ -213,7 +219,12 @@ export default function SaveWorkButton({
                                 e.preventDefault();
                                 saveAsNew();
                             }
-                            if (e.key === "Escape") setNaming(false);
+                            if (e.key === "Escape") {
+                                // Cancels the name form only — not the dialog
+                                // this form may be sitting in.
+                                e.stopPropagation();
+                                setNaming(false);
+                            }
                         }}
                         placeholder={
                             isCollection

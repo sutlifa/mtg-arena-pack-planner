@@ -6,6 +6,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "./HelpTip";
 import SaveWorkButton, { type SavedRef } from "./SaveWorkButton";
+import EntryChooser, { SWITCH_BUTTON_CLASS } from "./EntryChooser";
+import { LeaveDialog, useLeaveGuard } from "./LeaveGuard";
+import ModalFrame from "./ModalFrame";
+import { useOptionalSession } from "./useOptionalSession";
 // Shared with Deck Check's per-deck view (DeckShortfall); see there for what
 // a verdict is.
 import { resolveNames } from "./resolveNames";
@@ -29,7 +33,9 @@ import {
     MODE_KEY,
     OPEN_KEY,
     decodeOpen,
+    decodeSaved,
     encodeOpen,
+    fingerprint,
 } from "@/lib/openCollection";
 
 const PAGE_SIZE = 48;
@@ -63,6 +69,9 @@ interface AddProblem {
 /* Loading a saved collection from ?collection=<id>                    */
 /* ------------------------------------------------------------------ */
 
+/** What a ?collection= link says where saved collections can't exist. */
+const SAVED_COLLECTIONS_OFF = "Saved collections aren't available on this site.";
+
 /**
  * Split out so useSearchParams sits under its own Suspense boundary and the
  * page can still prerender, the same arrangement as the Sideboard Planner's
@@ -70,8 +79,11 @@ interface AddProblem {
  */
 function SavedCollectionLoader({
     onLoad,
+    authEnabled,
 }: {
     onLoad: (text: string, open: NonNullable<SavedRef>) => void;
+    /** isAuthConfigured(); without it there are no saved collections to open. */
+    authEnabled: boolean;
 }) {
     const searchParams = useSearchParams();
     const id = searchParams.get("collection");
@@ -84,11 +96,22 @@ function SavedCollectionLoader({
 
     useEffect(() => {
         if (!id) return;
+        // No sign-in on this deployment means no saved collections: say so,
+        // rather than "sign in" on a site where nobody can. Set from a timer,
+        // not the effect body, as DeckHandoffLoader does for ?deck=.
+        if (!authEnabled) {
+            const t = setTimeout(() => setStatus({ id, message: SAVED_COLLECTIONS_OFF }), 0);
+            return () => clearTimeout(t);
+        }
         let cancelled = false;
         (async () => {
             try {
                 const res = await fetch(`/api/collections/${id}`);
                 if (cancelled) return;
+                if (res.status === 503) {
+                    setStatus({ id, message: SAVED_COLLECTIONS_OFF });
+                    return;
+                }
                 if (res.status === 401) {
                     setStatus({ id, message: "Sign in to open that saved collection." });
                     return;
@@ -130,7 +153,7 @@ function SavedCollectionLoader({
         return () => {
             cancelled = true;
         };
-    }, [id]);
+    }, [id, authEnabled]);
 
     const message = status && status.id === id ? status.message : null;
     if (!message) return null;
@@ -502,12 +525,30 @@ function CardTile({
  * one place that does it. Deck Check reads the collection stored here (as
  * merged "qty name" text) as its default, and saved collections are the same
  * profile rows either page can load.
+ *
+ * Each visit starts at the chooser (EntryChooser): one of your saved
+ * collections, keep working on the one here, or start a new one; a
+ * ?collection= link skips it. Unlike the Decks page and the Sideboard
+ * Planner, leaving does NOT clear anything: this collection is the one Deck
+ * Check uses by default, and for a signed-out visitor it's the only copy
+ * there is. Leaving with changes that aren't in your profile asks whether to
+ * save first, and that's all.
  */
 export default function CollectionEditor({ authEnabled }: { authEnabled: boolean }) {
     const [cards, setCards] = useState<CollectionCard[]>([]);
     const [arena, setArena] = useState(true);
     const [open, setOpen] = useState<SavedRef>(null);
+    /**
+     * fingerprint() of the collection text as last saved or opened, while a
+     * saved collection is open: what "unsaved changes" is measured against.
+     * Stored with the open ref (lib/openCollection) so a reload keeps it.
+     */
+    const [baseline, setBaseline] = useState<string | null>(null);
     const [hydrated, setHydrated] = useState(false);
+    /** Chooser or editor; see DeckBuilder's `phase` for the why of each. */
+    const [phase, setPhase] = useState<"loading" | "choosing" | "editing">("loading");
+    const [chooser, setChooser] = useState<"entry" | "switch">("entry");
+    const { signedIn } = useOptionalSession();
 
     const [paste, setPaste] = useState("");
     const [notice, setNotice] = useState<string | null>(null);
@@ -574,6 +615,14 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
             .then((verdicts) => {
                 if (gen !== checkGen.current) return;
                 setCards((prev) => applyVerdicts(prev, verdicts).cards);
+                // Tidying an untouched saved collection's spelling isn't an
+                // edit the user made, so it mustn't make the page ask "save
+                // your changes?" on the way out: when the list that was
+                // checked is the saved version, its tidied form becomes the
+                // saved version. Anything edited since was unsaved anyway.
+                const asked = fingerprint(formatCollection([...list]));
+                const tidied = fingerprint(formatCollection(applyVerdicts([...list], verdicts).cards));
+                setBaseline((b) => (b === asked ? tidied : b));
                 setUnknown(
                     new Set([...verdicts].filter(([, v]) => v.name === null).map(([name]) => name))
                 );
@@ -589,6 +638,7 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
     // render agree. See the same exception in SideboardPlanner.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
+        let hasCollection = false;
         try {
             const text = localStorage.getItem(COLLECTION_KEY);
             if (text) {
@@ -601,12 +651,27 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
             // Only if it still belongs to that text: something else (an older
             // tab, a build from before Deck Check stopped writing here) may
             // have replaced the collection since this page last saw it.
-            setOpen(decodeOpen(localStorage.getItem(OPEN_KEY), text));
+            const openValue = localStorage.getItem(OPEN_KEY);
+            const restoredOpen = decodeOpen(openValue, text);
+            setOpen(restoredOpen);
+            // Measured on the text as this page will format it, which is
+            // what's compared from here on.
+            const shown = text ? formatCollection(mergeCollection(text)) : "";
+            setBaseline(
+                restoredOpen ? (decodeSaved(openValue, text) ?? (shown ? fingerprint(shown) : null)) : null
+            );
+            hasCollection = Boolean(shown);
         } catch {
             /* unavailable or corrupt storage just means starting empty */
         }
+        // Straight to the editor for a ?collection= link (read here rather
+        // than through useSearchParams, which would make the page dynamic),
+        // or where there's nothing to choose between: no sign-in on this
+        // deployment and no collection here yet.
+        const viaLink = new URLSearchParams(window.location.search).has("collection");
+        setPhase(viaLink || (!authEnabled && !hasCollection) ? "editing" : "choosing");
         setHydrated(true);
-    }, []);
+    }, [authEnabled]);
     /* eslint-enable react-hooks/set-state-in-effect */
 
     const text = formatCollection(cards);
@@ -620,13 +685,32 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
             // Rewritten with every change to the text, so the fingerprint
             // always describes what was just stored — an edit here is still
             // an edit of the open collection.
-            const openValue = encodeOpen(open, text);
+            const openValue = encodeOpen(open, text, baseline);
             if (openValue) localStorage.setItem(OPEN_KEY, openValue);
             else localStorage.removeItem(OPEN_KEY);
         } catch {
             /* the page still works; it just won't remember */
         }
-    }, [hydrated, text, arena, open]);
+    }, [hydrated, text, arena, open, baseline]);
+
+    /**
+     * Unsaved: an open collection that differs from its saved version, or a
+     * non-empty collection that was never saved. The Arena/Paper toggle
+     * isn't part of it — Save keeps the mode a collection was filed under
+     * (see SaveWorkButton), so flipping it changes nothing Save would write.
+     */
+    const dirty = text ? !(open && baseline && fingerprint(text) === baseline) : false;
+
+    /**
+     * Opening another collection and starting a new one ask first whenever
+     * something unsaved would be replaced. Leaving the page only asks when
+     * there's a Save to offer: nothing is cleared on the way out, so for a
+     * signed-out visitor the question would have nothing behind it.
+     */
+    const guard = useLeaveGuard({ dirty, guardNavigation: dirty && authEnabled && signedIn });
+
+    /** Said whenever the collection here is about to be replaced. */
+    const alsoDeckCheck = "This is also the collection Deck Check uses unless you pick another there.";
 
     /* ---- editing ---- */
 
@@ -795,6 +879,8 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
     const loadSaved = (loadedText: string, loaded: NonNullable<SavedRef>) => {
         const loadedCards = mergeCollection(loadedText);
         setCards(loadedCards);
+        setBaseline(loadedCards.length ? fingerprint(formatCollection(loadedCards)) : null);
+        setPhase("editing");
         setRejected([]);
         checkCollection(loadedCards);
         setArena(loaded.arena);
@@ -804,367 +890,510 @@ export default function CollectionEditor({ authEnabled }: { authEnabled: boolean
         showNotice(`Opened ${loaded.arena ? "Arena" : "Paper"} collection "${loaded.name}".`);
     };
 
+    /** Open a saved collection, asking first if that would drop unsaved work. */
+    const requestLoad = (loadedText: string, loaded: NonNullable<SavedRef>) =>
+        guard.request({
+            run: () => loadSaved(loadedText, loaded),
+            title: `Open “${loaded.name}”?`,
+            consequence: `Opening it replaces the collection on this page. ${alsoDeckCheck}`,
+            proceedLabel: "Open without saving",
+        });
+
+    /** The chooser's pick. Resolves to a message when it can't be opened. */
+    const openById = async (id: number): Promise<string | null> => {
+        try {
+            const res = await fetch(`/api/collections/${id}`);
+            if (res.status === 401) return "Sign in again to open your saved collections.";
+            if (res.status === 404) return "That collection no longer exists.";
+            if (!res.ok) return "Could not open that collection.";
+            const { collection } = await res.json();
+            requestLoad(collection.raw_text ?? "", {
+                id: collection.id,
+                name: collection.name,
+                arena: collection.arena_mode,
+            });
+            return null;
+        } catch {
+            return "Could not open that collection.";
+        }
+    };
+
+    /** Empty the page: Start Over's clear, and the chooser's Start new. */
+    const clearAll = () => {
+        setCards([]);
+        checkCollection([]);
+        setOpen(null);
+        setBaseline(null);
+        setPage(0);
+        showNotice(null);
+        setRejected([]);
+    };
+
+    const startNew = () =>
+        guard.request({
+            run: () => {
+                clearAll();
+                setPhase("editing");
+            },
+            title: "Start a new collection?",
+            consequence: `Starting new empties the collection on this page. ${alsoDeckCheck}`,
+            proceedLabel: "Start new without saving",
+        });
+
+    const openAnother = () => {
+        setChooser("switch");
+        setPhase("choosing");
+    };
+
     return (
         <div className="space-y-8">
             <Suspense fallback={null}>
-                <SavedCollectionLoader onLoad={loadSaved} />
+                {/* Through the guard, so a profile link no longer replaces
+                    unsaved work in this browser without asking. */}
+                <SavedCollectionLoader onLoad={requestLoad} authEnabled={authEnabled} />
             </Suspense>
 
-            {/* ---- summary and saving ---- */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-ink/55">
-                            {open ? "Editing" : "Your collection"}
-                        </p>
-                        <h2 className="text-2xl font-title break-words">
-                            {open ? open.name : "Unsaved collection"}
-                        </h2>
-                        <p className="text-sm text-ink/70">
-                            {cards.length.toLocaleString()} different card{cards.length === 1 ? "" : "s"} ·{" "}
-                            {totalCopies.toLocaleString()} total
-                        </p>
+            {phase === "loading" && (
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6">
+                    <p className="text-ink/60">Loading...</p>
+                </section>
+            )}
+
+            {phase === "choosing" && (
+                <EntryChooser
+                    kind="collections"
+                    authEnabled={authEnabled}
+                    mode={chooser}
+                    activeId={open?.id ?? null}
+                    onOpen={openById}
+                    onNew={startNew}
+                    newLabel="Start a new collection"
+                    // The collection here is never cleared on the way out,
+                    // so it's offered on every arrival, not just after a
+                    // reload as on the Decks page. When switching, "Back"
+                    // is the same thing.
+                    resume={
+                        chooser === "entry" && cards.length > 0
+                            ? {
+                                  label: "Keep working on what's here",
+                                  detail:
+                                      `${open ? `“${open.name}”` : "Your collection in this browser"}` +
+                                      ` — ${cards.length.toLocaleString()} different card${cards.length === 1 ? "" : "s"}` +
+                                      // No profile clause where there are no profiles.
+                                      `${dirty ? (open ? ", with changes you haven't saved" : authEnabled ? ", not saved to your profile" : "") : ""}.`,
+                                  onResume: () => setPhase("editing"),
+                              }
+                            : null
+                    }
+                    onCancel={chooser === "switch" ? () => setPhase("editing") : undefined}
+                    cancelLabel={open ? `Back to “${open.name}”` : "Back to your collection"}
+                />
+            )}
+
+            {/* Hidden rather than unmounted while the chooser is up, so the
+                add box, the filter and the page you were on are all still
+                there after "Back to ...". */}
+            <div className={phase === "editing" ? "space-y-8" : "hidden"}>
+                {/* ---- summary and saving ---- */}
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-ink/55">
+                                {open ? "Editing" : "Your collection"}
+                            </p>
+                            <h2 className="text-2xl font-title break-words">
+                                {open ? open.name : "Unsaved collection"}
+                            </h2>
+                            <p className="text-sm text-ink/70">
+                                {cards.length.toLocaleString()} different card{cards.length === 1 ? "" : "s"} ·{" "}
+                                {totalCopies.toLocaleString()} total
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            {authEnabled && (
+                                <button type="button" onClick={openAnother} className={SWITCH_BUTTON_CLASS}>
+                                    Open another...
+                                </button>
+                            )}
+                            <div className="flex gap-2" role="group" aria-label="Collection type">
+                                {[
+                                    { label: "Arena", value: true },
+                                    { label: "Paper", value: false },
+                                ].map((opt) => (
+                                    <button
+                                        key={opt.label}
+                                        type="button"
+                                        aria-pressed={arena === opt.value}
+                                        onClick={() => setArena(opt.value)}
+                                        className={
+                                            "px-4 py-2 rounded font-title text-sm " +
+                                            (arena === opt.value
+                                                ? "bg-brass text-brass-ink"
+                                                : "bg-parchment text-ink/70 hover:bg-parchment/70")
+                                        }
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="flex gap-2" role="group" aria-label="Collection type">
-                        {[
-                            { label: "Arena", value: true },
-                            { label: "Paper", value: false },
-                        ].map((opt) => (
+                    <div className="flex flex-wrap items-center gap-3 border-t border-brass/25 pt-4">
+                        {authEnabled && (
+                            <SaveWorkButton
+                                kind="collection"
+                                decks={[]}
+                                collection={text}
+                                arenaMode={arena}
+                                open={open}
+                                returnTo="/collection"
+                                onSaved={(saved) => {
+                                    setOpen({ id: saved.id, name: saved.name, arena: saved.arena });
+                                    setArena(saved.arena);
+                                    setBaseline(fingerprint(text));
+                                }}
+                            />
+                        )}
+                        {/* ?source=collection: Deck Check otherwise keeps whatever
+                            collection this tab last chose there, and a button that
+                            says "this collection" has to mean this one. */}
+                        <Link
+                            href="/deck-check?source=collection"
+                            className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
+                        >
+                            Check decks against it
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => (cards.length === 0 ? null : setConfirmClear(true))}
+                            disabled={cards.length === 0}
+                            className="sm:ml-auto px-5 py-2 rounded shadow-card font-title bg-red-700 text-white hover:bg-red-800 disabled:opacity-40"
+                        >
+                            Start Over
+                        </button>
+                    </div>
+                    <p className="text-xs text-ink/55">
+                        Deck Check compares your decks against this collection unless you load a different
+                        one there — change it here and Deck Check sees it.
+                    </p>
+                </section>
+
+                {/* ---- adding ---- */}
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                    <h2 className="text-2xl font-title flex items-center">
+                        Add Cards
+                        <HelpTip text="Type a card name and pick it from the list, or paste a whole list or an Arena export below. Copies of the same card are always added together, whichever set or printing they came from." />
+                    </h2>
+
+                    <AddCard onAdd={addOne} problem={addProblem} onProblem={onAddProblem} />
+
+                    <details className="group">
+                        <summary className="cursor-pointer text-sm text-brand hover:text-brand-dark underline underline-offset-2">
+                            Paste a list or an Arena export
+                        </summary>
+                        <div className="pt-3 space-y-3">
+                            <textarea
+                                value={paste}
+                                onChange={(e) => setPaste(e.target.value)}
+                                rows={8}
+                                placeholder={"4 Lightning Bolt\n2 Opt (XLN) 65\n..."}
+                                className="w-full px-3 py-2 rounded bg-parchment text-ink text-sm shadow-inner-parchment font-mono"
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void addPasted(false)}
+                                    disabled={pasting}
+                                    className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
+                                >
+                                    Add to collection
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void addPasted(true)}
+                                    disabled={pasting}
+                                    className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
+                                >
+                                    Replace collection
+                                </button>
+                                {pasting && <span className="text-sm text-ink/70">Checking card names...</span>}
+                            </div>
+                        </div>
+                    </details>
+
+                    {notice && (
+                        // Can quote a saved collection's name, which is the
+                        // user's own text — see the add box's problem line.
+                        <p className="text-sm text-ink/80 [overflow-wrap:anywhere]" role="status">
+                            {notice}
+                        </p>
+                    )}
+
+                    {rejected.length > 0 && (
+                        <div className="text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                                <p className="font-semibold text-red-800">
+                                    Couldn&apos;t find {rejected.length} line{rejected.length === 1 ? "" : "s"}, so{" "}
+                                    {rejected.length === 1 ? "it wasn't" : "they weren't"} added:
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setRejected([])}
+                                    className="shrink-0 px-2 py-1 rounded text-ink/70 hover:bg-parchment"
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
+                            <ul className="space-y-1.5">
+                                {rejected.slice(0, MAX_REJECTED_SHOWN).map((miss) => (
+                                    <li key={miss.name} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <span className="break-all">&ldquo;{miss.name}&rdquo;</span>
+                                        {miss.suggestions.length > 0 && (
+                                            <>
+                                                <span className="text-ink/70">did you mean</span>
+                                                {miss.suggestions.map((s) => (
+                                                    <button
+                                                        key={s}
+                                                        type="button"
+                                                        onClick={() => addSuggestion(miss, s)}
+                                                        aria-label={`Add ${miss.qty} ${s} instead of ${miss.name}`}
+                                                        className="px-2 py-0.5 rounded bg-parchment text-ink shadow-inner-parchment hover:bg-brass/25"
+                                                    >
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                            {rejected.length > MAX_REJECTED_SHOWN && (
+                                <p className="text-ink/70">
+                                    ...and {rejected.length - MAX_REJECTED_SHOWN} more.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </section>
+
+                {/* ---- the cards ---- */}
+                <section
+                    ref={gridRef}
+                    className="scroll-mt-4 bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4"
+                >
+                    {unknownHere.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-3 text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2">
+                            {/* Quotes names from an old collection, which can be
+                                any text at all — a long unbroken one widened the
+                                page to 590px on a phone without overflow-wrap. */}
+                            <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
+                                {unknownHere.length} card{unknownHere.length === 1 ? " in this collection isn't" : "s in this collection aren't"}{" "}
+                                recognised:{" "}
+                                {unknownHere
+                                    .slice(0, 5)
+                                    .map((c) => `“${c.name}”`)
+                                    .join(", ")}
+                                {unknownHere.length > 5 ? `, and ${unknownHere.length - 5} more` : ""}.
+                            </p>
                             <button
-                                key={opt.label}
                                 type="button"
-                                aria-pressed={arena === opt.value}
-                                onClick={() => setArena(opt.value)}
-                                className={
-                                    "px-4 py-2 rounded font-title text-sm " +
-                                    (arena === opt.value
-                                        ? "bg-brass text-brass-ink"
-                                        : "bg-parchment text-ink/70 hover:bg-parchment/70")
-                                }
+                                onClick={removeUnknown}
+                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
                             >
-                                {opt.label}
+                                Remove {unknownHere.length === 1 ? "it" : "them"}
                             </button>
-                        ))}
-                    </div>
-                </div>
+                        </div>
+                    )}
 
-                <div className="flex flex-wrap items-center gap-3 border-t border-brass/25 pt-4">
-                    {authEnabled && (
+                    <div className="flex flex-wrap items-end gap-3">
+                        <label className="flex-1 min-w-[12rem]">
+                            <span className="text-sm text-ink/70">Find in collection</span>
+                            <input
+                                type="search"
+                                value={filter}
+                                onChange={(e) => {
+                                    setFilter(e.target.value);
+                                    setPage(0);
+                                }}
+                                placeholder="Card name"
+                                className="mt-1 w-full px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
+                            />
+                        </label>
+                        <label>
+                            <span className="text-sm text-ink/70">Sort</span>
+                            <select
+                                value={sort}
+                                onChange={(e) => {
+                                    setSort(e.target.value as Sort);
+                                    setPage(0);
+                                }}
+                                className="mt-1 block px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
+                            >
+                                <option value="name">Name A–Z</option>
+                                <option value="qty">Most copies</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    {cards.length === 0 ? (
+                        <p className="text-ink/70 py-8 text-center">
+                            {hydrated ? "No cards yet. Add some above, or paste a list." : "Loading..."}
+                        </p>
+                    ) : shown.length === 0 ? (
+                        <p className="text-ink/70 py-8 text-center">Nothing in your collection matches that.</p>
+                    ) : (
+                        <>
+                            <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                {pageCards.map((c) => (
+                                    <CardTile
+                                        key={c.name}
+                                        card={c}
+                                        // A name too long to be a card was never
+                                        // looked up (see MAX_IMAGE_NAME), so it
+                                        // reads as "no picture", not as loading.
+                                        img={c.name.length > MAX_IMAGE_NAME ? null : images[c.name]}
+                                        unrecognised={unknown.has(c.name)}
+                                        onSetQty={(qty) => setQty(c.name, qty)}
+                                    />
+                                ))}
+                            </ul>
+
+                            {pages > 1 && (
+                                <div className="flex items-center justify-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => goToPage(Math.max(0, current - 1))}
+                                        disabled={current === 0}
+                                        className="px-4 py-2 rounded font-title bg-parchment hover:bg-parchment/70 disabled:opacity-40"
+                                    >
+                                        ‹ Previous
+                                    </button>
+                                    <span className="text-sm text-ink/70">
+                                        Page {current + 1} of {pages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => goToPage(Math.min(pages - 1, current + 1))}
+                                        disabled={current >= pages - 1}
+                                        className="px-4 py-2 rounded font-title bg-parchment hover:bg-parchment/70 disabled:opacity-40"
+                                    >
+                                        Next ›
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </section>
+            </div>
+
+            {/* ---- start over, with a chance to save first ----
+                In ModalFrame, like the leave-guard's dialog: portalled to
+                <body> (inside the page's space-y-8 stack the fixed backdrop
+                picked up a sibling margin and left the header clickable
+                above it), focus on "Keep it", Tab kept inside, Escape and
+                the backdrop meaning "Keep it". */}
+            {confirmClear && (
+                <ModalFrame
+                    onCancel={() => setConfirmClear(false)}
+                    labelledBy="clear-collection-title"
+                    boxClassName="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink"
+                >
+                    <h3 id="clear-collection-title" className="font-title text-2xl text-red-800">
+                        Start over?
+                    </h3>
+                    <p className="leading-relaxed">
+                        This empties your collection here, and in Deck Check wherever it&apos;s
+                        using this one.
+                    </p>
+                    <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
+                        There&apos;s no undo. Anything you haven&apos;t saved is gone.
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-end pt-1">
+                        <button
+                            type="button"
+                            data-autofocus
+                            onClick={() => setConfirmClear(false)}
+                            className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
+                        >
+                            Keep it
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                clearAll();
+                                setConfirmClear(false);
+                            }}
+                            className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
+                        >
+                            Clear without saving
+                        </button>
+                        {authEnabled && (
+                            <SaveWorkButton
+                                kind="collection"
+                                decks={[]}
+                                collection={text}
+                                arenaMode={arena}
+                                open={open}
+                                label="Save and clear"
+                                allowSaveAsNew={false}
+                                variant="primary"
+                                returnTo="/collection"
+                                onSaved={() => {
+                                    clearAll();
+                                    setConfirmClear(false);
+                                }}
+                            />
+                        )}
+                    </div>
+                </ModalFrame>
+            )}
+
+            {/* ---- leaving, or switching, with unsaved work ---- */}
+            {guard.pending && (
+                <LeaveDialog
+                    pending={guard.pending}
+                    onStay={guard.stay}
+                    onProceed={guard.proceed}
+                    authEnabled={authEnabled}
+                    noun="collection"
+                    itemName={open?.name ?? null}
+                    isSaved={open !== null}
+                    clearsOnLeave={false}
+                    renderSave={(done, label) => (
                         <SaveWorkButton
                             kind="collection"
                             decks={[]}
                             collection={text}
                             arenaMode={arena}
                             open={open}
+                            label={label}
+                            allowSaveAsNew={false}
+                            variant="primary"
                             returnTo="/collection"
                             onSaved={(saved) => {
-                                setOpen({ id: saved.id, name: saved.name, arena: saved.arena });
+                                const ref = { id: saved.id, name: saved.name, arena: saved.arena };
+                                setOpen(ref);
                                 setArena(saved.arena);
+                                setBaseline(fingerprint(text));
+                                // Written now as well as by the persistence
+                                // effect: "Save and leave" navigates away
+                                // straight after, and the collection stays
+                                // in this browser, so the next visit must
+                                // already know it's this saved one.
+                                try {
+                                    const openValue = encodeOpen(ref, text, fingerprint(text));
+                                    if (openValue) localStorage.setItem(OPEN_KEY, openValue);
+                                    localStorage.setItem(MODE_KEY, saved.arena ? "arena" : "paper");
+                                } catch {
+                                    /* the save itself succeeded; only the reminder is lost */
+                                }
+                                done();
                             }}
                         />
                     )}
-                    {/* ?source=collection: Deck Check otherwise keeps whatever
-                        collection this tab last chose there, and a button that
-                        says "this collection" has to mean this one. */}
-                    <Link
-                        href="/deck-check?source=collection"
-                        className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70"
-                    >
-                        Check decks against it
-                    </Link>
-                    <button
-                        type="button"
-                        onClick={() => (cards.length === 0 ? null : setConfirmClear(true))}
-                        disabled={cards.length === 0}
-                        className="sm:ml-auto px-5 py-2 rounded shadow-card font-title bg-red-700 text-white hover:bg-red-800 disabled:opacity-40"
-                    >
-                        Start Over
-                    </button>
-                </div>
-                <p className="text-xs text-ink/55">
-                    Deck Check compares your decks against this collection unless you load a different
-                    one there — change it here and Deck Check sees it.
-                </p>
-            </section>
-
-            {/* ---- adding ---- */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
-                <h2 className="text-2xl font-title flex items-center">
-                    Add Cards
-                    <HelpTip text="Type a card name and pick it from the list, or paste a whole list or an Arena export below. Copies of the same card are always added together, whichever set or printing they came from." />
-                </h2>
-
-                <AddCard onAdd={addOne} problem={addProblem} onProblem={onAddProblem} />
-
-                <details className="group">
-                    <summary className="cursor-pointer text-sm text-brand hover:text-brand-dark underline underline-offset-2">
-                        Paste a list or an Arena export
-                    </summary>
-                    <div className="pt-3 space-y-3">
-                        <textarea
-                            value={paste}
-                            onChange={(e) => setPaste(e.target.value)}
-                            rows={8}
-                            placeholder={"4 Lightning Bolt\n2 Opt (XLN) 65\n..."}
-                            className="w-full px-3 py-2 rounded bg-parchment text-ink text-sm shadow-inner-parchment font-mono"
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => void addPasted(false)}
-                                disabled={pasting}
-                                className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
-                            >
-                                Add to collection
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => void addPasted(true)}
-                                disabled={pasting}
-                                className="px-5 py-2 rounded shadow-card font-title bg-parchment text-ink hover:bg-parchment/70 disabled:opacity-50"
-                            >
-                                Replace collection
-                            </button>
-                            {pasting && <span className="text-sm text-ink/70">Checking card names...</span>}
-                        </div>
-                    </div>
-                </details>
-
-                {notice && (
-                    // Can quote a saved collection's name, which is the
-                    // user's own text — see the add box's problem line.
-                    <p className="text-sm text-ink/80 [overflow-wrap:anywhere]" role="status">
-                        {notice}
-                    </p>
-                )}
-
-                {rejected.length > 0 && (
-                    <div className="text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                            <p className="font-semibold text-red-800">
-                                Couldn&apos;t find {rejected.length} line{rejected.length === 1 ? "" : "s"}, so{" "}
-                                {rejected.length === 1 ? "it wasn't" : "they weren't"} added:
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setRejected([])}
-                                className="shrink-0 px-2 py-1 rounded text-ink/70 hover:bg-parchment"
-                            >
-                                Dismiss
-                            </button>
-                        </div>
-                        <ul className="space-y-1.5">
-                            {rejected.slice(0, MAX_REJECTED_SHOWN).map((miss) => (
-                                <li key={miss.name} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span className="break-all">&ldquo;{miss.name}&rdquo;</span>
-                                    {miss.suggestions.length > 0 && (
-                                        <>
-                                            <span className="text-ink/70">did you mean</span>
-                                            {miss.suggestions.map((s) => (
-                                                <button
-                                                    key={s}
-                                                    type="button"
-                                                    onClick={() => addSuggestion(miss, s)}
-                                                    aria-label={`Add ${miss.qty} ${s} instead of ${miss.name}`}
-                                                    className="px-2 py-0.5 rounded bg-parchment text-ink shadow-inner-parchment hover:bg-brass/25"
-                                                >
-                                                    {s}
-                                                </button>
-                                            ))}
-                                        </>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                        {rejected.length > MAX_REJECTED_SHOWN && (
-                            <p className="text-ink/70">
-                                ...and {rejected.length - MAX_REJECTED_SHOWN} more.
-                            </p>
-                        )}
-                    </div>
-                )}
-            </section>
-
-            {/* ---- the cards ---- */}
-            <section
-                ref={gridRef}
-                className="scroll-mt-4 bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4"
-            >
-                {unknownHere.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-3 text-sm rounded border border-red-700/30 bg-red-700/5 px-3 py-2">
-                        {/* Quotes names from an old collection, which can be
-                            any text at all — a long unbroken one widened the
-                            page to 590px on a phone without overflow-wrap. */}
-                        <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
-                            {unknownHere.length} card{unknownHere.length === 1 ? " in this collection isn't" : "s in this collection aren't"}{" "}
-                            recognised:{" "}
-                            {unknownHere
-                                .slice(0, 5)
-                                .map((c) => `“${c.name}”`)
-                                .join(", ")}
-                            {unknownHere.length > 5 ? `, and ${unknownHere.length - 5} more` : ""}.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={removeUnknown}
-                            className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
-                        >
-                            Remove {unknownHere.length === 1 ? "it" : "them"}
-                        </button>
-                    </div>
-                )}
-
-                <div className="flex flex-wrap items-end gap-3">
-                    <label className="flex-1 min-w-[12rem]">
-                        <span className="text-sm text-ink/70">Find in collection</span>
-                        <input
-                            type="search"
-                            value={filter}
-                            onChange={(e) => {
-                                setFilter(e.target.value);
-                                setPage(0);
-                            }}
-                            placeholder="Card name"
-                            className="mt-1 w-full px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
-                        />
-                    </label>
-                    <label>
-                        <span className="text-sm text-ink/70">Sort</span>
-                        <select
-                            value={sort}
-                            onChange={(e) => {
-                                setSort(e.target.value as Sort);
-                                setPage(0);
-                            }}
-                            className="mt-1 block px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
-                        >
-                            <option value="name">Name A–Z</option>
-                            <option value="qty">Most copies</option>
-                        </select>
-                    </label>
-                </div>
-
-                {cards.length === 0 ? (
-                    <p className="text-ink/70 py-8 text-center">
-                        {hydrated ? "No cards yet. Add some above, or paste a list." : "Loading..."}
-                    </p>
-                ) : shown.length === 0 ? (
-                    <p className="text-ink/70 py-8 text-center">Nothing in your collection matches that.</p>
-                ) : (
-                    <>
-                        <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                            {pageCards.map((c) => (
-                                <CardTile
-                                    key={c.name}
-                                    card={c}
-                                    // A name too long to be a card was never
-                                    // looked up (see MAX_IMAGE_NAME), so it
-                                    // reads as "no picture", not as loading.
-                                    img={c.name.length > MAX_IMAGE_NAME ? null : images[c.name]}
-                                    unrecognised={unknown.has(c.name)}
-                                    onSetQty={(qty) => setQty(c.name, qty)}
-                                />
-                            ))}
-                        </ul>
-
-                        {pages > 1 && (
-                            <div className="flex items-center justify-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => goToPage(Math.max(0, current - 1))}
-                                    disabled={current === 0}
-                                    className="px-4 py-2 rounded font-title bg-parchment hover:bg-parchment/70 disabled:opacity-40"
-                                >
-                                    ‹ Previous
-                                </button>
-                                <span className="text-sm text-ink/70">
-                                    Page {current + 1} of {pages}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => goToPage(Math.min(pages - 1, current + 1))}
-                                    disabled={current >= pages - 1}
-                                    className="px-4 py-2 rounded font-title bg-parchment hover:bg-parchment/70 disabled:opacity-40"
-                                >
-                                    Next ›
-                                </button>
-                            </div>
-                        )}
-                    </>
-                )}
-            </section>
-
-            {/* ---- start over, with a chance to save first ---- */}
-            {confirmClear && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="clear-collection-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) setConfirmClear(false);
-                    }}
-                >
-                    <div className="bg-parchment rounded-lg shadow-card p-6 max-w-md w-full space-y-4 text-ink">
-                        <h3 id="clear-collection-title" className="font-title text-2xl text-red-800">
-                            Start over?
-                        </h3>
-                        <p className="leading-relaxed">
-                            This empties your collection here, and in Deck Check wherever it&apos;s
-                            using this one.
-                        </p>
-                        <p className="text-sm font-semibold text-red-800 bg-red-700/10 border border-red-700/30 rounded px-3 py-2">
-                            There&apos;s no undo. Anything you haven&apos;t saved is gone.
-                        </p>
-                        <div className="flex flex-wrap gap-2 justify-end pt-1">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmClear(false)}
-                                className="px-4 py-2 rounded text-sm text-ink/70 hover:bg-parchment-dark"
-                            >
-                                Keep it
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setCards([]);
-                                    checkCollection([]);
-                                    setOpen(null);
-                                    setPage(0);
-                                    showNotice(null);
-                                    setRejected([]);
-                                    setConfirmClear(false);
-                                }}
-                                className="px-4 py-2 rounded font-title text-sm border border-red-700/40 text-red-700 hover:bg-red-700/10"
-                            >
-                                Clear without saving
-                            </button>
-                            {authEnabled && (
-                                <SaveWorkButton
-                                    kind="collection"
-                                    decks={[]}
-                                    collection={text}
-                                    arenaMode={arena}
-                                    open={open}
-                                    label="Save and clear"
-                                    allowSaveAsNew={false}
-                                    variant="primary"
-                                    returnTo="/collection"
-                                    onSaved={() => {
-                                        setCards([]);
-                                        checkCollection([]);
-                                        setOpen(null);
-                                        setPage(0);
-                                        showNotice(null);
-                                        setRejected([]);
-                                        setConfirmClear(false);
-                                    }}
-                                />
-                            )}
-                        </div>
-                    </div>
-                </div>
+                />
             )}
         </div>
     );

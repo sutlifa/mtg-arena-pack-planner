@@ -149,7 +149,8 @@ export default function PrivacyPage() {
                             {accounts ? (
                                 <>
                                     {" "}which saved collection it was opened from, if any, so Save updates
-                                    that one (
+                                    that one, with a short fingerprint of its saved version so the page
+                                    can tell whether you&apos;ve changed it (
                                     <code className="px-1 rounded bg-parchment">mtgpp:collection-open</code>
                                     ),
                                 </>
@@ -158,7 +159,27 @@ export default function PrivacyPage() {
                             {accounts ? ", and which saved deck it is, if any" : ""} (
                             <code className="px-1 rounded bg-parchment">mtgpp:decks-draft</code>), and the
                             decklist, format and matchup plans you build in the Sideboard Planner (under{" "}
-                            <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>).
+                            <code className="px-1 rounded bg-parchment">mtgpp:sideboard</code>
+                            {accounts ? (
+                                <>
+                                    , with a fingerprint of the open guide&apos;s saved version under{" "}
+                                    <code className="px-1 rounded bg-parchment">mtgpp:sideboard-baseline</code>
+                                </>
+                            ) : null}
+                            ).
+                        </p>
+                        {/* Written against DeckBuilder's clearStoredDraft and
+                            SideboardPlanner's clearStoredPlan, both run by the
+                            leave-guard (LeaveGuard). If either stops clearing on
+                            leave, change this. */}
+                        <p>
+                            The Decks page and the Sideboard Planner only keep your work while you&apos;re
+                            using them: when you leave either page through a link on this site, it asks
+                            first if anything is unsaved and then clears that page&apos;s draft (the
+                            Sideboard Planner keeps your format and the metagame you pulled). A draft
+                            left by reloading, pressing Back or closing the tab stays in your browser
+                            until you next open that page, which offers to pick it up or start fresh.
+                            The Collection page&apos;s collection is never cleared by leaving.
                         </p>
                         {/* Written against lib/deckHandoff: sessionStorage, taken
                             (read and removed) by the receiving page, ignored after

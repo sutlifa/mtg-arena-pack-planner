@@ -32,6 +32,34 @@ Three of the tools are about your decks and your cards, and each has one
 job: **Decks** holds your decklists, **Collection** holds your cards, and
 **Deck Check** is the only place that compares the two.
 
+### Opening, switching and leaving — Decks, Collection, Sideboard Planner
+
+The three pages that edit something you can save work the same way
+(`app/components/EntryChooser.tsx`, `app/components/LeaveGuard.tsx`):
+
+- **On the way in**, the page asks what you want to work on: one of your saved
+  decks / collections / guides (signed in), **Start new**, or carrying on with
+  what's already here. A deep link (`?deck=`, `?guide=`, `?collection=`, or a
+  deck handed over from the Decks page) skips the question and opens that
+  item. Signed out it never blocks anything — Start new is always there.
+- **Open another...** beside the name switches without going to the profile.
+- **Leaving with unsaved work** — any in-app link, or opening/starting
+  something else — asks first: *Save and leave* (signed in; leaves only if the
+  save succeeds), *Leave without saving*, or *Stay*. Reload and tab close get
+  the browser's own prompt. "Unsaved" means different from the last saved or
+  opened version, or a non-empty draft that was never saved; an empty page or
+  an untouched saved item never asks.
+- **Decks and the Sideboard Planner clear their draft when you leave** through
+  the site, so the next visit starts at the chooser. **The Collection page
+  never clears**: it's Deck Check's default collection and, signed out, the
+  only copy; leaving just asks whether to save first (and only when there's a
+  Save to offer).
+- **Back/Forward aren't intercepted** — the App Router gives no reliable way
+  to, and a sentinel history entry fights Next's own history handling (see
+  `LeaveGuard.tsx`). Nothing is lost: a draft left that way (or by a reload or
+  a closed tab) stays in the browser and the chooser offers to pick up where
+  you left off.
+
 ### Decks — `/decks`
 
 Keep and edit your own decklists.
@@ -48,10 +76,12 @@ Keep and edit your own decklists.
 - A saved, unchanged deck travels as `?deck=<id>`; anything else (signed out,
   or unsaved edits) is handed over in `sessionStorage`, never in the URL
   (`lib/deckHandoff.ts`).
-- Every action but saving works signed out. Signed in: save, save as new,
-  rename, duplicate and delete (confirmed in the page), with unsaved-changes
-  checks before opening another deck. Decks are stored normalised — a `Deck`
-  and a `Sideboard` section, one line per card (`lib/deckText.ts`).
+- Every action but saving works signed out. Signed in: open a saved deck from
+  the chooser or **Open another...**, save, save as new, rename, duplicate
+  and delete (confirmed in the page). Sending a deck to another tool counts as
+  leaving, so unsaved work is asked about first. Decks are stored normalised —
+  a `Deck` and a `Sideboard` section, one line per card (`lib/deckText.ts`).
+- The draft (`mtgpp:decks-draft`) is cleared when you leave the page.
 
 ### Collection — `/collection`
 
@@ -66,11 +96,13 @@ against it is Deck Check's job.
 - Copies across printings always merge into one line — whether pasted, saved,
   loaded or compared (`lib/collectionText.ts`).
 - Kept in localStorage (`mtgpp:collection`, its Arena/Paper type in
-  `mtgpp:collection-mode`, and which saved collection it came from in
-  `mtgpp:collection-open` — `lib/openCollection.ts`). Deck Check reads it as
-  its default collection and never writes it.
-- Signed in: save to your profile as Arena or Paper; a saved collection's
-  **Edit** button on the profile opens it here.
+  `mtgpp:collection-mode`, and which saved collection it came from — plus a
+  fingerprint of its saved version, for the unsaved-changes check — in
+  `mtgpp:collection-open`; `lib/openCollection.ts`). Deck Check reads it as
+  its default collection and never writes it. Leaving the page never clears
+  it.
+- Signed in: save to your profile as Arena or Paper; open a saved collection
+  from the chooser or **Open another...**, or with **Edit** on the profile.
 - **Check decks against it** → `/deck-check?source=collection`, which makes
   Deck Check use this collection even if the tab had chosen another.
 - Old `/collection?deck=<id>` links (the "Compare with a deck" panel this page
@@ -163,7 +195,11 @@ Build a matchup-by-matchup sideboard guide, then print it on one page.
 - **Start Over** clears the deck and matchups but keeps the format and the
   archetypes you pulled. It asks first if there is work to lose, and where
   sign-in is configured it offers to save before clearing.
-- Signed in: save to your profile, rename the open guide in place, duplicate it.
+- Signed in: open a saved guide from the chooser or **Open another...**, save
+  to your profile, rename the open guide in place, duplicate it.
+- The plan (`mtgpp:sideboard`) is cleared down to its format and pulled
+  metagame when you leave the page; `mtgpp:sideboard-baseline` fingerprints
+  the open guide's saved version for the unsaved-changes check.
 - Accepts a deck from the Decks page (`?deck=<id>` or a hand-off): loads it as
   the decklist, splits it and sets the format if supported. With a guide
   already in progress it asks first rather than replacing anything.

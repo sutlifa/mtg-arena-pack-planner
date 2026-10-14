@@ -5,8 +5,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import HelpTip from "./HelpTip";
 import GuideNameBar from "./GuideNameBar";
-import DeckSaves, { type SavedDeck } from "./DeckSaves";
+import DeckSaves, { DeckSaveAndContinue, type SavedDeck } from "./DeckSaves";
 import { DeckHandoffLoader, sendDeck } from "./DeckHandoff";
+import EntryChooser, { DraftBar, SWITCH_BUTTON_CLASS } from "./EntryChooser";
+import { LeaveDialog, useLeaveGuard } from "./LeaveGuard";
 import { DECK_FORMATS, NO_CARDS_MESSAGE, deckFormatLabel, deckSections, formatDeck } from "@/lib/deckText";
 import { totalCards, type DeckCard } from "@/lib/deckSections";
 import { isGoldfishDeckUrl } from "@/lib/goldfishUrl";
@@ -14,10 +16,14 @@ import { checkDecklistSize } from "@/lib/inputLimits";
 import type { HandoffDeck, HandoffTarget } from "@/lib/deckHandoff";
 
 /**
- * The deck being worked on, kept in this browser between visits like the
- * other tools' work. Includes which saved deck is open and what it held when
- * opened, so a reload still knows what Save updates and whether anything is
- * unsaved.
+ * The deck being worked on, kept in this browser while you're on the page.
+ * Includes which saved deck is open and what it held when opened, so a
+ * reload still knows what Save updates and whether anything is unsaved.
+ *
+ * Cleared when you leave the page through the site (after the leave-guard
+ * has asked), so the next visit starts at the chooser. It survives what the
+ * guard can't intercept — a reload, Back, a closed tab — and the chooser
+ * then offers to pick up where you left off, so nothing is lost silently.
  */
 const DRAFT_KEY = "mtgpp:decks-draft";
 
@@ -96,6 +102,12 @@ const SEND_TARGETS: { target: HandoffTarget; label: string; hint: string }[] = [
  * deck over without an account (see lib/deckHandoff). Saving is in
  * DeckSaves, rendered only where auth is configured, because it needs
  * useSession.
+ *
+ * Each visit starts at the chooser (EntryChooser): one of your saved decks,
+ * a new one, or — if a draft outlived the last visit — that. A ?deck=<id>
+ * link skips it and opens the deck. The saved-deck list that used to fill
+ * the bottom of the page is that chooser now, reachable again from "Open
+ * another..." beside the deck's name.
  */
 export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
     const router = useRouter();
@@ -106,6 +118,31 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
     const [hydrated, setHydrated] = useState(false);
     const { text, name, format, open, baseline } = draft;
     const patch = (fields: Partial<Draft>) => setDraft((d) => ({ ...d, ...fields }));
+
+    /**
+     * Chooser or editor. "loading" until the draft has been read, because
+     * whether there's a draft to offer — and whether a ?deck= link skips the
+     * chooser — is only known in the browser. `chooser` says why the chooser
+     * is up: arriving, or "Open another..." from the editor (which can go
+     * back to the deck unchanged).
+     */
+    const [phase, setPhase] = useState<"loading" | "choosing" | "editing">("loading");
+    const [chooser, setChooser] = useState<"entry" | "switch">("entry");
+    /**
+     * Set once the page is being left. A save made by "Save and leave"
+     * updates the draft a moment before the navigation unmounts the page,
+     * and without this the persistence effect would write that draft straight
+     * back after it had been cleared.
+     */
+    const leaving = useRef(false);
+    const clearStoredDraft = () => {
+        leaving.current = true;
+        try {
+            localStorage.removeItem(DRAFT_KEY);
+        } catch {
+            /* nothing stored to clear */
+        }
+    };
 
     const [importing, setImporting] = useState(false);
     /**
@@ -122,9 +159,6 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
     const notice = status?.kind === "notice" ? status.text : null;
     const error = status?.kind === "error" ? status.text : null;
     const [listVersion, setListVersion] = useState(0);
-    /** A saved deck waiting on "replace what's in the editor?" */
-    const [pendingOpen, setPendingOpen] = useState<SavedDeck | null>(null);
-    const [confirmNew, setConfirmNew] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [busy, setBusy] = useState(false);
 
@@ -132,20 +166,30 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
 
     // After mount rather than in a lazy initializer, so the server render and
     // the first client render agree. The same deliberate exception as the
-    // other tools.
+    // other tools. The address is read here too, rather than through
+    // useSearchParams, so the page stays statically prerendered: a ?deck=
+    // link goes straight to the editor (DeckHandoffLoader opens the deck);
+    // anything else starts at the chooser — except where there's nothing to
+    // choose between (no sign-in on this deployment and no draft), which
+    // would be a menu with one button.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
+        let restored = EMPTY_DRAFT;
         try {
-            setDraft(readDraft(localStorage.getItem(DRAFT_KEY)));
+            restored = readDraft(localStorage.getItem(DRAFT_KEY));
+            setDraft(restored);
         } catch {
             /* unavailable storage just means starting empty */
         }
+        const hasDraft = Boolean(restored.text || restored.name || restored.open);
+        const viaLink = new URLSearchParams(window.location.search).has("deck");
+        setPhase(viaLink || (!authEnabled && !hasDraft) ? "editing" : "choosing");
         setHydrated(true);
-    }, []);
+    }, [authEnabled]);
     /* eslint-enable react-hooks/set-state-in-effect */
 
     useEffect(() => {
-        if (!hydrated) return;
+        if (!hydrated || leaving.current) return;
         try {
             if (draft.text || draft.name || draft.open) {
                 localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -186,6 +230,14 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
 
     /* ---- opening, saving, starting again ---- */
 
+    /**
+     * The leave-guard: in-app links away from the page, reload / tab close,
+     * and every switch below (open another deck, start a new one, send this
+     * one to another tool) ask first while there's unsaved work. Leaving
+     * through the site clears the draft — see DRAFT_KEY.
+     */
+    const guard = useLeaveGuard({ dirty: Boolean(dirty), onLeavePage: clearStoredDraft });
+
     const applyOpen = (d: SavedDeck, message?: string) => {
         setDraft({
             text: d.decklist,
@@ -194,10 +246,10 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
             open: { id: d.id, name: d.name },
             baseline: { decklist: d.decklist, format: d.format ?? null },
         });
-        setPendingOpen(null);
         setConfirmDelete(false);
         setError(null);
         setNotice(message ?? `Opened "${d.name}".`);
+        setPhase("editing");
     };
 
     /** Open a saved deck, asking first if that would drop unsaved work. */
@@ -206,26 +258,25 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
             applyOpen(d);
             return;
         }
-        if (dirty) setPendingOpen(d);
-        else applyOpen(d);
+        guard.request({
+            run: () => applyOpen(d),
+            title: `Open “${d.name}”?`,
+            consequence: "Opening it replaces what's in the editor.",
+            proceedLabel: "Open without saving",
+        });
     };
 
-    const pickFromList = async (id: number) => {
-        setError(null);
+    /** The chooser's pick. Resolves to a message when the deck can't be opened. */
+    const openById = async (id: number): Promise<string | null> => {
         try {
             const res = await fetch(`/api/decks/${id}`);
-            if (res.status === 401) {
-                setError("Sign in again to open your saved decks.");
-                return;
-            }
-            if (!res.ok) {
-                setError(res.status === 404 ? "That deck no longer exists." : "Could not open that deck.");
-                return;
-            }
+            if (res.status === 401) return "Sign in again to open your saved decks.";
+            if (!res.ok) return res.status === 404 ? "That deck no longer exists." : "Could not open that deck.";
             const { deck } = await res.json();
             requestOpen({ id: deck.id, name: deck.name, decklist: deck.decklist, format: deck.format ?? null });
+            return null;
         } catch {
-            setError("Could not open that deck.");
+            return "Could not open that deck.";
         }
     };
 
@@ -243,14 +294,19 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
         setError(null);
     };
 
-    const startNew = () => {
-        setDraft(EMPTY_DRAFT);
-        setConfirmNew(false);
-        setConfirmDelete(false);
-        setPendingOpen(null);
-        setError(null);
-        setNotice(null);
-    };
+    const startNew = () =>
+        guard.request({
+            run: () => {
+                setDraft(EMPTY_DRAFT);
+                setConfirmDelete(false);
+                setError(null);
+                setNotice(null);
+                setPhase("editing");
+            },
+            title: "Start a new deck?",
+            consequence: "Starting a new deck empties the editor.",
+            proceedLabel: "Start new without saving",
+        });
 
     const importLink = async () => {
         setImporting(true);
@@ -317,6 +373,13 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
         setBusy(false);
     };
 
+    /**
+     * Sending is leaving: the deck goes with you, but the page is cleared
+     * behind you like any other way out, so unsaved work is asked about
+     * first — the same dialog, with the same Save. After a save from that
+     * dialog the deck still travels as the editor holds it (a hand-off, not
+     * ?deck=), which is the same list the save just stored.
+     */
     const send = (target: HandoffTarget) => {
         if (!usable) return;
         const deck: HandoffDeck = {
@@ -325,10 +388,21 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
             format: format || null,
             decklist: normalized,
         };
-        // By id only when what's stored is what's on screen; otherwise the
-        // editor's own list goes, so unsaved edits aren't silently swapped
-        // for the saved copy.
-        router.push(sendDeck(target, deck, { saved: open !== null && !dirty }));
+        const label = SEND_TARGETS.find((s) => s.target === target)?.label ?? "the next tool";
+        guard.request({
+            run: () => {
+                // By id only when what's stored is what's on screen;
+                // otherwise the editor's own list goes, so unsaved edits
+                // aren't silently swapped for the saved copy.
+                const href = sendDeck(target, deck, { saved: open !== null && !dirty });
+                clearStoredDraft();
+                router.push(href);
+            },
+            title: `${label}?`,
+            consequence:
+                "The deck goes with you as it is, but this page is cleared when you leave — it won't be here when you come back unless it's saved.",
+            proceedLabel: "Go without saving",
+        });
     };
 
     /* ---- card pictures for the preview ---- */
@@ -405,297 +479,348 @@ export default function DeckBuilder({ authEnabled }: { authEnabled: boolean }) {
 
     return (
         <div className="space-y-8">
-            {/* Opening from the profile arrives as ?deck=<id>. Only where
-                sign-in exists — without it there are no saved decks. */}
-            {authEnabled && (
-                <Suspense fallback={null}>
-                    <DeckHandoffLoader
-                        target="decks"
-                        authEnabled={authEnabled}
-                        ready={hydrated}
-                        onDeck={(d) => {
-                            if (d.id === null) return;
-                            requestOpen({ id: d.id, name: d.name ?? "Deck", decklist: d.decklist, format: d.format });
-                        }}
-                    />
-                </Suspense>
+            {/* Opening from the profile arrives as ?deck=<id>. Mounted even
+                without sign-in, where it opens nothing but says "Saved decks
+                aren't available on this site." — left out, a ?deck= link
+                showed an empty editor with no word of why. */}
+            <Suspense fallback={null}>
+                <DeckHandoffLoader
+                    target="decks"
+                    authEnabled={authEnabled}
+                    ready={hydrated}
+                    onDeck={(d) => {
+                        if (d.id === null) return;
+                        requestOpen({ id: d.id, name: d.name ?? "Deck", decklist: d.decklist, format: d.format });
+                    }}
+                />
+            </Suspense>
+
+            {phase === "loading" && (
+                <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6">
+                    <p className="text-ink/60">Loading...</p>
+                </section>
             )}
 
-            {open && (
-                <div className="space-y-2">
-                    <GuideNameBar
-                        kind="decks"
-                        id={open.id}
-                        name={open.name}
-                        onRenamed={(next) => {
-                            patch({ open: { id: open.id, name: next } });
-                            setListVersion((n) => n + 1);
-                        }}
-                        actions={
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={busy ? undefined : duplicateOpen}
-                                    disabled={busy}
-                                    className="px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70 disabled:opacity-50"
+            {phase === "choosing" && (
+                <EntryChooser
+                    kind="decks"
+                    authEnabled={authEnabled}
+                    mode={chooser}
+                    activeId={chooser === "switch" ? (open?.id ?? null) : null}
+                    onOpen={openById}
+                    onNew={startNew}
+                    newLabel="Start a new deck"
+                    // On arrival, a draft that outlived the last visit. When
+                    // switching, the deck on the page is what "Back" returns
+                    // to, so it isn't offered twice.
+                    resume={
+                        chooser === "entry" && (text || name || open)
+                            ? {
+                                  label: "Pick up where you left off",
+                                  detail: open
+                                      ? `“${open.name}”${dirty ? ", with changes you haven't saved" : ""}.`
+                                      : `${name.trim() ? `“${name.trim()}”` : "A deck"} you hadn't saved yet.`,
+                                  onResume: () => setPhase("editing"),
+                              }
+                            : null
+                    }
+                    onCancel={chooser === "switch" ? () => setPhase("editing") : undefined}
+                    cancelLabel={open ? `Back to “${open.name}”` : "Back to your deck"}
+                />
+            )}
+
+            {phase === "editing" && (
+                <>
+                    {open ? (
+                        <div className="space-y-2">
+                            <GuideNameBar
+                                kind="decks"
+                                id={open.id}
+                                name={open.name}
+                                onRenamed={(next) => {
+                                    patch({ open: { id: open.id, name: next } });
+                                    setListVersion((n) => n + 1);
+                                }}
+                                actions={
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setChooser("switch");
+                                                setPhase("choosing");
+                                            }}
+                                            className={SWITCH_BUTTON_CLASS}
+                                        >
+                                            Open another...
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={busy ? undefined : duplicateOpen}
+                                            disabled={busy}
+                                            className="px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70 disabled:opacity-50"
+                                        >
+                                            Duplicate
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmDelete(true)}
+                                            disabled={busy}
+                                            className="px-4 py-2 rounded text-sm text-ink/70 hover:text-red-700 hover:bg-red-700/10 disabled:opacity-50"
+                                        >
+                                            Delete
+                                        </button>
+                                    </>
+                                }
+                            />
+                            {/* Confirmed in the page, not with window.confirm: the
+                                native dialog is browser chrome and reads as the
+                                browser interrupting, the same reasoning as the
+                                Sideboard Planner's Clear. */}
+                            {confirmDelete && (
+                                <div
+                                    role="alert"
+                                    className="flex flex-wrap items-center gap-2 rounded border border-red-700/40 bg-red-700/5 px-3 py-2 text-sm"
                                 >
-                                    Duplicate
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDelete(true)}
-                                    disabled={busy}
-                                    className="px-4 py-2 rounded text-sm text-ink/70 hover:text-red-700 hover:bg-red-700/10 disabled:opacity-50"
-                                >
-                                    Delete
-                                </button>
-                            </>
-                        }
-                    />
-                    {/* Confirmed in the page, not with window.confirm: the
-                        native dialog is browser chrome and reads as the
-                        browser interrupting, the same reasoning as the
-                        Sideboard Planner's Clear. */}
-                    {confirmDelete && (
-                        <div
-                            role="alert"
-                            className="flex flex-wrap items-center gap-2 rounded border border-red-700/40 bg-red-700/5 px-3 py-2 text-sm"
-                        >
-                            <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
-                                Delete &quot;{open.name}&quot; from your profile? This can&apos;t be undone.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDelete(false)}
-                                className="px-3 py-1.5 rounded text-ink/70 hover:bg-parchment"
-                            >
-                                Keep it
-                            </button>
-                            <button
-                                type="button"
-                                onClick={busy ? undefined : deleteOpen}
-                                disabled={busy}
-                                className="px-3 py-1.5 rounded font-title border border-red-700/40 text-red-700 hover:bg-red-700/10 disabled:opacity-50"
-                            >
-                                {busy ? "Deleting..." : "Delete"}
-                            </button>
+                                    <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
+                                        Delete &quot;{open.name}&quot; from your profile? This can&apos;t be undone.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmDelete(false)}
+                                        className="px-3 py-1.5 rounded text-ink/70 hover:bg-parchment"
+                                    >
+                                        Keep it
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={busy ? undefined : deleteOpen}
+                                        disabled={busy}
+                                        className="px-3 py-1.5 rounded font-title border border-red-700/40 text-red-700 hover:bg-red-700/10 disabled:opacity-50"
+                                    >
+                                        {busy ? "Deleting..." : "Delete"}
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                    ) : (
+                        // Without sign-in there's nothing else to open, so no bar
+                        // whose only button would lead to a one-option chooser.
+                        authEnabled && (
+                            <DraftBar title={name.trim() || "New deck"} detail="Not saved yet">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setChooser("switch");
+                                        setPhase("choosing");
+                                    }}
+                                    className={SWITCH_BUTTON_CLASS}
+                                >
+                                    Open another...
+                                </button>
+                            </DraftBar>
+                        )
                     )}
-                </div>
-            )}
 
-            {/* ---- the editor ---- */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-2xl font-title flex flex-wrap items-center">
-                        {/* Not "New deck": that is the button beside it. */}
-                        {open ? "Decklist" : "Your deck"}
-                        <HelpTip text="Paste a decklist with its sideboard — from Arena, MTGGoldfish or anywhere with one card per line — or an MTGGoldfish deck link. The sideboard starts after a 'Sideboard' line or a single blank line." />
-                    </h2>
-                    {(text || open) &&
-                        (confirmNew ? (
-                            <span className="flex flex-wrap items-center gap-1 bg-parchment rounded px-2 py-1 shadow-card text-sm">
-                                <span className="text-ink/70">Unsaved changes will be lost.</span>
+                    {/* ---- the editor ---- */}
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-2xl font-title flex flex-wrap items-center">
+                                {/* Not "New deck": that is the button beside it. */}
+                                {open ? "Decklist" : "Your deck"}
+                                <HelpTip text="Paste a decklist with its sideboard — from Arena, MTGGoldfish or anywhere with one card per line — or an MTGGoldfish deck link. The sideboard starts after a 'Sideboard' line or a single blank line." />
+                            </h2>
+                            {/* Asks through the leave-guard's dialog when there's
+                                unsaved work, like every other way of replacing it. */}
+                            {(text || open) && (
                                 <button
                                     type="button"
                                     onClick={startNew}
-                                    className="px-2 py-0.5 rounded font-semibold text-red-700 hover:bg-red-700/10"
+                                    className="px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70"
                                 >
-                                    Start new
+                                    New deck
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmNew(false)}
-                                    className="px-2 py-0.5 rounded text-ink/60 hover:bg-parchment-dark"
-                                >
-                                    Cancel
-                                </button>
-                            </span>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => (dirty ? setConfirmNew(true) : startNew())}
-                                className="px-4 py-2 rounded text-sm font-title bg-parchment text-ink shadow-card hover:bg-parchment/70"
-                            >
-                                New deck
-                            </button>
-                        ))}
-                </div>
-
-                {pendingOpen && (
-                    <div
-                        role="alert"
-                        className="flex flex-wrap items-center gap-2 rounded border border-amber-700/40 bg-amber-700/10 px-3 py-2 text-sm"
-                    >
-                        <p className="flex-1 min-w-[12rem] [overflow-wrap:anywhere]">
-                            {open
-                                ? `"${open.name}" has unsaved changes.`
-                                : "The list in the editor isn't saved."}{" "}
-                            Open &quot;{pendingOpen.name}&quot; anyway?
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setPendingOpen(null)}
-                            className="px-3 py-1.5 rounded text-ink/70 hover:bg-parchment"
-                        >
-                            Keep editing
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => applyOpen(pendingOpen)}
-                            className="px-3 py-1.5 rounded font-title border border-amber-700/50 text-amber-800 hover:bg-amber-700/10"
-                        >
-                            Open it
-                        </button>
-                    </div>
-                )}
-
-                <div className="flex flex-wrap gap-4">
-                    {!open && (
-                        <label className="flex flex-col gap-1 flex-1 min-w-[12rem]">
-                            <span className="text-sm text-ink/70">Name</span>
-                            <input
-                                type="text"
-                                value={name}
-                                maxLength={120}
-                                onChange={(e) => patch({ name: e.target.value })}
-                                placeholder="Mono-Red Aggro"
-                                className="px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
-                            />
-                        </label>
-                    )}
-                    <label className="flex flex-col gap-1">
-                        <span className="text-sm text-ink/70">Format</span>
-                        <select
-                            value={format}
-                            onChange={(e) => patch({ format: e.target.value })}
-                            className="px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
-                        >
-                            <option value="">No particular format</option>
-                            {DECK_FORMATS.map((f) => (
-                                <option key={f.slug} value={f.slug}>
-                                    {f.label}
-                                </option>
-                            ))}
-                            {/* A format saved through the API that isn't in
-                                the list still shows as itself. */}
-                            {!knownFormat && <option value={format}>{deckFormatLabel(format)}</option>}
-                        </select>
-                    </label>
-                </div>
-
-                <textarea
-                    value={text}
-                    onChange={(e) => {
-                        patch({ text: e.target.value });
-                        setStatus(null);
-                    }}
-                    aria-label="Decklist"
-                    placeholder={"Deck\n4 Lightning Bolt\n4 Monastery Swiftspear\n...\n\nSideboard\n2 Pyroblast\n\nor paste an MTGGoldfish deck link"}
-                    className="w-full h-56 p-4 bg-parchment shadow-inner-parchment rounded resize-y text-ink font-mono text-sm"
-                />
-
-                {isLink && (
-                    <div className="flex flex-wrap items-center gap-3">
-                        <p className="text-sm text-ink/80">That&apos;s an MTGGoldfish link. Import it to get the list.</p>
-                        <button
-                            type="button"
-                            onClick={importing ? undefined : importLink}
-                            disabled={importing}
-                            className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
-                        >
-                            {importing ? "Importing..." : "Import"}
-                        </button>
-                    </div>
-                )}
-
-                {sizeError && <p className="text-sm text-red-700">{sizeError}</p>}
-                {noCards && !sizeError && <p className="text-sm text-amber-700">{NO_CARDS_MESSAGE}</p>}
-                {error && (
-                    <p className="text-sm text-red-700 [overflow-wrap:anywhere]" role="alert">
-                        {error}
-                    </p>
-                )}
-                {notice && (
-                    <p className="text-sm text-ink/80 [overflow-wrap:anywhere]" role="status">
-                        {notice}
-                    </p>
-                )}
-
-                {hasCards && (
-                    <div className="flex gap-4 items-start pt-2">
-                        <div className="flex-1 min-w-0 grid sm:grid-cols-2 gap-4">
-                            <div className="bg-parchment rounded shadow-inner-parchment p-3">
-                                {cardList("Maindeck", sections.maindeck, mainCount)}
-                            </div>
-                            <div className="bg-parchment rounded shadow-inner-parchment p-3">
-                                {cardList("Sideboard", sections.sideboard, sideCount)}
-                            </div>
-                        </div>
-                        {/* Beside the list on a wide screen only, pinned while
-                            it scrolls; on a phone there's no room beside it. */}
-                        <div className="hidden md:block w-[176px] shrink-0 sticky top-4">
-                            {shownImage && (
-                                <Image
-                                    unoptimized
-                                    src={shownImage}
-                                    alt={shown ?? ""}
-                                    width={244}
-                                    height={340}
-                                    className="w-full h-auto rounded-[4.5%] shadow-card"
-                                />
                             )}
                         </div>
-                    </div>
-                )}
-            </section>
 
-            {/* ---- send it somewhere ---- */}
-            <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-3">
-                <h2 className="text-2xl font-title">Use this deck</h2>
-                {!usable && (
-                    <p className="text-sm text-ink/70">
-                        {isLink
-                            ? "Import the link first."
-                            : sizeError
-                                ? sizeError
-                                : noCards
-                                    ? NO_CARDS_MESSAGE
-                                    : "Paste a decklist above to use it in the other tools."}
-                    </p>
-                )}
-                <div className="grid sm:grid-cols-2 gap-3">
-                    {SEND_TARGETS.map((s) => (
-                        <button
-                            key={s.target}
-                            type="button"
-                            onClick={() => send(s.target)}
-                            disabled={!usable}
-                            className="text-left rounded shadow-card bg-parchment p-3 hover:bg-brass/15 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <span className="block font-title text-lg">{s.label}</span>
-                            <span className="block text-xs text-ink/65 mt-1">{s.hint}</span>
-                        </button>
-                    ))}
-                </div>
-                {open && dirty && usable && (
-                    <p className="text-xs text-ink/60">
-                        Sends the list as it is in the editor, including changes you haven&apos;t saved.
-                    </p>
-                )}
-            </section>
+                        <div className="flex flex-wrap gap-4">
+                            {!open && (
+                                <label className="flex flex-col gap-1 flex-1 min-w-[12rem]">
+                                    <span className="text-sm text-ink/70">Name</span>
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        maxLength={120}
+                                        onChange={(e) => patch({ name: e.target.value })}
+                                        placeholder="Mono-Red Aggro"
+                                        className="px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
+                                    />
+                                </label>
+                            )}
+                            <label className="flex flex-col gap-1">
+                                <span className="text-sm text-ink/70">Format</span>
+                                <select
+                                    value={format}
+                                    onChange={(e) => patch({ format: e.target.value })}
+                                    className="px-3 py-2 rounded bg-parchment text-ink shadow-inner-parchment"
+                                >
+                                    <option value="">No particular format</option>
+                                    {DECK_FORMATS.map((f) => (
+                                        <option key={f.slug} value={f.slug}>
+                                            {f.label}
+                                        </option>
+                                    ))}
+                                    {/* A format saved through the API that isn't in
+                                        the list still shows as itself. */}
+                                    {!knownFormat && <option value={format}>{deckFormatLabel(format)}</option>}
+                                </select>
+                            </label>
+                        </div>
 
-            {authEnabled && (
-                <DeckSaves
-                    decklist={normalized}
-                    format={format || null}
-                    draftName={name}
-                    open={open}
-                    dirty={Boolean(dirty)}
-                    canSave={usable}
-                    listVersion={listVersion}
-                    onSaved={onSaved}
-                    onPick={(id) => void pickFromList(id)}
+                        <textarea
+                            value={text}
+                            onChange={(e) => {
+                                patch({ text: e.target.value });
+                                setStatus(null);
+                            }}
+                            aria-label="Decklist"
+                            placeholder={"Deck\n4 Lightning Bolt\n4 Monastery Swiftspear\n...\n\nSideboard\n2 Pyroblast\n\nor paste an MTGGoldfish deck link"}
+                            className="w-full h-56 p-4 bg-parchment shadow-inner-parchment rounded resize-y text-ink font-mono text-sm"
+                        />
+
+                        {isLink && (
+                            <div className="flex flex-wrap items-center gap-3">
+                                <p className="text-sm text-ink/80">That&apos;s an MTGGoldfish link. Import it to get the list.</p>
+                                <button
+                                    type="button"
+                                    onClick={importing ? undefined : importLink}
+                                    disabled={importing}
+                                    className="px-5 py-2 rounded shadow-card font-title bg-brand text-midnight-light hover:bg-brand-dark disabled:opacity-50"
+                                >
+                                    {importing ? "Importing..." : "Import"}
+                                </button>
+                            </div>
+                        )}
+
+                        {sizeError && <p className="text-sm text-red-700">{sizeError}</p>}
+                        {noCards && !sizeError && <p className="text-sm text-amber-700">{NO_CARDS_MESSAGE}</p>}
+                        {error && (
+                            <p className="text-sm text-red-700 [overflow-wrap:anywhere]" role="alert">
+                                {error}
+                            </p>
+                        )}
+                        {notice && (
+                            <p className="text-sm text-ink/80 [overflow-wrap:anywhere]" role="status">
+                                {notice}
+                            </p>
+                        )}
+
+                        {hasCards && (
+                            <div className="flex gap-4 items-start pt-2">
+                                <div className="flex-1 min-w-0 grid sm:grid-cols-2 gap-4">
+                                    <div className="bg-parchment rounded shadow-inner-parchment p-3">
+                                        {cardList("Maindeck", sections.maindeck, mainCount)}
+                                    </div>
+                                    <div className="bg-parchment rounded shadow-inner-parchment p-3">
+                                        {cardList("Sideboard", sections.sideboard, sideCount)}
+                                    </div>
+                                </div>
+                                {/* Beside the list on a wide screen only, pinned while
+                                    it scrolls; on a phone there's no room beside it. */}
+                                <div className="hidden md:block w-[176px] shrink-0 sticky top-4">
+                                    {shownImage && (
+                                        <Image
+                                            unoptimized
+                                            src={shownImage}
+                                            alt={shown ?? ""}
+                                            width={244}
+                                            height={340}
+                                            className="w-full h-auto rounded-[4.5%] shadow-card"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Right under the editor: with the saved-deck list gone from
+                        the bottom, saving is the page's next step, not its last. */}
+                    {authEnabled && (
+                        <DeckSaves
+                            decklist={normalized}
+                            format={format || null}
+                            draftName={name}
+                            open={open}
+                            dirty={Boolean(dirty)}
+                            canSave={usable}
+                            listVersion={listVersion}
+                            onSaved={onSaved}
+                        />
+                    )}
+
+                    {/* ---- send it somewhere ---- */}
+                    <section className="bg-parchment-dark shadow-card rounded-lg p-4 sm:p-6 space-y-3">
+                        <h2 className="text-2xl font-title">Use this deck</h2>
+                        {!usable && (
+                            <p className="text-sm text-ink/70">
+                                {isLink
+                                    ? "Import the link first."
+                                    : sizeError
+                                        ? sizeError
+                                        : noCards
+                                            ? NO_CARDS_MESSAGE
+                                            : "Paste a decklist above to use it in the other tools."}
+                            </p>
+                        )}
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            {SEND_TARGETS.map((s) => (
+                                <button
+                                    key={s.target}
+                                    type="button"
+                                    onClick={() => send(s.target)}
+                                    disabled={!usable}
+                                    className="text-left rounded shadow-card bg-parchment p-3 hover:bg-brass/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <span className="block font-title text-lg">{s.label}</span>
+                                    <span className="block text-xs text-ink/65 mt-1">{s.hint}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {open && dirty && usable && (
+                            <p className="text-xs text-ink/60">
+                                Sends the list as it is in the editor, including changes you haven&apos;t saved.
+                            </p>
+                        )}
+                    </section>
+                </>
+            )}
+
+            {guard.pending && (
+                <LeaveDialog
+                    pending={guard.pending}
+                    onStay={guard.stay}
+                    onProceed={guard.proceed}
+                    authEnabled={authEnabled}
+                    noun="deck"
+                    itemName={open?.name ?? (name.trim() || null)}
+                    isSaved={open !== null}
+                    clearsOnLeave
+                    renderSave={(done, label) => (
+                        <DeckSaveAndContinue
+                            decklist={normalized}
+                            format={format || null}
+                            draftName={name}
+                            open={open}
+                            canSave={usable}
+                            cannotSaveReason={
+                                isLink
+                                    ? "There's no list to save yet — the MTGGoldfish link hasn't been imported."
+                                    : (sizeError ?? NO_CARDS_MESSAGE)
+                            }
+                            label={label}
+                            onSaved={onSaved}
+                            done={done}
+                        />
+                    )}
                 />
             )}
         </div>
