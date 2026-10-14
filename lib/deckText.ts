@@ -51,9 +51,11 @@ export const MAX_FORMAT_LENGTH = 40;
 /**
  * Most copies of one card on one line that a saved deck keeps. Far above any
  * real list (Relentless Rats decks run a few dozen), and low enough that the
- * profile's SQL card count can never overflow an integer.
+ * profile's SQL card count can never overflow an integer. Exported for the
+ * Decks page's count boxes (lib/deckEdit), which stop at the same ceiling
+ * rather than letting a number on screen disagree with what gets saved.
  */
-const MAX_LINE_QTY = 999;
+export const MAX_LINE_QTY = 999;
 
 export function deckFormatLabel(slug: string | null | undefined): string {
     if (!slug) return "";

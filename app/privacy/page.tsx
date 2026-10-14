@@ -106,8 +106,8 @@ export default function PrivacyPage() {
                         <li>
                             {accounts ? "Unless you sign in and save something, the" : "The"} app keeps
                             nothing you type anywhere but your own browser. The one caveat is card-name
-                            suggestions on the Collection page, which pass through the host&apos;s standard
-                            request logs, as explained below.
+                            suggestions on the Collection and Decks pages, which pass through the
+                            host&apos;s standard request logs, as explained below.
                         </li>
                         <li>
                             No advertising, no ad networks, no cross-site tracking, and no data is sold.
@@ -412,14 +412,20 @@ export default function PrivacyPage() {
                             address, so it appears in Vercel&apos;s standard request logs like any other
                             address.
                         </p>
-                        {/* DeckBuilder: deckSections runs client-side; the only
-                            requests are card-images (debounced, names only),
-                            import-deck on the Import button, and the saved-deck
-                            calls covered in the signed-in paragraph below. */}
+                        {/* DeckBuilder: deckSections and every list edit run
+                            client-side; the only requests are card-images and
+                            card-resolve (debounced, names only), card-search from
+                            the add boxes (CardNameAdd, GET ?q= — hence the caveat
+                            above), import-deck when a link is pasted or imported,
+                            and the saved-deck calls covered in the signed-in
+                            paragraph below. */}
                         <p>
-                            The Decks page splits your list in your browser. It sends the server the
-                            card names in it, to show their pictures, and an MTGGoldfish link when you
-                            press Import — not the list itself, unless you&apos;re signed in and press Save.
+                            The Decks page splits and edits your list in your browser. It sends the
+                            server the card names in it, to show their pictures and check each is a
+                            real card, what you type into its add boxes, for suggestions (the same
+                            caveat as the Collection page&apos;s), and an MTGGoldfish link when you
+                            paste or import one — not the list itself, unless you&apos;re signed in and
+                            press Save.
                         </p>
                         {/*
                           * Written against SideboardPlanner's `reference` effect and

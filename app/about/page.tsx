@@ -53,9 +53,15 @@ export default function AboutPage() {
                         <div>
                             <h3 className="font-title text-xl mb-1">Decks</h3>
                             <p>
-                                Somewhere to keep and edit your own decklists. Paste one — from Arena,
-                                MTGGoldfish or anywhere with one card per line — pick its format, and
-                                it&apos;s split into maindeck and sideboard. When it&apos;s ready, it goes
+                                Somewhere to keep and edit your own decklists. Build one card by card,
+                                with name suggestions as you type, or paste one — from Arena,
+                                MTGGoldfish or anywhere with one card per line, or an MTGGoldfish link
+                                — and it turns into a list you edit line by line: maindeck and
+                                sideboard side by side, a picture of each card, counts you can change
+                                and cards you can move between the two. Misspelt names are corrected
+                                where it&apos;s certain what was meant and marked, with suggestions,
+                                where it isn&apos;t; there&apos;s still a plain text box for anyone who
+                                would rather type. When it&apos;s ready, it goes
                                 straight to Deck Check, which checks it against your collection as soon
                                 as it arrives, or to the Sideboard Planner as the deck a guide is built
                                 from.

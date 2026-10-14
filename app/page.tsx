@@ -48,9 +48,10 @@ const TOOLS: Tool[] = [
         name: "Decks",
         art: "/art/banner-rotation.svg",
         tagline: "Where do I keep my lists?",
-        body: "Your decklists, kept and edited in one place. Paste one from Arena, MTGGoldfish or anywhere else, pick its format and see it split into maindeck and sideboard, with a picture of each card. When it's ready, one click checks it in Deck Check or loads it into the Sideboard Planner to start a guide.",
+        body: "Your decklists, kept and edited in one place. Build one card by card with name suggestions, or paste one from Arena, MTGGoldfish or anywhere else and it turns into an editable list — maindeck and sideboard side by side, with a picture of each card. When it's ready, one click checks it in Deck Check or loads it into the Sideboard Planner to start a guide.",
         points: [
-            "Paste a list or an MTGGoldfish link; maindeck and sideboard split automatically",
+            "Build card by card, or paste a list or an MTGGoldfish link and edit it line by line",
+            "Change counts, move cards between maindeck and sideboard, and fix misspelt names",
             "Check it in Deck Check, which runs straight away against your collection",
             "Start a sideboard guide from it, with the format already set",
         ],

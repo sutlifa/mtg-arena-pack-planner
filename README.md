@@ -64,10 +64,29 @@ The three pages that edit something you can save work the same way
 
 Keep and edit your own decklists.
 
-- Paste a list (Arena, MTGGoldfish or any "4 Card Name" list) or import an
-  MTGGoldfish link; it splits into maindeck and sideboard as you type, with
-  card pictures on hover. Pick a format (the Sideboard Planner's five, plus
-  Historic, Explorer, Timeless, Alchemy, Brawl, Commander) or none.
+- A new deck asks how to begin: **Build it card by card** (an empty list
+  editor) or **Paste a list or link**. A paste (Arena, MTGGoldfish or any
+  "4 Card Name" list) turns straight into the list editor; a pasted
+  MTGGoldfish link is imported at once (a typed one on Enter or Import).
+  Typed text waits for **Show as cards** — it never converts on a timer.
+- The list editor (`app/components/DeckListEditor.tsx`) shows Maindeck and
+  Sideboard side by side (stacked below `lg`), one row per card: count with
+  − / + (the box alone on a phone), **→ SB** / **→ Main**, remove, and an add
+  box per half with suggestions from every card (`CardNameAdd`, shared with
+  the Collection page). The picture sits beside the list from `md`; on a
+  phone a tapped name shows it in a corner card.
+- The deck stays **text** throughout: every edit is written back as the
+  normalised list (`lib/deckEdit.ts`), so the draft, the "unsaved" check,
+  Save and the hand-offs read exactly what they did before. **Edit as text**
+  opens the same text in a box; going back re-parses it.
+- Names go through `/api/card-resolve`. On a paste or import, names it
+  recognises are put under their official spelling; unknown ones are marked
+  on their row with suggestions, and Save waits until they're fixed or
+  removed (sending to the other tools doesn't). Opening a saved deck only
+  marks — it never rewrites a stored spelling, so an untouched deck never
+  reads as unsaved.
+- Pick a format (the Sideboard Planner's five, plus Historic, Explorer,
+  Timeless, Alchemy, Brawl, Commander) or none.
 - **Check in Deck Check** → `/deck-check`, which runs the comparison against
   your collection straight away. **Build a sideboard guide** → `/sideboard`,
   which loads it as the decklist and sets the format; if a guide is already
@@ -262,8 +281,8 @@ app/
     rotation/           rotation check
     import-deck/        MTGGoldfish deck or archetype link -> decklist
     archetypes/         live metagame: { format, limit, period } -> name, share, url
-    card-search/        card-name suggestions for the Collection page
-    card-resolve/       official spelling for card names (Collection, Deck Check)
+    card-search/        card-name suggestions (Collection, Decks)
+    card-resolve/       official spelling for card names (Collection, Decks, Deck Check)
     card-images/        card pictures by name, from the bundled data
     decks/ guides/ collections/ analyses/
                         saved items: list, create, get, update, delete, [id]/copy
@@ -277,6 +296,7 @@ lib/
   deckParser.ts         decklist parsing
   deckSections.ts       maindeck / sideboard split
   deckText.ts           saved-deck normal form, formats, validation
+  deckEdit.ts           card-by-card edits for the Decks page's list editor
   decks.ts              saved-deck queries (decks table)
   deckHandoff.ts        passing an unsaved deck between pages via sessionStorage
   deckSlots.ts          Deck Check's deck slots: saved or pasted, edited or not

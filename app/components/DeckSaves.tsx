@@ -233,6 +233,7 @@ export default function DeckSaves({
     open,
     dirty,
     canSave,
+    blockedReason = null,
     listVersion,
     onSaved,
 }: {
@@ -245,6 +246,13 @@ export default function DeckSaves({
     dirty: boolean;
     /** False while there's nothing savable (no cards, or a link not yet imported). */
     canSave: boolean;
+    /**
+     * Why Save is off when the deck itself is fine to look at — names that
+     * aren't real cards. Said here, beside the disabled button, because a
+     * greyed-out Save with no reason reads as broken. Left null for "no
+     * cards yet", which the page already explains above.
+     */
+    blockedReason?: string | null;
     /** Bumped by the page after a duplicate, delete or rename, to re-read the names. */
     listVersion: number;
     onSaved: (saved: SavedDeck) => void;
@@ -375,6 +383,10 @@ export default function DeckSaves({
                     </button>
                 )}
             </div>
+
+            {blockedReason && (
+                <p className="text-sm text-amber-800 [overflow-wrap:anywhere]">{blockedReason}</p>
+            )}
 
             {!open && clash && (
                 <p className="text-xs text-amber-700 [overflow-wrap:anywhere]">
